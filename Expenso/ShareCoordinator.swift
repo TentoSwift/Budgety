@@ -88,6 +88,33 @@ final class ShareCoordinator {
         try await pc.container.persistUpdatedShare(share, in: store)
     }
 
+    /// 参加者として共有シートから退出する。CloudKit Sharing zone をローカルでだけ purge し、
+    /// オーナーや他の参加者の側のデータには影響を与えない。
+    /// (ctx.delete(record) を使うと共有レコードの削除としてオーナーにも伝搬してしまう)
+    @MainActor
+    func leaveSharedSheet(_ sheet: ExpenseSheet) async throws {
+        let pc = PersistenceController.shared
+        guard let sharedStore = pc.sharedStore else { throw ShareError.storeNotReady }
+
+        // シートの CKShare から zoneID を取得
+        let zoneID: CKRecordZone.ID? = {
+            if let share = existingShare(for: sheet) {
+                return share.recordID.zoneID
+            }
+            // CKShare がローカルに無い場合 (rare) は ObjectID から推測
+            return nil
+        }()
+
+        guard let zoneID else { throw ShareError.storeNotReady }
+
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            pc.container.purgeObjectsAndRecordsInZone(with: zoneID, in: sharedStore) { _, error in
+                if let error { cont.resume(throwing: error) }
+                else { cont.resume() }
+            }
+        }
+    }
+
     /// 自分が所有する CKShare のうち、参加者がいる/公開リンクが有効なものが残っているか。
     /// Premium が切れているのに共有が生きている検知用。
     @MainActor

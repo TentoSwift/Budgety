@@ -88,8 +88,16 @@ struct SheetListView: View {
     }
 
     private func deleteGroups(at offsets: IndexSet) {
-        withAnimation {
-            offsets.map { sheets[$0] }.forEach(viewContext.delete)
+        let targets = offsets.map { sheets[$0] }
+        Task { @MainActor in
+            for sheet in targets {
+                if sheet.isOwnedByCurrentUser {
+                    viewContext.delete(sheet)
+                } else {
+                    // 参加シートはローカルだけ purge。オーナー側を削除しない。
+                    try? await ShareCoordinator.shared.leaveSharedSheet(sheet)
+                }
+            }
             PersistenceController.shared.save()
             Haptics.warning()
         }

@@ -206,10 +206,10 @@ struct CloudSharingView: View {
     private func leaveSharedSheet() async {
         isProcessing = true
         errorMessage = nil
-        let ctx = PersistenceController.shared.container.viewContext
-        ctx.delete(record)
         do {
-            try ctx.save()
+            // ctx.delete(record) ではなく purge を使う。
+            // delete だとオーナーや他参加者の側のシートまで消えてしまう。
+            try await ShareCoordinator.shared.leaveSharedSheet(record)
             Haptics.warning()
             dismiss()
         } catch {

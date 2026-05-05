@@ -100,10 +100,7 @@ struct EditSheetView: View {
                 titleVisibility: .visible
             ) {
                 Button(record.isOwnedByCurrentUser ? "削除" : "退出", role: .destructive) {
-                    viewContext.delete(record)
-                    PersistenceController.shared.save()
-                    Haptics.warning()
-                    dismiss()
+                    Task { await deleteOrLeave() }
                 }
                 Button("キャンセル", role: .cancel) {}
             } message: {
@@ -149,6 +146,29 @@ struct EditSheetView: View {
         origNote = note
         origColor = selectedColor
         origCurrencyCode = defaultCurrencyCode
+    }
+
+    /// オーナー = ローカル削除 + CloudKit 伝搬で全員から消える。
+    /// 参加者 = CloudKit Sharing zone の purge でローカルだけ消す (オーナーや他参加者は影響なし)。
+    @MainActor
+    private func deleteOrLeave() async {
+        if record.isOwnedByCurrentUser {
+            viewContext.delete(record)
+            PersistenceController.shared.save()
+            Haptics.warning()
+            dismiss()
+        } else {
+            do {
+                try await ShareCoordinator.shared.leaveSharedSheet(record)
+                Haptics.warning()
+                dismiss()
+            } catch {
+                // 失敗しても dismiss はしない。エラー表示は今後追加できる
+                #if DEBUG
+                print("⚠️ leaveSharedSheet failed: \(error)")
+                #endif
+            }
+        }
     }
 
     private func save() {
