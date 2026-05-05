@@ -173,6 +173,8 @@ final class UserProfileStore: ObservableObject {
         member.name      = newName
         member.colorHex  = avatarBgColorHex ?? "#5B8DEF"
         member.photoData = photoData
+        // LWW タイムスタンプ: 編集の時刻を記録。propagateProfile での衝突解決に使う
+        member.updatedAt = .now
 
         if let old = oldName, !old.isEmpty, old != newName {
             renamePaidByInPrivateStore(from: old, to: newName, in: ctx)
@@ -232,23 +234,29 @@ final class UserProfileStore: ObservableObject {
     /// 自分のプロフィールを、参加している全シート (Private + Shared) の `participantProfiles` に
     /// ParticipantProfile レコードとして書き込む。CKShare 経由で他の参加者にも同期される。
     /// - Parameter context: 操作するコンテキスト (通常 viewContext)
+    /// 自分のプロフィールを各シートの ParticipantProfile に書き込む。
+    /// **Member を source of truth として使い**, ParticipantProfile.updatedAt と
+    /// Member.updatedAt を比較する LWW 戦略で「新しい方が勝つ」ようにする。
+    /// 古い端末がオフラインから復帰した時に、その古いデータが新しい PP を上書きしないことが目的。
     func propagateProfile(in ctx: NSManagedObjectContext) {
         guard let recordName = userRecordName, !recordName.isEmpty else { return }
+        guard let member = findOrCreateSelfMember(in: ctx) else { return }
+        let memberUpdatedAt = member.updatedAt ?? .distantPast
 
         let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
         guard let sheets = try? ctx.fetch(sheetReq) else { return }
 
-        let now = Date()
-        let newName = resolvedDisplayName
-        let newColor = avatarBgColorHex ?? "#5B8DEF"
-
         for sheet in sheets {
-            // NSManagedObjectID.persistentStore で直接取る
-            // (coord.persistentStore(for:) はファイル URL 用なので uriRepresentation を渡しても nil)
             guard let sheetStore = sheet.objectID.persistentStore else { continue }
 
             let existing: ParticipantProfile? = (sheet.participantProfiles as? Set<ParticipantProfile>)?
                 .first(where: { $0.recordName == recordName })
+
+            // 既存 PP が Member より新しければ、こちらは古い情報なのでスキップ。
+            // (= オフライン端末の古い Member が、別端末の最新 PP を踏みつぶさない)
+            if let pp = existing, let ppAt = pp.updatedAt, ppAt > memberUpdatedAt {
+                continue
+            }
 
             let profile: ParticipantProfile
             if let existing {
@@ -259,22 +267,29 @@ final class UserProfileStore: ObservableObject {
                 profile.recordName = recordName
                 profile.sheet = sheet
             }
-            profile.displayName = newName
-            profile.colorHex = newColor
-            profile.photoData = photoData
-            profile.updatedAt = now
+            profile.displayName = member.name
+            profile.colorHex    = member.colorHex
+            profile.photoData   = member.photoData
+            profile.updatedAt   = memberUpdatedAt > .distantPast ? memberUpdatedAt : .now
         }
 
         try? ctx.save()
     }
 
     /// 1 シートだけプロフィールを書き込む (支出追加時など、特定シートだけ更新する用途)。
+    /// LWW チェックを行い、自分の Member が PP よりも古ければ何もしない。
     func ensureProfile(in sheet: ExpenseSheet, ctx: NSManagedObjectContext) {
         guard let recordName = userRecordName, !recordName.isEmpty else { return }
         guard let sheetStore = sheet.objectID.persistentStore else { return }
+        guard let member = findOrCreateSelfMember(in: ctx) else { return }
+        let memberUpdatedAt = member.updatedAt ?? .distantPast
 
         let existing = (sheet.participantProfiles as? Set<ParticipantProfile>)?
             .first(where: { $0.recordName == recordName })
+
+        if let pp = existing, let ppAt = pp.updatedAt, ppAt > memberUpdatedAt {
+            return
+        }
 
         let profile: ParticipantProfile
         if let existing {
@@ -285,9 +300,9 @@ final class UserProfileStore: ObservableObject {
             profile.recordName = recordName
             profile.sheet = sheet
         }
-        profile.displayName = resolvedDisplayName
-        profile.colorHex = avatarBgColorHex ?? "#5B8DEF"
-        profile.photoData = photoData
-        profile.updatedAt = .now
+        profile.displayName = member.name
+        profile.colorHex    = member.colorHex
+        profile.photoData   = member.photoData
+        profile.updatedAt   = memberUpdatedAt > .distantPast ? memberUpdatedAt : .now
     }
 }
