@@ -51,6 +51,16 @@ struct AddExpenseView: View {
     @State private var origDate: Date = .distantPast
     @State private var origNote: String = ""
 
+    /// 定期項目から生成された支出を編集中、保存ボタンを押した時に出る 3 択ダイアログ。
+    @State private var showRecurringSaveChoice: Bool = false
+
+    /// 「定期項目に反映する」処理範囲
+    private enum RecurringSaveScope {
+        case thisOnly   // この 1 件だけ
+        case future     // ルールも更新 (今後)
+        case all        // ルール + 過去に生成済みの全支出も更新
+    }
+
     init(record: ExpenseSheet) { self.mode = .create(record: record) }
     init(expense: Expense) { self.mode = .edit(expense: expense) }
 
@@ -264,9 +274,21 @@ struct AddExpenseView: View {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button("保存") { trySave() }
                         .disabled(!canSave)
                 }
+            }
+            .confirmationDialog(
+                "変更の適用範囲",
+                isPresented: $showRecurringSaveChoice,
+                titleVisibility: .visible
+            ) {
+                Button("この項目のみ保存") { performRecurringSave(scope: .thisOnly) }
+                Button("今後の定期項目で保存") { performRecurringSave(scope: .future) }
+                Button("全ての定期項目で変更") { performRecurringSave(scope: .all) }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この支出は定期項目から生成されています。変更をどこまで反映するか選んでください。")
             }
             .onAppear { loadIfNeeded() }
             .fullScreenCover(isPresented: $showCameraScanner) {
@@ -311,6 +333,111 @@ struct AddExpenseView: View {
             date = d
         }
         Haptics.success()
+    }
+
+    /// 保存ボタンタップ時のディスパッチ。定期由来の支出に変更があれば 3 択ダイアログ、
+    /// それ以外は通常 save。
+    private func trySave() {
+        if case .edit(let expense) = mode,
+           expense.generatedFromRuleID != nil,
+           expense.relatedRule != nil,
+           hasAnyEditChanges {
+            showRecurringSaveChoice = true
+        } else {
+            save()  // save() 内で dismiss() まで行う
+        }
+    }
+
+    /// 編集モードで何かしらフィールドを変更したかを判定する。
+    private var hasAnyEditChanges: Bool {
+        guard case .edit = mode else { return false }
+        if title.trimmingCharacters(in: .whitespaces) != origTitle { return true }
+        if amountText != origAmountText { return true }
+        if kind.rawValue != origKindRaw { return true }
+        if currencyCode != origCurrencyCode { return true }
+        if note != origNote { return true }
+        if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
+        if (selectedPayer?.profileID ?? "") != origPayerProfileID { return true }
+        if selectedCategory?.objectID != origCategoryObjectID { return true }
+        return false
+    }
+
+    /// 編集中の差分を、対象の Expense / RecurringRule に適用する。
+    /// `includeDate = true` のときだけ date を反映 (= 過去の生成支出 / Rule には date は触らない)。
+    private func applyChanges(toExpense expense: Expense, includeDate: Bool) {
+        let newTitle = title.trimmingCharacters(in: .whitespaces)
+        if newTitle != origTitle { expense.title = newTitle }
+        if amountText != origAmountText, let d = Decimal(string: amountText) {
+            expense.amount = NSDecimalNumber(decimal: d)
+        }
+        if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
+        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        if note != origNote { expense.note = note }
+        if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
+            expense.date = date
+        }
+        let newPayerProfileID = selectedPayer?.profileID ?? ""
+        if newPayerProfileID != origPayerProfileID {
+            expense.payerProfileID = selectedPayer?.profileID
+            expense.paidBy = selectedPayer?.name
+        }
+        if selectedCategory?.objectID != origCategoryObjectID {
+            expense.categoryRaw = selectedCategory?.name
+            let store = expense.objectID.persistentStore
+            if let cat = selectedCategory, cat.objectID.persistentStore == store {
+                expense.category = cat
+            } else {
+                expense.category = nil
+            }
+        }
+    }
+
+    /// RecurringRule に同じ差分を適用する (date / sheet は触らない)。
+    private func applyChanges(toRule rule: RecurringRule) {
+        let newTitle = title.trimmingCharacters(in: .whitespaces)
+        if newTitle != origTitle { rule.title = newTitle }
+        if amountText != origAmountText, let d = Decimal(string: amountText) {
+            rule.amount = NSDecimalNumber(decimal: d)
+        }
+        if kind.rawValue != origKindRaw { rule.kindRaw = kind.rawValue }
+        if currencyCode != origCurrencyCode { rule.currencyCode = currencyCode }
+        if note != origNote { rule.note = note }
+        let newPayerProfileID = selectedPayer?.profileID ?? ""
+        if newPayerProfileID != origPayerProfileID {
+            rule.payerProfileID = selectedPayer?.profileID
+            rule.paidBy = selectedPayer?.name
+        }
+        if selectedCategory?.objectID != origCategoryObjectID {
+            rule.categoryRaw = selectedCategory?.name
+        }
+    }
+
+    /// 「変更の適用範囲」ダイアログから呼ばれる。
+    private func performRecurringSave(scope: RecurringSaveScope) {
+        guard case .edit(let expense) = mode else { return }
+        viewContext.refresh(expense, mergeChanges: true)
+
+        // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
+        applyChanges(toExpense: expense, includeDate: true)
+
+        // 2) ルールへ反映 (今後 / 全て)
+        if scope != .thisOnly, let rule = expense.relatedRule {
+            applyChanges(toRule: rule)
+
+            // 3) 過去に生成された他の支出にも反映 (全て)
+            if scope == .all, let ruleID = rule.id {
+                let req = NSFetchRequest<Expense>(entityName: "Expense")
+                req.predicate = NSPredicate(format: "generatedFromRuleID == %@", ruleID as CVarArg)
+                let others = (try? viewContext.fetch(req)) ?? []
+                for other in others where other.objectID != expense.objectID {
+                    applyChanges(toExpense: other, includeDate: false)
+                }
+            }
+        }
+
+        PersistenceController.shared.save()
+        Haptics.success()
+        dismiss()
     }
 
     private func datePresetButton(_ label: String, offset: Int) -> some View {
@@ -412,50 +539,9 @@ struct AddExpenseView: View {
             // 自分の ParticipantProfile を同シートに ensure (まだ無ければ作成、あれば更新)
             profile.ensureProfile(in: record, ctx: viewContext)
         case .edit(let expense):
-            // CloudKit 経由で取り込まれた最新値を取り込んでから差分のみ書き戻す。
-            // (こうすることで、ユーザーが触っていないフィールドが他デバイスの更新を
-            //  上書きしないようになる = 操作ベースの CRDT 動作)
+            // 通常編集 (定期項目以外、または「この項目のみ」)。差分のみ書き戻し。
             viewContext.refresh(expense, mergeChanges: true)
-
-            let newTitle = title.trimmingCharacters(in: .whitespaces)
-            if newTitle != origTitle {
-                expense.title = newTitle
-            }
-            if amountText != origAmountText {
-                expense.amount = NSDecimalNumber(decimal: amountDecimal)
-            }
-            if kind.rawValue != origKindRaw {
-                expense.kindRaw = kind.rawValue
-            }
-            if currencyCode != origCurrencyCode {
-                expense.currencyCode = currencyCode
-            }
-            if note != origNote {
-                expense.note = note
-            }
-            if !Calendar.current.isDate(date, inSameDayAs: origDate) {
-                expense.date = date
-            }
-
-            // 支払者: profileID + paidBy + Member 関係をひとセットでまとめて反映
-            let newPayerProfileID = selectedPayer?.profileID ?? ""
-            if newPayerProfileID != origPayerProfileID {
-                expense.payerProfileID = selectedPayer?.profileID
-                expense.paidBy = selectedPayer?.name
-            }
-
-            // カテゴリ: 元の category objectID と比較し、変更があった時のみ反映
-            let newCategoryObjectID = selectedCategory?.objectID
-            if newCategoryObjectID != origCategoryObjectID {
-                expense.categoryRaw = selectedCategory?.name
-                let expStore = expense.objectID.persistentStore
-                if let cat = selectedCategory,
-                   cat.objectID.persistentStore == expStore {
-                    expense.category = cat
-                } else {
-                    expense.category = nil
-                }
-            }
+            applyChanges(toExpense: expense, includeDate: true)
         }
         PersistenceController.shared.save()
         Haptics.success()

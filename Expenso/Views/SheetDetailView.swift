@@ -41,9 +41,6 @@ struct SheetDetailView: View {
     @State private var showingShare = false
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
-    /// 定期から生成された支出をタップした時に保留する。
-    /// 「この 1 件だけ編集」or「定期項目を編集」のダイアログ表示用。
-    @State private var pendingRecurringExpense: Expense?
     @State private var showingEditGroup = false
     @State private var searchText: String = ""
     @State private var selectedCategory: ExpenseCategory?
@@ -182,28 +179,6 @@ struct SheetDetailView: View {
         .sheet(isPresented: $showingEditGroup) {
             EditSheetView(record: record)
         }
-        .confirmationDialog(
-            "編集対象を選んでください",
-            isPresented: Binding(
-                get: { pendingRecurringExpense != nil },
-                set: { if !$0 { pendingRecurringExpense = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("この 1 件だけ編集") {
-                editingExpense = pendingRecurringExpense
-                pendingRecurringExpense = nil
-            }
-            Button("定期項目を編集") {
-                editingRule = pendingRecurringExpense?.relatedRule
-                pendingRecurringExpense = nil
-            }
-            Button("キャンセル", role: .cancel) {
-                pendingRecurringExpense = nil
-            }
-        } message: {
-            Text("この支出は定期項目から自動生成されています。1 件だけ変えるか、ルール自体を変えるか選んでください。")
-        }
         .onAppear {
             switch ProcessInfo.processInfo.environment["EXPENSO_DEMO"] {
             case "addExpense": showingAddExpense = true
@@ -230,15 +205,6 @@ struct SheetDetailView: View {
         ContentUnavailableView.search(text: searchText)
     }
 
-    /// 行タップのディスパッチ。定期から生成された支出はダイアログで対象を選ばせる。
-    private func tapRow(_ expense: Expense) {
-        if expense.generatedFromRuleID != nil {
-            pendingRecurringExpense = expense
-        } else {
-            editingExpense = expense
-        }
-    }
-
     private var sectionedList: some View {
         LazyVStack(spacing: 16) {
             ForEach(groupedByDay(), id: \.key) { section in
@@ -251,7 +217,7 @@ struct SheetDetailView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(section.value.enumerated()), id: \.element.objectID) { idx, expense in
                             Button {
-                                tapRow(expense)
+                                editingExpense = expense
                             } label: {
                                 ExpenseRowView(expense: expense)
                                     .padding(.horizontal, 14)
@@ -259,7 +225,7 @@ struct SheetDetailView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button { tapRow(expense) } label: {
+                                Button { editingExpense = expense } label: {
                                     Label("編集", systemImage: "pencil")
                                 }
                                 if expense.generatedFromRuleID != nil {
