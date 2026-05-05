@@ -171,7 +171,14 @@ struct AddExpenseView: View {
                                 Text(m.displayName)
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("未選択")
+                                // selectedPayer が未確定でも、登録済みのプロフィールがあれば自分として表示
+                                AvatarView(
+                                    photoData: profile.photoData,
+                                    displayName: profile.resolvedDisplayName,
+                                    colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                                    size: 24
+                                )
+                                Text(profile.resolvedDisplayName)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -273,6 +280,8 @@ struct AddExpenseView: View {
     private func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
+        // 自分の Member が無ければここで作る (プロフィール未登録でも"自分"が選べるように)
+        profile.ensureSelfMemberExists(in: viewContext)
         switch mode {
         case .create(let record):
             currencyCode = record.resolvedDefaultCurrencyCode

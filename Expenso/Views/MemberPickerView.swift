@@ -51,7 +51,9 @@ struct MemberPickerView: View {
     var body: some View {
         List {
             unspecifiedSection
-            if let me = selfMember { selfSection(me) }
+            // Member の有無に依存せず、UserProfileStore のプロフィールから直接「自分」を表示。
+            // 選択時に Member を ensure する。
+            selfFromProfileSection
             if !otherParticipants.isEmpty { otherParticipantsSection }
         }
         .navigationTitle("支払者を選択")
@@ -91,27 +93,66 @@ struct MemberPickerView: View {
         }
     }
 
-    private func selfSection(_ me: Member) -> some View {
+    /// 既存 Member があればそれを観測ベースで描画。無ければ UserProfileStore から直接表示し、
+    /// タップで Member を ensure (作成 or 更新) してから selected に設定。
+    @ViewBuilder
+    private var selfFromProfileSection: some View {
         Section {
-            Button {
-                selected = me
-                dismiss()
-            } label: {
-                HStack(spacing: 12) {
-                    ObservedMemberAvatar(member: me, size: 36)
-                    Text(me.displayName)
-                        .foregroundStyle(.primary)
-                    Text("自分")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if selected?.objectID == me.objectID {
-                        Image(systemName: "checkmark").foregroundStyle(.tint)
-                    }
+            if let me = selfMember {
+                Button {
+                    selected = me
+                    dismiss()
+                } label: {
+                    selfRowContent(
+                        avatar: AnyView(ObservedMemberAvatar(member: me, size: 36)),
+                        name: me.displayName,
+                        isSelected: selected?.objectID == me.objectID
+                    )
                 }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    ensureSelfMemberAndSelect()
+                } label: {
+                    selfRowContent(
+                        avatar: AnyView(AvatarView(
+                            photoData: profile.photoData,
+                            displayName: profile.resolvedDisplayName,
+                            colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                            size: 36
+                        )),
+                        name: profile.resolvedDisplayName,
+                        isSelected: false
+                    )
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
+    }
+
+    private func selfRowContent(avatar: AnyView, name: String, isSelected: Bool) -> some View {
+        HStack(spacing: 12) {
+            avatar
+            Text(name)
+                .foregroundStyle(.primary)
+            Text("自分")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark").foregroundStyle(.tint)
+            }
+        }
+    }
+
+    private func ensureSelfMemberAndSelect() {
+        // applyToSelfMember が selfMemberID を保証 + Member を作成/更新する
+        profile.applyToSelfMember(in: viewContext)
+        if let id = profile.selfMemberID,
+           let me = allMembers.first(where: { $0.id == id }) {
+            selected = me
+        }
+        dismiss()
     }
 
     private var otherParticipantsSection: some View {
