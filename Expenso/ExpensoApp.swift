@@ -58,10 +58,14 @@ struct ExpensoApp: App {
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     let ctx = persistenceController.container.viewContext
-                    // CloudKit 同期で来た自分の Member の値をローカルに取り込む
-                    // (= 同一アカウント別デバイスでプロフィールを引き継ぐ)
                     UserProfileStore.shared.syncFromSelfMember(in: ctx)
                     UserProfileStore.shared.propagateProfile(in: ctx)
+                }
+                // CloudKit が新しいデータを取り込んだら自分の Member も再 sync して
+                // ローカルのプロフィール (UserProfileStore) を最新に保つ
+                .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+                    let ctx = persistenceController.container.viewContext
+                    UserProfileStore.shared.syncFromSelfMember(in: ctx)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     // フォアグラウンド復帰時にも entitlement を再確認。

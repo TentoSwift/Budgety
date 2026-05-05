@@ -181,27 +181,26 @@ final class UserProfileStore: ObservableObject {
         try? ctx.save()
     }
 
-    /// CloudKit 同期で来た自分の Member の値をローカル (UserDefaults / photo file) に取り込む。
-    /// 同一アカウントの別デバイスで初回起動した時に、設定済プロフィールを引き継ぐ用途。
+    /// CloudKit 同期で来た自分の Member の値をローカルに取り込む。
+    /// 同一アカウント別デバイス間でプロフィールを一致させるため、**常に Member を正** とし
+    /// `UserProfileStore` のキャッシュを Member の値で上書きする。編集は必ず
+    /// `applyToSelfMember` を通って Member に書き、その後 sync で他デバイスへ伝搬する設計。
     func syncFromSelfMember(in ctx: NSManagedObjectContext) {
         guard let member = findOrCreateSelfMember(in: ctx) else { return }
 
-        // selfMemberID をこの Member の id に合わせる (id ベース解決のため)
         if let mid = member.id, mid != selfMemberID {
             selfMemberID = mid
         }
-        // ローカルが空なら Member の値を採用
-        if displayName.isEmpty, let n = member.name, !n.isEmpty {
+        if let n = member.name, !n.isEmpty, displayName != n {
             displayName = n
         }
-        if (avatarBgColorHex == nil || avatarBgColorHex?.isEmpty == true),
-           let c = member.colorHex, !c.isEmpty {
+        if let c = member.colorHex, !c.isEmpty, avatarBgColorHex != c {
             avatarBgColorHex = c
         }
-        if photoData == nil, let p = member.photoData {
-            photoData = p
+        if photoData != member.photoData {
+            photoData = member.photoData
         }
-        // recordName が未設定なら今のうちに埋める (CloudKit から来た古い Member が対象)
+        // recordName が未設定なら今のうちに埋める (旧 Member の救済)
         if (member.recordName ?? "").isEmpty,
            let rn = userRecordName, !rn.isEmpty {
             member.recordName = rn
