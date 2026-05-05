@@ -25,6 +25,11 @@ struct EditCategoryView: View {
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
 
+    // CRDT 用スナップショット
+    @State private var origName: String = ""
+    @State private var origColor: String = ""
+    @State private var origSymbol: String = ""
+
     private var navTitle: String {
         switch mode {
         case .create: "新しいカテゴリ"
@@ -168,6 +173,10 @@ struct EditCategoryView: View {
             selectedColor = category.displayColorHex
             selectedSymbol = category.displaySymbol
             customColor = Color(hex: selectedColor) ?? .gray
+
+            origName = name
+            origColor = selectedColor
+            origSymbol = selectedSymbol
         }
     }
 
@@ -197,9 +206,11 @@ struct EditCategoryView: View {
             Haptics.success()
             onSave?(cat)
         case .edit(let category):
-            category.name = trimmed
-            category.colorHex = selectedColor
-            category.symbol = selectedSymbol
+            // 差分のみ書き戻し
+            viewContext.refresh(category, mergeChanges: true)
+            if trimmed != origName { category.name = trimmed }
+            if selectedColor != origColor { category.colorHex = selectedColor }
+            if selectedSymbol != origSymbol { category.symbol = selectedSymbol }
             PersistenceController.shared.save()
             Haptics.success()
         }

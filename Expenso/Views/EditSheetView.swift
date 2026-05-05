@@ -19,6 +19,12 @@ struct EditSheetView: View {
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
 
+    // CRDT 用スナップショット (差分のみ書き戻し)
+    @State private var origName: String = ""
+    @State private var origNote: String = ""
+    @State private var origColor: String = ""
+    @State private var origCurrencyCode: String = ""
+
     private let palette: [String] = [
         "#5B8DEF", "#34C759", "#FF9500", "#FF3B30",
         "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00"
@@ -138,13 +144,21 @@ struct EditSheetView: View {
         note = record.note ?? ""
         selectedColor = record.displayColorHex
         defaultCurrencyCode = record.resolvedDefaultCurrencyCode
+
+        origName = name
+        origNote = note
+        origColor = selectedColor
+        origCurrencyCode = defaultCurrencyCode
     }
 
     private func save() {
-        record.name = name.trimmingCharacters(in: .whitespaces)
-        record.note = note
-        record.colorHex = selectedColor
-        record.defaultCurrencyCode = defaultCurrencyCode
+        // 差分のみ書き戻し (= ユーザーが変更したフィールドのみ)
+        viewContext.refresh(record, mergeChanges: true)
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        if trimmed != origName { record.name = trimmed }
+        if note != origNote { record.note = note }
+        if selectedColor != origColor { record.colorHex = selectedColor }
+        if defaultCurrencyCode != origCurrencyCode { record.defaultCurrencyCode = defaultCurrencyCode }
         PersistenceController.shared.save()
         Haptics.success()
         dismiss()

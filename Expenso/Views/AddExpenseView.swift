@@ -39,6 +39,18 @@ struct AddExpenseView: View {
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
 
+    // 編集モードの「ロード時スナップショット」。save 時に現在値と比較し、
+    // 差分のあるフィールドだけを Expense に書き戻す (= ユーザーが触らなかった
+    // フィールドは他デバイスの更新を上書きしない = field-level CRDT 動作)
+    @State private var origTitle: String = ""
+    @State private var origAmountText: String = ""
+    @State private var origKindRaw: String = ""
+    @State private var origCurrencyCode: String = ""
+    @State private var origCategoryObjectID: NSManagedObjectID?
+    @State private var origPayerProfileID: String = ""
+    @State private var origDate: Date = .distantPast
+    @State private var origNote: String = ""
+
     init(record: ExpenseSheet) { self.mode = .create(record: record) }
     init(expense: Expense) { self.mode = .edit(expense: expense) }
 
@@ -311,6 +323,16 @@ struct AddExpenseView: View {
             selectedPayer = expense.resolvedPayer
             date = expense.date ?? .now
             note = expense.note ?? ""
+
+            // CRDT 用スナップショット
+            origTitle = title
+            origAmountText = amountText
+            origKindRaw = expense.kindRaw ?? ""
+            origCurrencyCode = expense.currencyCode ?? ""
+            origCategoryObjectID = expense.category?.objectID
+            origPayerProfileID = expense.payerProfileID ?? ""
+            origDate = expense.date ?? .distantPast
+            origNote = expense.note ?? ""
         }
     }
 
@@ -348,22 +370,49 @@ struct AddExpenseView: View {
             // 自分の ParticipantProfile を同シートに ensure (まだ無ければ作成、あれば更新)
             profile.ensureProfile(in: record, ctx: viewContext)
         case .edit(let expense):
-            expense.title = title.trimmingCharacters(in: .whitespaces)
-            expense.amount = NSDecimalNumber(decimal: amountDecimal)
-            expense.kindRaw = kind.rawValue
-            expense.currencyCode = currencyCode
-            expense.categoryRaw = selectedCategory?.name
-            expense.paidBy = selectedPayer?.name
-            expense.payerProfileID = selectedPayer?.profileID
-            expense.date = date
-            expense.note = note
+            // CloudKit 経由で取り込まれた最新値を取り込んでから差分のみ書き戻す。
+            // (こうすることで、ユーザーが触っていないフィールドが他デバイスの更新を
+            //  上書きしないようになる = 操作ベースの CRDT 動作)
+            viewContext.refresh(expense, mergeChanges: true)
 
-            let expStore = expense.objectID.persistentStore
-            if let cat = selectedCategory,
-               cat.objectID.persistentStore == expStore {
-                expense.category = cat
-            } else {
-                expense.category = nil
+            let newTitle = title.trimmingCharacters(in: .whitespaces)
+            if newTitle != origTitle {
+                expense.title = newTitle
+            }
+            if amountText != origAmountText {
+                expense.amount = NSDecimalNumber(decimal: amountDecimal)
+            }
+            if kind.rawValue != origKindRaw {
+                expense.kindRaw = kind.rawValue
+            }
+            if currencyCode != origCurrencyCode {
+                expense.currencyCode = currencyCode
+            }
+            if note != origNote {
+                expense.note = note
+            }
+            if !Calendar.current.isDate(date, inSameDayAs: origDate) {
+                expense.date = date
+            }
+
+            // 支払者: profileID + paidBy + Member 関係をひとセットでまとめて反映
+            let newPayerProfileID = selectedPayer?.profileID ?? ""
+            if newPayerProfileID != origPayerProfileID {
+                expense.payerProfileID = selectedPayer?.profileID
+                expense.paidBy = selectedPayer?.name
+            }
+
+            // カテゴリ: 元の category objectID と比較し、変更があった時のみ反映
+            let newCategoryObjectID = selectedCategory?.objectID
+            if newCategoryObjectID != origCategoryObjectID {
+                expense.categoryRaw = selectedCategory?.name
+                let expStore = expense.objectID.persistentStore
+                if let cat = selectedCategory,
+                   cat.objectID.persistentStore == expStore {
+                    expense.category = cat
+                } else {
+                    expense.category = nil
+                }
             }
         }
         PersistenceController.shared.save()
