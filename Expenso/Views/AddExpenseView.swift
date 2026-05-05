@@ -167,7 +167,7 @@ struct AddExpenseView: View {
                             Text("支払者")
                             Spacer()
                             if let m = selectedPayer {
-                                MemberAvatarView(member: m, size: 24)
+                                AvatarView(member: m, size: 24)
                                 Text(m.displayName)
                                     .foregroundStyle(.secondary)
                             } else {

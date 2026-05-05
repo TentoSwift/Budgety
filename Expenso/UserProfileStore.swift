@@ -2,8 +2,8 @@
 //  UserProfileStore.swift
 //  Expenso
 //
-//  ShareCalendarApp の UserProfileStore を参考に、ユーザーのアイコンと名前を
-//  端末/アカウント単位で保持する。シートとは独立。
+//  ユーザーのアバター画像 (写真 or Memoji 合成) と表示名を端末/アカウント単位で保持する。
+//  シートとは独立。CloudKit Public DB にも同期して、共有先からも見えるようにする。
 //
 
 import Foundation
@@ -17,11 +17,11 @@ final class UserProfileStore: ObservableObject {
     static let shared = UserProfileStore()
 
     private enum Keys {
-        static let displayName  = "userProfile.displayName"
-        static let iconSymbol   = "userProfile.iconSymbol"
-        static let colorHex     = "userProfile.colorHex"
-        static let selfMemberID = "userProfile.selfMemberID"
+        static let displayName       = "userProfile.displayName"
+        static let avatarBgColorHex  = "userProfile.avatarBgColorHex"
+        static let selfMemberID      = "userProfile.selfMemberID"
     }
+    private static let photoFileName = "userProfile.photo.jpg"
 
     @Published var displayName: String {
         didSet {
@@ -30,12 +30,15 @@ final class UserProfileStore: ObservableObject {
         }
     }
 
-    @Published var iconSymbol: String {
-        didSet { UserDefaults.standard.set(iconSymbol, forKey: Keys.iconSymbol) }
+    /// Memoji エディタで選択した背景色 (Memoji 経路で使う)。
+    @Published var avatarBgColorHex: String? {
+        didSet { UserDefaults.standard.set(avatarBgColorHex, forKey: Keys.avatarBgColorHex) }
     }
 
-    @Published var colorHex: String {
-        didSet { UserDefaults.standard.set(colorHex, forKey: Keys.colorHex) }
+    /// アバター画像 (JPEG)。写真選択 or Memoji 合成の結果。
+    /// `Application Support/userProfile.photo.jpg` に保存。
+    @Published var photoData: Data? {
+        didSet { writePhotoToDisk() }
     }
 
     @Published private(set) var selfMemberID: UUID? {
@@ -44,7 +47,8 @@ final class UserProfileStore: ObservableObject {
         }
     }
 
-    var tint: Color { Color(hex: colorHex) ?? .blue }
+    /// アバター背景色。SwiftUI から使うために Color 化。未設定時は青。
+    var bgColor: Color { Color(hex: avatarBgColorHex ?? "#5B8DEF") ?? .blue }
 
     var resolvedDisplayName: String {
         displayName.isEmpty ? "自分" : displayName
@@ -53,16 +57,38 @@ final class UserProfileStore: ObservableObject {
     private init() {
         let ud = UserDefaults.standard
         self.displayName = ud.string(forKey: Keys.displayName)
-            ?? ud.string(forKey: "displayName") // 古いキーから移行
+            ?? ud.string(forKey: "displayName")
             ?? ""
-        self.iconSymbol = ud.string(forKey: Keys.iconSymbol) ?? "person.fill"
-        self.colorHex   = ud.string(forKey: Keys.colorHex) ?? "#5B8DEF"
+        self.avatarBgColorHex = ud.string(forKey: Keys.avatarBgColorHex)
         if let str = ud.string(forKey: Keys.selfMemberID), let id = UUID(uuidString: str) {
             self.selfMemberID = id
         } else {
             self.selfMemberID = nil
         }
+        self.photoData = Self.readPhotoFromDisk()
     }
+
+    // MARK: - Local file helpers
+
+    private static var photoURL: URL {
+        let dir = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)) ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return dir.appendingPathComponent(photoFileName)
+    }
+
+    private static func readPhotoFromDisk() -> Data? {
+        try? Data(contentsOf: photoURL)
+    }
+
+    private func writePhotoToDisk() {
+        let url = Self.photoURL
+        if let data = photoData {
+            try? data.write(to: url, options: [.atomic])
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    // MARK: - Self Member sync
 
     /// Settings 編集後に呼ぶ。selfMemberID に対応する Member エンティティを
     /// 作成または更新して、プロフィールを反映する。
@@ -75,7 +101,6 @@ final class UserProfileStore: ObservableObject {
             selfMemberID = resolvedID
         }
 
-        // 既存検索
         let req = NSFetchRequest<Member>(entityName: "Member")
         req.predicate = NSPredicate(format: "id == %@", resolvedID as CVarArg)
         req.fetchLimit = 1
@@ -83,14 +108,13 @@ final class UserProfileStore: ObservableObject {
         if let existing = (try? ctx.fetch(req))?.first {
             member = existing
         } else {
-            // 既存メンバー (旧スキーマからの移行) で名前一致するものを探す
+            // 旧スキーマからの移行: 名前一致の既存メンバーを再利用
             let nameReq = NSFetchRequest<Member>(entityName: "Member")
             nameReq.predicate = NSPredicate(format: "name == %@", resolvedDisplayName)
             nameReq.sortDescriptors = [NSSortDescriptor(keyPath: \Member.createdAt, ascending: true)]
             nameReq.fetchLimit = 1
             if let nameMatch = (try? ctx.fetch(nameReq))?.first {
                 member = nameMatch
-                // ID を上書きして profile に紐付け
                 member.id = resolvedID
             } else {
                 member = Member(context: ctx)
@@ -100,14 +124,13 @@ final class UserProfileStore: ObservableObject {
             }
         }
 
-        member.name     = resolvedDisplayName
-        member.colorHex = colorHex
-        member.symbol   = iconSymbol
+        member.name      = resolvedDisplayName
+        member.colorHex  = avatarBgColorHex ?? "#5B8DEF"
+        member.photoData = photoData
 
         try? ctx.save()
     }
 
-    /// Settings の起動時に呼ぶ。Member が無く、Profile に未保存の場合にデフォルトを生成する。
     func ensureSelfMemberExists(in ctx: NSManagedObjectContext) {
         if selfMemberID != nil { return }
         applyToSelfMember(in: ctx)
@@ -133,16 +156,24 @@ final class UserProfileStore: ObservableObject {
                 record = CKRecord(recordType: Self.recordType, recordID: profileID)
             }
             record["displayName"] = resolvedDisplayName as CKRecordValue
-            record["iconSymbol"]  = iconSymbol as CKRecordValue
-            record["colorHex"]    = colorHex as CKRecordValue
+            record["avatarBgColorHex"] = (avatarBgColorHex ?? "#5B8DEF") as CKRecordValue
+
+            // 写真は CKAsset として保存。一時ファイルにコピーしてから渡す
+            if let data = photoData {
+                let tmp = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("expenso_profile_\(UUID().uuidString).jpg")
+                try data.write(to: tmp, options: [.atomic])
+                record["photo"] = CKAsset(fileURL: tmp)
+            } else {
+                record["photo"] = nil
+            }
             _ = try await container.publicCloudDatabase.save(record)
         } catch {
-            // 失敗しても致命的ではない (オフライン等)。次回再試行。
+            // 失敗時はサイレント (オフライン等)
         }
     }
 
-    /// 起動時に Public DB から自分のプロフィールを取得して、ローカルが空なら反映する。
-    /// (他デバイスでセットアップ済みのプロフィールを引き継ぐため)
+    /// 起動時に Public DB から自分のプロフィールを取得して、ローカルが未設定の場合に反映する。
     func refreshFromCloudKit() async {
         let container = CKContainer(identifier: Self.containerID)
         do {
@@ -154,11 +185,14 @@ final class UserProfileStore: ObservableObject {
                 if displayName.isEmpty, let n = record["displayName"] as? String, !n.isEmpty {
                     displayName = n
                 }
-                if iconSymbol == "person.fill", let s = record["iconSymbol"] as? String, !s.isEmpty {
-                    iconSymbol = s
+                if avatarBgColorHex == nil, let c = record["avatarBgColorHex"] as? String, !c.isEmpty {
+                    avatarBgColorHex = c
                 }
-                if colorHex == "#5B8DEF", let c = record["colorHex"] as? String, !c.isEmpty {
-                    colorHex = c
+                if photoData == nil,
+                   let asset = record["photo"] as? CKAsset,
+                   let url = asset.fileURL,
+                   let data = try? Data(contentsOf: url) {
+                    photoData = data
                 }
             }
         } catch {

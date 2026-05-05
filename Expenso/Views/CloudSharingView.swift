@@ -578,21 +578,14 @@ private struct ParticipantRow: View {
         return nil
     }
 
-    private var avatarColor: Color {
-        if isAccepted, let cached = cachedProfile, let hex = cached.colorHex, let c = Color(hex: hex) {
-            return c
+    private var avatarColorHex: String {
+        if isAccepted, let cached = cachedProfile, let hex = cached.colorHex, !hex.isEmpty {
+            return hex
         }
         switch participant.role {
-        case .owner: return .indigo
-        default: return participant.acceptanceStatus == .pending ? .orange : .gray
+        case .owner: return "#5856D6" // indigo
+        default: return participant.acceptanceStatus == .pending ? "#FF9500" : "#8E8E93"
         }
-    }
-
-    private var avatarSymbol: String {
-        if isAccepted, let cached = cachedProfile, let s = cached.iconSymbol, !s.isEmpty {
-            return s
-        }
-        return participant.acceptanceStatus == .pending ? "envelope.fill" : "person.fill"
     }
 
     private var statusText: String {
@@ -618,13 +611,12 @@ private struct ParticipantRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(avatarColor.gradient)
-                    Image(systemName: avatarSymbol)
-                        .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
-                }
-                .frame(width: 40, height: 40)
+                AvatarView(
+                    photoData: cachedProfile?.photoData,
+                    displayName: primaryText,
+                    colorHex: avatarColorHex,
+                    size: 40
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(primaryText)

@@ -53,20 +53,6 @@ enum CategoryDefaults {
 }
 
 enum MemberDefaults {
-    /// メンバーのアイコン用 SF Symbols (人物・顔系を中心に)
-    static let symbols: [String] = [
-        "person.fill", "person.crop.circle.fill",
-        "figure.stand", "figure.run", "figure.walk", "figure.and.child.holdinghands",
-        "face.smiling", "face.dashed",
-        "graduationcap.fill", "briefcase.fill",
-        "heart.fill", "star.fill", "sparkles",
-        "pawprint.fill", "bird.fill",
-        "sun.max.fill", "moon.fill", "leaf.fill",
-        "flame.fill", "drop.fill", "bolt.fill",
-        "music.note", "headphones", "gamecontroller.fill",
-        "airplane", "car.fill", "bicycle"
-    ]
-
-    /// メンバーのカラーパレット (カテゴリと共通)
+    /// メンバーアバターの背景色パレット (写真未設定時のフォールバック用)
     static let palette: [String] = CategoryDefaults.palette
 }

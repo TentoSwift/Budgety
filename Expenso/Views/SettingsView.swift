@@ -60,14 +60,12 @@ struct SettingsView: View {
                         showProfileEditor = true
                     } label: {
                         HStack(spacing: 14) {
-                            ZStack {
-                                Circle()
-                                    .fill(profile.tint.gradient)
-                                    .frame(width: 56, height: 56)
-                                Image(systemName: profile.iconSymbol)
-                                    .font(.title3)
-                                    .foregroundStyle(.white)
-                            }
+                            AvatarView(
+                                photoData: profile.photoData,
+                                displayName: profile.resolvedDisplayName,
+                                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                                size: 56
+                            )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(profile.resolvedDisplayName)
                                     .font(.headline)
@@ -86,7 +84,7 @@ struct SettingsView: View {
                 } header: {
                     Text("プロフィール")
                 } footer: {
-                    Text("アカウント全体で使われるアイコンと名前です。新しい支出を追加した時の支払者の初期値にも使われます。")
+                    Text("アカウント全体で使われるアバターと名前です。共有シートの相手にも表示されます。")
                 }
 
                 Section("カテゴリ") {

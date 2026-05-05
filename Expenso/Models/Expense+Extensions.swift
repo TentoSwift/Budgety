@@ -11,7 +11,8 @@ extension Expense {
     var displayTitle: String { title ?? "" }
     var displayPaidBy: String { resolvedPayer?.displayName ?? (paidBy ?? "") }
     var payerTint: Color { resolvedPayer?.tint ?? .secondary }
-    var payerSymbol: String { resolvedPayer?.displaySymbol ?? "person.fill" }
+    /// Avatar 用: 解決できた Member の写真 (なければ nil → AvatarView がイニシャル文字で fallback)
+    var payerPhotoData: Data? { resolvedPayer?.photoData }
 
     /// `paidBy` の名前と一致するローカル `Member` を返す。Member は Private ストアのみに存在するため、
     /// Shared ストアの Expense (他人のシート) では nil を返し、表示は `paidBy` 文字列にフォールバックする。

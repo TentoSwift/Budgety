@@ -99,7 +99,7 @@ struct MemberPickerView: View {
                 dismiss()
             } label: {
                 HStack(spacing: 12) {
-                    MemberAvatarView(member: me, size: 36)
+                    AvatarView(member: me, size: 36)
                     Text(me.displayName)
                         .foregroundStyle(.primary)
                     Text("自分")
@@ -136,13 +136,7 @@ struct MemberPickerView: View {
             selectFromParticipant(info)
         } label: {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill((Color(hex: info.colorHex) ?? .gray).gradient)
-                    Image(systemName: info.symbol)
-                        .foregroundStyle(.white)
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .frame(width: 36, height: 36)
+                AvatarView(name: info.name, colorHex: info.colorHex, photoData: info.photoData, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(info.name)
                         .foregroundStyle(.primary)
@@ -163,8 +157,8 @@ struct MemberPickerView: View {
 
     private struct ParticipantInfo {
         let name: String
-        let symbol: String
         let colorHex: String
+        let photoData: Data?
     }
 
     private func participantDisplayInfo(_ p: CKShare.Participant) -> ParticipantInfo {
@@ -181,9 +175,8 @@ struct MemberPickerView: View {
             if let email = p.userIdentity.lookupInfo?.emailAddress, !email.isEmpty { return email }
             return p.role == .owner ? "オーナー" : "メンバー"
         }()
-        let symbol = (cached?.iconSymbol).flatMap { $0.isEmpty ? nil : $0 } ?? "person.fill"
         let color = (cached?.colorHex).flatMap { $0.isEmpty ? nil : $0 } ?? "#8E8E93"
-        return ParticipantInfo(name: name, symbol: symbol, colorHex: color)
+        return ParticipantInfo(name: name, colorHex: color, photoData: cached?.photoData)
     }
 
     /// 参加者を選択した時、ローカルに同名 Member が居れば再利用、なければ作成して `selected` に紐づける。
@@ -196,7 +189,7 @@ struct MemberPickerView: View {
             m.id = UUID()
             m.name = info.name
             m.colorHex = info.colorHex
-            m.symbol = info.symbol
+            m.photoData = info.photoData
             m.sortOrder = (allMembers.map(\.sortOrder).max() ?? -1) + 1
             m.createdAt = .now
             PersistenceController.shared.save()
@@ -221,18 +214,3 @@ struct MemberPickerView: View {
     }
 }
 
-struct MemberAvatarView: View {
-    @ObservedObject var member: Member
-    var size: CGFloat = 36
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(member.tint.gradient)
-            Image(systemName: member.displaySymbol)
-                .foregroundStyle(.white)
-                .font(.system(size: size * 0.45, weight: .semibold))
-        }
-        .frame(width: size, height: size)
-    }
-}

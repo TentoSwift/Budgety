@@ -69,8 +69,9 @@ struct StatsView: View {
 
     private struct PayerSummary: Identifiable {
         let name: String
+        let colorHex: String
+        let photoData: Data?
         let tint: Color
-        let symbol: String
         let total: Decimal
         let count: Int
         var id: String { name }
@@ -89,8 +90,9 @@ struct StatsView: View {
             }
             return PayerSummary(
                 name: name,
+                colorHex: resolved?.displayColorHex ?? "#8E8E93",
+                photoData: resolved?.photoData,
                 tint: resolved?.tint ?? .secondary,
-                symbol: resolved?.displaySymbol ?? "person.fill",
                 total: total,
                 count: list.count
             )
@@ -350,14 +352,12 @@ struct StatsView: View {
                 .font(.headline)
             ForEach(byPayer) { item in
                 HStack {
-                    ZStack {
-                        Circle()
-                            .fill(item.tint.opacity(0.18))
-                            .frame(width: 28, height: 28)
-                        Image(systemName: item.symbol)
-                            .font(.caption)
-                            .foregroundStyle(item.tint)
-                    }
+                    AvatarView(
+                        photoData: item.photoData,
+                        displayName: item.name,
+                        colorHex: item.colorHex,
+                        size: 28
+                    )
                     Text(item.name)
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {

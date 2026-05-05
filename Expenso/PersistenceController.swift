@@ -171,7 +171,6 @@ final class PersistenceController {
         m.id = UUID()
         m.name = displayName.isEmpty ? "自分" : displayName
         m.colorHex = "#5B8DEF"
-        m.symbol = "person.fill"
         m.sortOrder = 0
         m.createdAt = .now
         try? ctx.save()
@@ -461,8 +460,8 @@ final class PersistenceController {
         family.createdAt = .now
         Self.seedDefaultCategories(for: family, in: ctx)
         // Member はアカウント単位 (グローバル) なので両シートで共通に作る
-        _ = makeMember(name: "自分", color: "#5B8DEF", symbol: "person.fill", sort: 0, ctx: ctx)
-        _ = makeMember(name: "パートナー", color: "#FF2D55", symbol: "heart.fill", sort: 1, ctx: ctx)
+        _ = makeMember(name: "自分", color: "#5B8DEF", sort: 0, ctx: ctx)
+        _ = makeMember(name: "パートナー", color: "#FF2D55", sort: 1, ctx: ctx)
 
         let trip = ExpenseSheet(context: ctx)
         trip.name = "京都旅行"
@@ -498,12 +497,11 @@ final class PersistenceController {
         try? ctx.save()
     }
 
-    private func makeMember(name: String, color: String, symbol: String, sort: Int32, ctx: NSManagedObjectContext) -> Member {
+    private func makeMember(name: String, color: String, sort: Int32, ctx: NSManagedObjectContext) -> Member {
         let m = Member(context: ctx)
         m.id = UUID()
         m.name = name
         m.colorHex = color
-        m.symbol = symbol
         m.sortOrder = sort
         m.createdAt = .now
         return m

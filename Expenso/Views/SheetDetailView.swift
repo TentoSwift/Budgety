@@ -571,9 +571,12 @@ private struct ExpenseRowView: View {
                 if showSubtitle {
                     HStack(spacing: 6) {
                         if let paidBy = expense.paidBy, !paidBy.isEmpty {
-                            Image(systemName: expense.payerSymbol)
-                                .font(.caption2)
-                                .foregroundStyle(expense.payerTint)
+                            AvatarView(
+                                name: paidBy,
+                                colorHex: (expense.resolvedPayer?.displayColorHex) ?? "#8E8E93",
+                                photoData: expense.payerPhotoData,
+                                size: 16
+                            )
                             Text(paidBy)
                                 .foregroundStyle(expense.payerTint)
                         }

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2DDCE11E2FA8974700A42F60 /* Expenso.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Expenso.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -37,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0010000A0010000A0010000 /* MemojiView in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,6 +84,7 @@
 			);
 			name = Expenso;
 			packageProductDependencies = (
+				A0030000A0030000A0030000 /* MemojiView */,
 			);
 			productName = Expenso;
 			productReference = 2DDCE11E2FA8974700A42F60 /* Expenso.app */;
@@ -108,6 +114,9 @@
 			);
 			mainGroup = 2DDCE1152FA8974700A42F60;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2DDCE11F2FA8974700A42F60 /* Products */;
 			projectDirPath = "";
@@ -356,6 +365,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/emrearmagan/MemojiView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A0030000A0030000A0030000 /* MemojiView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */;
+			productName = MemojiView;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2DDCE1162FA8974700A42F60 /* Project object */;
 }

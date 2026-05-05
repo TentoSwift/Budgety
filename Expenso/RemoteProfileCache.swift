@@ -2,9 +2,8 @@
 //  RemoteProfileCache.swift
 //  Expenso
 //
-//  ShareCalendarApp の ProfileCache を参考に、他ユーザーのプロフィール
-//  (displayName / iconSymbol / colorHex) を CloudKit Public DB から取得し
-//  Caches ディレクトリにキャッシュする。
+//  他ユーザーのプロフィール (displayName / 背景色 / アバター画像) を
+//  CloudKit Public DB から取得し、Caches ディレクトリにキャッシュする。
 //
 
 import Foundation
@@ -19,9 +18,18 @@ final class RemoteProfileCache: ObservableObject {
     struct CachedProfile: Codable, Equatable {
         var recordName: String
         var displayName: String?
-        var iconSymbol: String?
         var colorHex: String?
+        /// 画像はディスクに分離保存し、メタデータ JSON にはファイル名だけ保持する。
+        /// (ロード時に Data へ復元するため Codable 上は無視)
+        var photoFileName: String?
         var lastFetched: Date
+
+        /// メモリ展開後にだけ持つ画像バイト列。Codable には載せない。
+        var photoData: Data? {
+            guard let name = photoFileName else { return nil }
+            let url = RemoteProfileCache.photosDir.appendingPathComponent(name)
+            return try? Data(contentsOf: url)
+        }
 
         func isStale(olderThan seconds: TimeInterval = 3600) -> Bool {
             Date().timeIntervalSince(lastFetched) > seconds
@@ -38,6 +46,13 @@ final class RemoteProfileCache: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("profiles.json")
     }()
+    fileprivate nonisolated static let photosDir: URL = {
+        let dir = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ExpensoProfiles/photos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
 
     private var inFlight: Set<String> = []
 
@@ -53,10 +68,6 @@ final class RemoteProfileCache: ObservableObject {
 
     func displayName(for recordName: String) -> String? {
         entries[recordName]?.displayName
-    }
-
-    func iconSymbol(for recordName: String) -> String? {
-        entries[recordName]?.iconSymbol
     }
 
     func tint(for recordName: String) -> Color? {
@@ -91,11 +102,24 @@ final class RemoteProfileCache: ObservableObject {
                           record.recordType == "UserProfile" else {
                         return nil
                     }
+                    let displayName = record["displayName"] as? String
+                    // 旧スキーマの `colorHex` と新スキーマの `avatarBgColorHex` の両方を許容
+                    let colorHex = (record["avatarBgColorHex"] as? String)
+                        ?? (record["colorHex"] as? String)
+                    var photoFileName: String? = nil
+                    if let asset = record["photo"] as? CKAsset, let url = asset.fileURL,
+                       let data = try? Data(contentsOf: url) {
+                        let name = "\(recordName).jpg"
+                        let dest = Self.photosDir.appendingPathComponent(name)
+                        if (try? data.write(to: dest, options: .atomic)) != nil {
+                            photoFileName = name
+                        }
+                    }
                     return CachedProfile(
                         recordName: recordName,
-                        displayName: record["displayName"] as? String,
-                        iconSymbol:  record["iconSymbol"] as? String,
-                        colorHex:    record["colorHex"] as? String,
+                        displayName: displayName,
+                        colorHex: colorHex,
+                        photoFileName: photoFileName,
                         lastFetched: .now
                     )
                 }
