@@ -91,7 +91,9 @@ final class UserProfileStore: ObservableObject {
     // MARK: - Self Member sync
 
     /// Settings 編集後に呼ぶ。selfMemberID に対応する Member エンティティを
-    /// 作成または更新して、プロフィールを反映する。
+    /// 作成または更新し、自分が払った Private ストアの過去支出の paidBy も新しい名前に追従させる
+    /// (`Expense.paidBy` は文字列フリーズなので、ここで一括 rename しないと過去ログのアバターが
+    /// プロフィール変更後に解決できなくなる)。
     func applyToSelfMember(in ctx: NSManagedObjectContext) {
         let resolvedID: UUID
         if let id = selfMemberID {
@@ -105,8 +107,10 @@ final class UserProfileStore: ObservableObject {
         req.predicate = NSPredicate(format: "id == %@", resolvedID as CVarArg)
         req.fetchLimit = 1
         let member: Member
+        let oldName: String?
         if let existing = (try? ctx.fetch(req))?.first {
             member = existing
+            oldName = existing.name
         } else {
             // 旧スキーマからの移行: 名前一致の既存メンバーを再利用
             let nameReq = NSFetchRequest<Member>(entityName: "Member")
@@ -116,19 +120,45 @@ final class UserProfileStore: ObservableObject {
             if let nameMatch = (try? ctx.fetch(nameReq))?.first {
                 member = nameMatch
                 member.id = resolvedID
+                oldName = nameMatch.name
             } else {
                 member = Member(context: ctx)
                 member.id = resolvedID
                 member.createdAt = .now
                 member.sortOrder = 0
+                oldName = nil
             }
         }
 
-        member.name      = resolvedDisplayName
+        let newName = resolvedDisplayName
+        member.name      = newName
         member.colorHex  = avatarBgColorHex ?? "#5B8DEF"
         member.photoData = photoData
 
+        // 名前が変わったら、自分が払った Private ストアの過去支出の paidBy を追従更新
+        if let old = oldName, !old.isEmpty, old != newName {
+            renamePaidByInPrivateStore(from: old, to: newName, in: ctx)
+        }
+
         try? ctx.save()
+    }
+
+    /// `paidBy == old` の Expense のうち、Private ストアにあるもの (= 自分が所有するもの) だけを
+    /// `paidBy = new` に書き換える。Shared ストアの支出は他アカウントが所有するため触らない。
+    private func renamePaidByInPrivateStore(from old: String, to new: String, in ctx: NSManagedObjectContext) {
+        let pc = PersistenceController.shared
+        guard let coord = ctx.persistentStoreCoordinator,
+              let privateStore = pc.privateStore else { return }
+
+        let req = NSFetchRequest<Expense>(entityName: "Expense")
+        req.predicate = NSPredicate(format: "paidBy == %@", old)
+        guard let expenses = try? ctx.fetch(req), !expenses.isEmpty else { return }
+
+        for e in expenses {
+            guard let store = coord.persistentStore(for: e.objectID.uriRepresentation()),
+                  store == privateStore else { continue }
+            e.paidBy = new
+        }
     }
 
     func ensureSelfMemberExists(in ctx: NSManagedObjectContext) {
