@@ -44,6 +44,12 @@ struct AddExpenseView: View {
     /// 過去の同タイトル支出からの候補。タイトル入力で自動更新。
     @State private var titleSuggestion: TitleSuggestion?
 
+    /// FoundationModels が推測したカテゴリ。過去候補にカテゴリが無い時だけセットされる。
+    @State private var aiCategorySuggestion: ExpenseCategory?
+    @State private var isComputingAICategory: Bool = false
+    /// 現在進行中の AI 推測 Task。新しいキーストロークでキャンセルする。
+    @State private var aiSuggestTask: Task<Void, Never>?
+
     // 編集モードの「ロード時スナップショット」。save 時に現在値と比較し、
     // 差分のあるフィールドだけを Expense に書き戻す (= ユーザーが触らなかった
     // フィールドは他デバイスの更新を上書きしない = field-level CRDT 動作)
@@ -159,6 +165,58 @@ struct AddExpenseView: View {
     }
 
     @ViewBuilder
+    private var aiCategorySuggestionSection: some View {
+        if case .create = mode {
+            if isComputingAICategory {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color.accentColor)
+                        Text("AI でカテゴリを推測中…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            } else if let cat = aiCategorySuggestion,
+                      selectedCategory?.objectID != cat.objectID {
+                Section {
+                    Button {
+                        selectedCategory = cat
+                        aiCategorySuggestion = nil
+                        Haptics.success()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("AI 推奨カテゴリ")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    CategoryIconView(category: cat, size: 22)
+                                    Text(cat.displayName)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            Spacer()
+                            Text("適用")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var suggestionSection: some View {
         if case .create = mode, let s = titleSuggestion {
             Section {
@@ -197,6 +255,12 @@ struct AddExpenseView: View {
     /// 種別 (支出 / 収入) を尊重する。1 文字以下では何もしない (= ノイズ抑制)。
     @MainActor
     private func recomputeTitleSuggestion() {
+        // 進行中の AI suggest Task を必ずキャンセル
+        aiSuggestTask?.cancel()
+        aiSuggestTask = nil
+        aiCategorySuggestion = nil
+        isComputingAICategory = false
+
         guard case .create(let sheet) = mode else {
             titleSuggestion = nil
             return
@@ -248,6 +312,48 @@ struct AddExpenseView: View {
             payerMemberID: topPayerExpense?.payerMemberID,
             sampleCount: results.count
         )
+
+        // 過去マッチからカテゴリが拾えない時だけ FoundationModels で推測する。
+        // selectedCategory が既に何か入っていても (= ロード時の自動デフォルト) 提案を出して
+        // 上書きしたいケースに対応する。
+        if topCategory == nil {
+            kickAICategorySuggest(title: trimmed, in: sheet)
+        }
+    }
+
+    /// FoundationModels で「タイトルからカテゴリを推測」を非同期で行う。
+    /// 連続入力中はデバウンスしつつ前の Task をキャンセル。利用不可ならスキップ。
+    @MainActor
+    private func kickAICategorySuggest(title: String, in sheet: ExpenseSheet) {
+        guard CategoryAISuggestor.isAvailable else { return }
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let kindCats = cats.filter { c in
+            let raw = c.kindRaw ?? ""
+            return raw == kind.rawValue || (kind == .expense && raw.isEmpty)
+        }
+        let names = kindCats.map { $0.displayName }
+        guard !names.isEmpty else { return }
+
+        let snapshotKind = kind
+        let snapshotTitle = title
+
+        isComputingAICategory = true
+        aiSuggestTask = Task { @MainActor in
+            // デバウンス。typing が落ち着くまで待つ
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if Task.isCancelled { return }
+            let suggested = await CategoryAISuggestor.suggest(
+                title: snapshotTitle,
+                kind: snapshotKind,
+                categories: names
+            )
+            if Task.isCancelled { return }
+            isComputingAICategory = false
+            if let suggested,
+               let match = kindCats.first(where: { $0.displayName == suggested }) {
+                aiCategorySuggestion = match
+            }
+        }
     }
 
     /// サジェストを適用。フィールドが空 / 自動初期値のままなら上書きし、ユーザーが
@@ -485,6 +591,7 @@ struct AddExpenseView: View {
                 }
 
                 suggestionSection
+                aiCategorySuggestionSection
 
                 Section("カテゴリ") {
                     if let sheet = contextSheet {
