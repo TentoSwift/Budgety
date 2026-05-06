@@ -250,8 +250,8 @@ struct AddExpenseView: View {
         )
     }
 
-    /// サジェストを適用。空 / デフォルト値のフィールドのみ書き換える (= ユーザーが既に
-    /// 入力したものは尊重する)。kind は現在の値を使うので変更しない。
+    /// サジェストを適用。フィールドが空 / 自動初期値のままなら上書きし、ユーザーが
+    /// 手で変更したと推測できる場合は上書きしない。kind は現在の値で絞り込まれているため触らない。
     @MainActor
     private func applySuggestion(_ s: TitleSuggestion) {
         if amountText.isEmpty, let amt = s.amount {
@@ -260,7 +260,15 @@ struct AddExpenseView: View {
         if selectedCategory == nil, let cat = s.category {
             selectedCategory = cat
         }
-        if selectedPayer == nil, let mid = s.payerMemberID {
+        // selectedPayer は loadIfNeeded で自分にデフォルト初期化される。
+        // 自分のままなら "ユーザーが意図して選んだ" わけではないので、サジェストの payer で上書きする。
+        let isDefaultPayer: Bool = {
+            guard let payer = selectedPayer, let myID = profile.selfMemberID else { return false }
+            return payer.id == myID
+        }()
+        if (selectedPayer == nil || isDefaultPayer),
+           let mid = s.payerMemberID,
+           mid != profile.selfMemberID {
             let req = NSFetchRequest<Member>(entityName: "Member")
             req.predicate = NSPredicate(format: "id == %@", mid as CVarArg)
             req.fetchLimit = 1
