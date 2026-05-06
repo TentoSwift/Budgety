@@ -47,6 +47,7 @@ struct SheetDetailView: View {
     @State private var demoOpenCalendar: Bool = false
     @State private var demoOpenTemplates: Bool = false
     @State private var demoOpenStats: Bool = false
+    @State private var demoOpenChat: Bool = false
     @AppStorage("expenseSortOption") private var sortOptionRaw: String = SortOption.dateDesc.rawValue
 
     /// シート配下の Expense を直接観測。`record.expenses` 経由だと子の attribute 変更
@@ -150,6 +151,13 @@ struct SheetDetailView: View {
                     } label: {
                         Label("統計を見る", systemImage: "chart.pie.fill")
                     }
+                    if SheetAIChat.isAvailable {
+                        NavigationLink {
+                            SheetAIChatView(record: record)
+                        } label: {
+                            Label("AI チャット", systemImage: "sparkles.rectangle.stack")
+                        }
+                    }
                     Divider()
                     Picker("並び順", selection: $sortOptionRaw) {
                         ForEach(SortOption.allCases) { opt in
@@ -210,6 +218,8 @@ struct SheetDetailView: View {
                 demoOpenTemplates = true
             case "stats":
                 demoOpenStats = true
+            case "chat":
+                demoOpenChat = true
             default: break
             }
         }
@@ -221,6 +231,9 @@ struct SheetDetailView: View {
         }
         .navigationDestination(isPresented: $demoOpenStats) {
             StatsView(record: record)
+        }
+        .navigationDestination(isPresented: $demoOpenChat) {
+            SheetAIChatView(record: record)
         }
     }
 
