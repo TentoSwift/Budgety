@@ -57,27 +57,45 @@ final class SheetAIChat: ObservableObject {
     }
 
     /// メッセージ送信。空文字や利用不可状態は黙ってスキップ。
+    /// 応答はストリーミング受信して、placeholder の assistant メッセージ text を逐次更新する。
     func send() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let session else { return }
         guard !isThinking else { return }
 
         messages.append(Message(role: .user, text: trimmed))
+        // 受信先の placeholder を 1 つ追加。stream で text をどんどん書き換えていく。
+        let placeholder = Message(role: .assistant, text: "")
+        let placeholderID = placeholder.id
+        messages.append(placeholder)
         inputText = ""
         isThinking = true
 
         Task { @MainActor in
+            defer { isThinking = false }
             do {
-                let response = try await session.respond(to: trimmed)
-                let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                messages.append(Message(role: .assistant, text: text.isEmpty ? "(空の応答)" : text))
+                let stream = session.streamResponse(to: trimmed)
+                for try await partial in stream {
+                    if let i = messages.firstIndex(where: { $0.id == placeholderID }) {
+                        messages[i].text = partial.content
+                    }
+                }
+                // 末尾を trim して仕上げ
+                if let i = messages.firstIndex(where: { $0.id == placeholderID }) {
+                    let trimmedFinal = messages[i].text
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    messages[i].text = trimmedFinal.isEmpty ? "(空の応答)" : trimmedFinal
+                }
             } catch {
                 #if DEBUG
-                print("⚠️ SheetAIChat: \(error)")
+                print("⚠️ SheetAIChat stream: \(error)")
                 #endif
+                // 受信中の placeholder は捨ててエラー表示に置き換え
+                if let i = messages.firstIndex(where: { $0.id == placeholderID }) {
+                    messages.remove(at: i)
+                }
                 messages.append(Message(role: .error, text: "応答できませんでした: \(error.localizedDescription)"))
             }
-            isThinking = false
         }
     }
 

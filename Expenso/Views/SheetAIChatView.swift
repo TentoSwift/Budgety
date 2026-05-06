@@ -48,17 +48,15 @@ struct SheetAIChatView: View {
                     ForEach(chat.messages) { msg in
                         bubble(for: msg).id(msg.id)
                     }
-                    if chat.isThinking {
-                        thinkingBubble.id("thinking")
-                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 16)
             }
-            .onChange(of: chat.messages.count) { _, _ in
+            // ストリーミング中はテキストが伸びるたびに最下部へ
+            .onChange(of: chat.messages.last?.text) { _, _ in
                 scrollToBottom(proxy: proxy)
             }
-            .onChange(of: chat.isThinking) { _, _ in
+            .onChange(of: chat.messages.count) { _, _ in
                 scrollToBottom(proxy: proxy)
             }
             .onAppear { scrollToBottom(proxy: proxy) }
@@ -66,10 +64,10 @@ struct SheetAIChatView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if chat.isThinking {
-            withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
-        } else if let lastID = chat.messages.last?.id {
-            withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
+        if let lastID = chat.messages.last?.id {
+            withAnimation(.easeOut(duration: 0.15)) {
+                proxy.scrollTo(lastID, anchor: .bottom)
+            }
         }
     }
 
@@ -94,12 +92,24 @@ struct SheetAIChatView: View {
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 28, height: 28)
                     .background(Color.accentColor.opacity(0.15), in: Circle())
-                Text(.init(msg.text))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .textSelection(.enabled)
+                Group {
+                    if msg.text.isEmpty {
+                        // ストリーミング開始前 = まだトークンが届いていない
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("考え中…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(.init(msg.text))
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 Spacer(minLength: 40)
             }
         case .error:
@@ -113,25 +123,6 @@ struct SheetAIChatView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 Spacer()
             }
-        }
-    }
-
-    private var thinkingBubble: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "sparkles")
-                .font(.subheadline)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 28, height: 28)
-                .background(Color.accentColor.opacity(0.15), in: Circle())
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("考え中...").font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Spacer(minLength: 40)
         }
     }
 
