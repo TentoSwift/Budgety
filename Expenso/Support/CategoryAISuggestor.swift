@@ -34,32 +34,48 @@ enum CategoryAISuggestor {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !categories.isEmpty else { return nil }
 
+        let listing = categories
+            .enumerated()
+            .map { "  [\($0.offset)] \($0.element)" }
+            .joined(separator: "\n")
+
         let instructions = """
         あなたは家計簿アプリのカテゴリ分類アシスタントです。
-        ユーザーが入力した支出/収入のタイトルから、提供されたカテゴリ一覧の中で
-        最も適切なものを 1 つだけ選んでください。
+        ユーザーが入力した支出/収入のタイトルから、与えられたカテゴリリストの
+        **中だけ**から 1 つを選んで返します。
 
-        ルール:
-        - 必ず提供された一覧の文字列を **そのまま** 返すこと (大文字小文字も同じ)。
-        - 一覧に含まれない名前は決して返さない。
-        - どれも明確に当てはまらない場合は空文字を返す。
-        - 種別 (支出 / 収入) に合うカテゴリだけ候補から選ぶ。
+        絶対ルール:
+        - 出力 categoryName は **必ずリストにある名前そのもの** をコピーする。
+        - リストに無い名前を作らない / 翻訳しない / 改変しない。
+        - 適切なものが無い場合は空文字 "" を返す。
+        - 種別 (支出 / 収入) に合うカテゴリだけを候補から選ぶ。
         """
 
         let prompt = """
+        以下のカテゴリリストの中から、入力タイトルに最も適切な 1 つの名前を選んでください。
+
         種別: \(kind.label)
-        タイトル: \(trimmed)
-        利用可能なカテゴリ:
-        \(categories.map { "- \($0)" }.joined(separator: "\n"))
+        入力タイトル: \(trimmed)
+
+        カテゴリリスト (この中から選ぶこと):
+        \(listing)
+
+        最適なものが無ければ "" を返してください。
         """
 
         do {
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: prompt, generating: CategoryGuess.self)
             let raw = response.content.categoryName.trimmingCharacters(in: .whitespacesAndNewlines)
-            // LLM がリスト外の名前を返したらフィルタアウト
-            guard !raw.isEmpty, categories.contains(raw) else { return nil }
-            return raw
+            guard !raw.isEmpty else { return nil }
+            // 厳密一致 → 大文字/小文字 + 全角/半角空白を正規化したマッチも許容する
+            if categories.contains(raw) { return raw }
+            let normalize: (String) -> String = {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                  .lowercased()
+            }
+            let target = normalize(raw)
+            return categories.first(where: { normalize($0) == target })
         } catch {
             #if DEBUG
             print("⚠️ CategoryAISuggestor: failed: \(error)")
