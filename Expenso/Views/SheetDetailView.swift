@@ -133,6 +133,11 @@ struct SheetDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     NavigationLink {
+                        SheetCalendarView(record: record)
+                    } label: {
+                        Label("カレンダー", systemImage: "calendar")
+                    }
+                    NavigationLink {
                         SettlementView(record: record)
                     } label: {
                         Label("精算", systemImage: "arrow.left.arrow.right.circle")
