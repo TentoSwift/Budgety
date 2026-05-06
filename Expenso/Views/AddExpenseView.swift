@@ -41,6 +41,9 @@ struct AddExpenseView: View {
     @State private var showingTemplatePicker: Bool = false
     @State private var showingSaveTemplateConfirm: Bool = false
 
+    /// 過去の同タイトル支出からの候補。タイトル入力で自動更新。
+    @State private var titleSuggestion: TitleSuggestion?
+
     // 編集モードの「ロード時スナップショット」。save 時に現在値と比較し、
     // 差分のあるフィールドだけを Expense に書き戻す (= ユーザーが触らなかった
     // フィールドは他デバイスの更新を上書きしない = field-level CRDT 動作)
@@ -130,6 +133,149 @@ struct AddExpenseView: View {
             return p.isEmpty ? nil : p
         }
         return nil
+    }
+
+    // MARK: - Title-based suggestion (= 過去の入力から学習)
+
+    fileprivate struct TitleSuggestion {
+        let category: ExpenseCategory?
+        let amount: Decimal?
+        let kind: TransactionKind
+        let payerName: String?
+        let payerProfileID: String?
+        let payerMemberID: UUID?
+        let sampleCount: Int
+
+        /// 1 行プレビュー: "食費 · ¥320 (5 件)"
+        func summary(currency: String) -> String {
+            var parts: [String] = []
+            if let cat = category { parts.append(cat.displayName) }
+            if let amt = amount {
+                parts.append(CurrencyCatalog.format(amt, code: currency))
+            }
+            if let p = payerName, !p.isEmpty { parts.append(p) }
+            return parts.joined(separator: " · ") + "  (\(sampleCount) 件)"
+        }
+    }
+
+    @ViewBuilder
+    private var suggestionSection: some View {
+        if case .create = mode, let s = titleSuggestion {
+            Section {
+                Button {
+                    applySuggestion(s)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("過去の入力から候補")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(s.summary(currency: currencyCode))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        Spacer()
+                        Text("適用")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// 現在の title 入力に基づいて、同シート内の過去 Expense を引いて候補を組み立てる。
+    /// 1 文字以下では何もしない (= ノイズ抑制)。
+    @MainActor
+    private func recomputeTitleSuggestion() {
+        guard case .create(let sheet) = mode else {
+            titleSuggestion = nil
+            return
+        }
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2 else {
+            titleSuggestion = nil
+            return
+        }
+        let req = NSFetchRequest<Expense>(entityName: "Expense")
+        req.predicate = NSPredicate(
+            format: "sheet == %@ AND title CONTAINS[c] %@",
+            sheet, trimmed
+        )
+        req.sortDescriptors = [NSSortDescriptor(keyPath: \Expense.date, ascending: false)]
+        req.fetchLimit = 30
+        let results = (try? viewContext.fetch(req)) ?? []
+        guard !results.isEmpty else {
+            titleSuggestion = nil
+            return
+        }
+
+        // 最頻 kind
+        let kindCounts = Dictionary(grouping: results, by: { $0.kind })
+        let topKind = kindCounts.max(by: { $0.value.count < $1.value.count })?.key ?? .expense
+
+        // 最頻カテゴリ (objectID で集計、kind 一致)
+        let kindResults = results.filter { $0.kind == topKind }
+        let categoryCounts = Dictionary(grouping: kindResults, by: { $0.category?.objectID })
+        let topCategoryID = categoryCounts
+            .filter { $0.key != nil }
+            .max(by: { $0.value.count < $1.value.count })?.key
+        let topCategory: ExpenseCategory? = kindResults
+            .first(where: { $0.category?.objectID == topCategoryID })?.category
+
+        // 中央値 (kind 一致、0 以外)
+        let amounts = kindResults.map { $0.amountDecimal }.filter { $0 > 0 }.sorted()
+        let medianAmount: Decimal? = amounts.isEmpty ? nil : amounts[amounts.count / 2]
+
+        // 最頻 payer
+        let payerCounts = Dictionary(grouping: kindResults, by: { $0.payerProfileID ?? "" })
+        let topPayerKey = payerCounts
+            .filter { !$0.key.isEmpty }
+            .max(by: { $0.value.count < $1.value.count })?.key
+        let topPayerExpense = kindResults
+            .first(where: { ($0.payerProfileID ?? "") == (topPayerKey ?? "") })
+
+        titleSuggestion = TitleSuggestion(
+            category: topCategory,
+            amount: medianAmount,
+            kind: topKind,
+            payerName: topPayerExpense?.paidBy,
+            payerProfileID: topPayerKey,
+            payerMemberID: topPayerExpense?.payerMemberID,
+            sampleCount: results.count
+        )
+    }
+
+    /// サジェストを適用。空 / デフォルト値のフィールドのみ書き換える (= ユーザーが既に
+    /// 入力したものは尊重する)。
+    @MainActor
+    private func applySuggestion(_ s: TitleSuggestion) {
+        if amountText.isEmpty, let amt = s.amount {
+            amountText = NSDecimalNumber(decimal: amt).stringValue
+        }
+        if selectedCategory == nil, let cat = s.category {
+            selectedCategory = cat
+        }
+        if selectedPayer == nil, let mid = s.payerMemberID {
+            let req = NSFetchRequest<Member>(entityName: "Member")
+            req.predicate = NSPredicate(format: "id == %@", mid as CVarArg)
+            req.fetchLimit = 1
+            if let m = (try? viewContext.fetch(req))?.first {
+                selectedPayer = m
+            }
+        }
+        if kind != s.kind {
+            kind = s.kind
+        }
+        Haptics.success()
     }
 
     @ViewBuilder
@@ -307,6 +453,9 @@ struct AddExpenseView: View {
 
                 Section("内容") {
                     TextField(kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)", text: $title)
+                        .onChange(of: title) { _, _ in
+                            recomputeTitleSuggestion()
+                        }
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
@@ -328,6 +477,8 @@ struct AddExpenseView: View {
                     }
                     .pickerStyle(.navigationLink)
                 }
+
+                suggestionSection
 
                 Section("カテゴリ") {
                     if let sheet = contextSheet {
