@@ -100,9 +100,18 @@ final class SheetAIChat: ObservableObject {
         あなたは家計簿アプリ「Expenso」のシート専用アシスタントです。
         ユーザーの支出/収入データに基づいて、日本語で自然に答えます。
 
-        回答ルール:
+        重要 — 支出と収入は必ず区別する:
+        - 各項目には [支出] または [収入] のタグが付いている。
+        - 金額は支出なら `-` (マイナス)、収入なら `+` (プラス) で表記される。
+        - 「支出」と聞かれたら [支出] タグ / `-` 記号の項目だけ集計する。
+        - 「収入」と聞かれたら [収入] タグ / `+` 記号の項目だけ集計する。
+        - 「合計」「使った」「払った」「コスト」などは支出のみを意味する。
+        - 「もらった」「入った」「給料」「ボーナス」などは収入のみを意味する。
+        - 区別せずに混ぜて合算しないこと。
+
+        その他のルール:
         - 必ず提供されたデータの数値をもとに答える。データに無い情報は推測しない。
-        - 数値を出す時は、コンテキストの通貨記号 (\(context.contains("通貨: JPY") ? "¥" : "$") など) を併記する。
+        - 数値を出す時は通貨単位 (¥ や $) を併記する。
         - 「分かりません」と答える時は、その理由 (例: そのカテゴリは記録がない) を 1 文で添える。
         - 1 メッセージ 3 行以内が望ましい。長い表は避ける。
         - データに含まれない期間 / カテゴリ / 人物について聞かれたら、データ不在を明示する。
@@ -124,6 +133,10 @@ final class SheetAIChat: ObservableObject {
         lines.append("通貨: \(target)")
         lines.append("今日: \(formatDate(now))")
         lines.append("")
+        lines.append("注意: 各項目の種別は [支出] / [収入] で明示する。")
+        lines.append("金額の符号は支出なら `-`、収入なら `+` を付ける。")
+        lines.append("カテゴリ集計は支出と収入を分けて記載する (= 同じカテゴリ名でも種別が違えば別の集計)。")
+        lines.append("")
 
         let allExpenses = ((sheet.expenses as? Set<Expense>) ?? [])
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
@@ -133,7 +146,9 @@ final class SheetAIChat: ObservableObject {
             cal.isDate($0.date ?? .distantPast, equalTo: now, toGranularity: .month)
         }
         let (mExp, mInc) = totals(of: thisMonth, target: target, fx: fx)
-        lines.append("今月の合計: 支出 \(format(mExp, code: target)) / 収入 \(format(mInc, code: target)) (\(thisMonth.count) 件)")
+        lines.append("今月の合計:")
+        lines.append("  支出: \(format(mExp, code: target)) (\(thisMonth.filter { $0.kind == .expense }.count) 件)")
+        lines.append("  収入: \(format(mInc, code: target)) (\(thisMonth.filter { $0.kind == .income }.count) 件)")
 
         // 先月の合計 (比較用)
         if let prev = cal.date(byAdding: .month, value: -1, to: now) {
@@ -141,41 +156,68 @@ final class SheetAIChat: ObservableObject {
                 cal.isDate($0.date ?? .distantPast, equalTo: prev, toGranularity: .month)
             }
             let (pExp, pInc) = totals(of: prevMonth, target: target, fx: fx)
-            lines.append("先月の合計: 支出 \(format(pExp, code: target)) / 収入 \(format(pInc, code: target)) (\(prevMonth.count) 件)")
+            lines.append("先月の合計:")
+            lines.append("  支出: \(format(pExp, code: target)) (\(prevMonth.filter { $0.kind == .expense }.count) 件)")
+            lines.append("  収入: \(format(pInc, code: target)) (\(prevMonth.filter { $0.kind == .income }.count) 件)")
         }
         lines.append("")
 
-        // 今月のカテゴリ別
-        if !thisMonth.isEmpty {
-            lines.append("今月のカテゴリ別 (上位):")
-            let byCategory = Dictionary(grouping: thisMonth) { $0.categoryDisplayName }
-            let rows = byCategory.map { (name, list) -> (String, Decimal, Int) in
-                let sum = list.reduce(Decimal(0)) { acc, e in
-                    acc + (fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal)
-                }
-                return (name, sum, list.count)
-            }.sorted { $0.1 > $1.1 }
-            for r in rows.prefix(8) {
-                lines.append("  - \(r.0): \(format(r.1, code: target)) (\(r.2) 件)")
-            }
-            lines.append("")
-        }
+        // 今月のカテゴリ別 (kind ごとに分割)
+        appendCategoryBreakdown(
+            title: "今月の支出カテゴリ別 (上位):",
+            list: thisMonth.filter { $0.kind == .expense },
+            target: target, fx: fx, into: &lines
+        )
+        appendCategoryBreakdown(
+            title: "今月の収入カテゴリ別 (上位):",
+            list: thisMonth.filter { $0.kind == .income },
+            target: target, fx: fx, into: &lines
+        )
 
         // 最近の Expense (新しい順)
         let recent = Array(allExpenses.prefix(40))
         if !recent.isEmpty {
-            lines.append("最近の支出/収入 (新しい順、最大 40 件):")
+            lines.append("最近の項目 (新しい順、最大 40 件):")
             for e in recent {
                 let dateLabel = formatDate(e.date ?? .now)
                 let kindLabel = e.kind == .income ? "収入" : "支出"
                 let category = e.categoryDisplayName
                 let payer = e.paidBy?.isEmpty == false ? e.paidBy! : "未指定"
                 let title = e.displayTitle.isEmpty ? "(無題)" : e.displayTitle
-                let amount = format(e.amountDecimal, code: e.resolvedCurrencyCode)
-                lines.append("  - \(dateLabel) [\(kindLabel)] \(title) (\(category)): \(amount) / \(payer)")
+                let signed = signedAmount(value: e.amountDecimal, kind: e.kind, code: e.resolvedCurrencyCode)
+                lines.append("  - \(dateLabel) [\(kindLabel)] \(title) (\(category)): \(signed) / \(payer)")
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// 1 つの kind に絞ったカテゴリ別合計を append する。空ならセクションごとスキップ。
+    private static func appendCategoryBreakdown(
+        title: String,
+        list: [Expense],
+        target: String,
+        fx: FXRatesService,
+        into lines: inout [String]
+    ) {
+        guard !list.isEmpty else { return }
+        lines.append(title)
+        let byCategory = Dictionary(grouping: list) { $0.categoryDisplayName }
+        let rows = byCategory.map { (name, items) -> (String, Decimal, Int) in
+            let sum = items.reduce(Decimal(0)) { acc, e in
+                acc + (fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal)
+            }
+            return (name, sum, items.count)
+        }.sorted { $0.1 > $1.1 }
+        for r in rows.prefix(8) {
+            lines.append("  - \(r.0): \(format(r.1, code: target)) (\(r.2) 件)")
+        }
+        lines.append("")
+    }
+
+    /// 金額に種別記号を付けて返す。支出は `-`、収入は `+`。
+    private static func signedAmount(value: Decimal, kind: TransactionKind, code: String) -> String {
+        let sign = kind == .income ? "+" : "-"
+        return sign + format(value, code: code)
     }
 
     private static func totals(of list: [Expense], target: String, fx: FXRatesService) -> (Decimal, Decimal) {
