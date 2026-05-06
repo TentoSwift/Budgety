@@ -70,4 +70,73 @@ extension ExpenseSheet {
         }
     }
 
+    // MARK: - Members (精算機能用)
+
+    /// シートに紐づく全メンバーの profileID リスト (= Expense.payerProfileID と同じ識別子空間)。
+    /// 自分 (UserProfileStore.userRecordName) と ParticipantProfile.recordName を結合して返す。
+    /// 受益者未指定の Expense を「全員均等割り」として扱う際の母集合。
+    @MainActor
+    func allMemberProfileIDs() -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        if let myRN = UserProfileStore.shared.userRecordName, !myRN.isEmpty,
+           seen.insert(myRN).inserted {
+            result.append(myRN)
+        }
+
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        let sortedProfiles = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+        for pp in sortedProfiles {
+            guard let rn = pp.recordName, !rn.isEmpty,
+                  rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+            if seen.insert(rn).inserted {
+                result.append(rn)
+            }
+        }
+        return result
+    }
+
+    /// profileID を表示用情報に解決する。
+    /// 1. 自分 (UserProfileStore.userRecordName 一致)
+    /// 2. ParticipantProfile.recordName 一致 (= 共有相手のプロフィール)
+    /// 3. ローカル Member の recordName 一致
+    /// 4. ローカル Member の id (UUID) 一致 (旧データ救済)
+    /// いずれにも一致しなければ "メンバー" の汎用表示。
+    @MainActor
+    func memberDisplayInfo(for profileID: String) -> (name: String, colorHex: String, photoData: Data?) {
+        if let myRN = UserProfileStore.shared.userRecordName, profileID == myRN {
+            let store = UserProfileStore.shared
+            return (
+                name: store.resolvedDisplayName,
+                colorHex: store.avatarBgColorHex ?? "#5B8DEF",
+                photoData: store.photoData
+            )
+        }
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        if let pp = profiles.first(where: { $0.recordName == profileID }) {
+            return (
+                name: pp.displayName?.isEmpty == false ? pp.displayName! : "メンバー",
+                colorHex: pp.colorHex?.isEmpty == false ? pp.colorHex! : "#8E8E93",
+                photoData: pp.photoData
+            )
+        }
+        // ローカル Member へのフォールバック (recordName / UUID)
+        let ctx = managedObjectContext ?? PersistenceController.shared.container.viewContext
+        let req = NSFetchRequest<Member>(entityName: "Member")
+        if let uuid = UUID(uuidString: profileID) {
+            req.predicate = NSPredicate(format: "recordName == %@ OR id == %@", profileID, uuid as CVarArg)
+        } else {
+            req.predicate = NSPredicate(format: "recordName == %@", profileID)
+        }
+        req.fetchLimit = 1
+        if let m = (try? ctx.fetch(req))?.first {
+            return (
+                name: m.displayName,
+                colorHex: m.displayColorHex,
+                photoData: m.photoData
+            )
+        }
+        return (name: "メンバー", colorHex: "#8E8E93", photoData: nil)
+    }
 }

@@ -133,6 +133,11 @@ struct SheetDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     NavigationLink {
+                        SettlementView(record: record)
+                    } label: {
+                        Label("精算", systemImage: "arrow.left.arrow.right.circle")
+                    }
+                    NavigationLink {
                         StatsView(record: record)
                     } label: {
                         Label("統計を見る", systemImage: "chart.pie.fill")

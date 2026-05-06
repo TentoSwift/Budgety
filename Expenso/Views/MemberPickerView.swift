@@ -197,14 +197,25 @@ struct MemberPickerView: View {
     }
 
     private func participantRowIsSelected(_ p: CKShare.Participant, info: ParticipantInfo) -> Bool {
-        if let s = selected, s.name == info.name { return true }
-        guard selected == nil else { return false }
-        // recordName 一致
+        let participantRN = p.userIdentity.userRecordID?.recordName
+
+        if let s = selected {
+            // 1) Member.recordName ↔ Participant.userRecordName で安定 match
+            //    (Member.name が古い場合でも確実に同一人物として認識する)
+            if let memberRN = s.recordName, !memberRN.isEmpty,
+               let prn = participantRN, !prn.isEmpty,
+               memberRN == prn {
+                return true
+            }
+            // 2) フォールバック: 名前一致
+            if s.name == info.name { return true }
+            return false
+        }
+        // selected が nil でも fallback 情報と一致すればチェック
         if let pid = fallbackProfileID, !pid.isEmpty,
-           let rn = p.userIdentity.userRecordID?.recordName, rn == pid {
+           let rn = participantRN, rn == pid {
             return true
         }
-        // 名前一致 (paidBy)
         if let name = fallbackPaidBy, !name.isEmpty, name == info.name {
             return true
         }
@@ -242,6 +253,10 @@ struct MemberPickerView: View {
         let name: String
         let colorHex: String
         let photoData: Data?
+        /// CKShare 参加者の userRecordName。Member.recordName に保存し、
+        /// Expense.payerProfileID として永続化することで、シート参加者間で
+        /// 払った相手を一意に同期できる。
+        let recordName: String?
     }
 
     /// 同シート配下の ParticipantProfile を recordName 一致で引く
@@ -265,13 +280,51 @@ struct MemberPickerView: View {
             return p.role == .owner ? "オーナー" : "メンバー"
         }()
         let color = (pp?.colorHex).flatMap { $0.isEmpty ? nil : $0 } ?? "#8E8E93"
-        return ParticipantInfo(name: name, colorHex: color, photoData: pp?.photoData)
+        let rn: String? = {
+            guard let id = p.userIdentity.userRecordID?.recordName,
+                  !id.isEmpty,
+                  id != "_defaultOwner_", id != "__defaultOwner__" else { return nil }
+            return id
+        }()
+        return ParticipantInfo(name: name, colorHex: color, photoData: pp?.photoData, recordName: rn)
     }
 
-    /// 参加者を選択した時、ローカルに同名 Member が居れば再利用、なければ作成して `selected` に紐づける。
-    /// (Expense.paidBy には文字列が保存されるだけなので、Member を作る目的は UI 上の選択状態保持)
+    /// 参加者を選択した時、ローカルに対応する Member が居れば再利用、なければ作成して `selected` に紐づける。
+    /// 既存 Member のマッチは recordName 優先 (= CKShare ID 一致) で行い、無ければ同名フォールバック。
+    /// 新規作成時は recordName を保存することで、Expense.payerProfileID として正しく一意な
+    /// 識別子が永続化され、精算画面で他端末からも解決できるようになる。
     private func selectFromParticipant(_ info: ParticipantInfo) {
-        if let existing = allMembers.first(where: { $0.name == info.name }) {
+        let matched: Member? = {
+            if let rn = info.recordName, !rn.isEmpty,
+               let m = allMembers.first(where: { $0.recordName == rn }) {
+                return m
+            }
+            return allMembers.first(where: { $0.name == info.name })
+        }()
+        if let existing = matched {
+            // 既存 Member の denormalized プロフィール (名前/色/写真) を最新の ParticipantProfile
+            // 値で上書きする。古いキャッシュが残ると Expense 表示で旧プロフィールが出てしまう。
+            var changed = false
+            if (existing.recordName ?? "").isEmpty, let rn = info.recordName, !rn.isEmpty {
+                existing.recordName = rn
+                changed = true
+            }
+            if existing.name != info.name {
+                existing.name = info.name
+                changed = true
+            }
+            if existing.colorHex != info.colorHex {
+                existing.colorHex = info.colorHex
+                changed = true
+            }
+            if existing.photoData != info.photoData {
+                existing.photoData = info.photoData
+                changed = true
+            }
+            if changed {
+                existing.updatedAt = .now
+                PersistenceController.shared.save()
+            }
             selected = existing
         } else {
             let m = Member(context: viewContext)
@@ -279,6 +332,7 @@ struct MemberPickerView: View {
             m.name = info.name
             m.colorHex = info.colorHex
             m.photoData = info.photoData
+            m.recordName = info.recordName
             m.sortOrder = (allMembers.map(\.sortOrder).max() ?? -1) + 1
             m.createdAt = .now
             PersistenceController.shared.save()

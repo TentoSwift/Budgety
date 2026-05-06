@@ -50,6 +50,12 @@ struct AddExpenseView: View {
     @State private var origPayerProfileID: String = ""
     @State private var origDate: Date = .distantPast
     @State private var origNote: String = ""
+    @State private var origBeneficiaryCSV: String = ""
+
+    /// 受益者 (誰の負担として扱うか) の profileID 集合。
+    /// 空 = 「シートの全員で均等割り」(精算計算側で展開される)。
+    /// 収入では使わない (精算対象外)。
+    @State private var selectedBeneficiaries: Set<String> = []
 
     /// 定期項目から生成された支出を編集中、保存ボタンを押した時に出る 3 択ダイアログ。
     @State private var showRecurringSaveChoice: Bool = false
@@ -103,11 +109,43 @@ struct AddExpenseView: View {
         return nil
     }
 
+    /// 受益者ピッカーのプレビュー文字列。空 = 全員均等、それ以外 = 「N 人選択中: 名前1, 名前2...」。
+    @MainActor
+    private func beneficiarySummary(in sheet: ExpenseSheet) -> String {
+        if selectedBeneficiaries.isEmpty {
+            return "全員均等"
+        }
+        let names = selectedBeneficiaries.map { sheet.memberDisplayInfo(for: $0).name }
+        return "\(selectedBeneficiaries.count) 人: \(names.joined(separator: ", "))"
+    }
+
+    /// 永続化用のソート済み CSV (順序非依存で同値判定するため)。
+    private var selectedBeneficiaryCSV: String {
+        selectedBeneficiaries.sorted().joined(separator: ",")
+    }
+
+    /// `selectedPayer` (Member) に対応する ParticipantProfile を同シートから引く。
+    /// あればそれが「最新のプロフィール」(共有同期される) なので、Member の denormalized キャッシュより優先する。
+    private func currentParticipantProfile(for member: Member) -> ParticipantProfile? {
+        guard let rn = member.recordName, !rn.isEmpty,
+              rn != "_defaultOwner_", rn != "__defaultOwner__",
+              let sheet = contextSheet,
+              let profiles = sheet.participantProfiles as? Set<ParticipantProfile> else { return nil }
+        return profiles.first(where: { $0.recordName == rn })
+    }
+
     @ViewBuilder
     private var payerPreview: some View {
         if let m = selectedPayer {
-            ObservedMemberAvatar(member: m, size: 24)
-            Text(m.displayName).foregroundStyle(.secondary)
+            if let pp = currentParticipantProfile(for: m) {
+                // ParticipantProfile があれば最新値を表示
+                ObservedParticipantProfileAvatar(profile: pp, size: 24)
+                Text(pp.displayName?.isEmpty == false ? pp.displayName! : m.displayName)
+                    .foregroundStyle(.secondary)
+            } else {
+                ObservedMemberAvatar(member: m, size: 24)
+                Text(m.displayName).foregroundStyle(.secondary)
+            }
         } else if let name = payerFallbackName {
             // 編集モードで Member 解決できなかった時: 保存済みの paidBy + ParticipantProfile
             // (= 共有相手が支払者になっている支出をローカル Member 無しで正しく表示)
@@ -263,6 +301,26 @@ struct AddExpenseView: View {
                     }
                 }
 
+                if kind == .expense, let sheet = contextSheet {
+                    Section {
+                        NavigationLink {
+                            BeneficiaryPickerView(selected: $selectedBeneficiaries, record: sheet)
+                        } label: {
+                            HStack {
+                                Text("受益者")
+                                Spacer()
+                                Text(beneficiarySummary(in: sheet))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                    } footer: {
+                        Text("精算する際にこの支出を誰の負担として割るかを指定します。未指定の場合はシート全員で均等割り。")
+                            .font(.caption2)
+                    }
+                }
+
                 Section("メモ (任意)") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
@@ -373,6 +431,7 @@ struct AddExpenseView: View {
         if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
         if (selectedPayer?.profileID ?? "") != origPayerProfileID { return true }
         if selectedCategory?.objectID != origCategoryObjectID { return true }
+        if selectedBeneficiaryCSV != origBeneficiaryCSV { return true }
         return false
     }
 
@@ -394,6 +453,7 @@ struct AddExpenseView: View {
         if newPayerProfileID != origPayerProfileID {
             expense.payerProfileID = selectedPayer?.profileID
             expense.paidBy = selectedPayer?.name
+            expense.payerMemberID = selectedPayer?.id
         }
         if selectedCategory?.objectID != origCategoryObjectID {
             expense.categoryRaw = selectedCategory?.name
@@ -403,6 +463,9 @@ struct AddExpenseView: View {
             } else {
                 expense.category = nil
             }
+        }
+        if selectedBeneficiaryCSV != origBeneficiaryCSV {
+            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
         }
     }
 
@@ -506,6 +569,7 @@ struct AddExpenseView: View {
             selectedPayer = expense.resolvedPayer
             date = expense.date ?? .now
             note = expense.note ?? ""
+            selectedBeneficiaries = Set(expense.beneficiaryIDList)
 
             // CRDT 用スナップショット
             origTitle = title
@@ -516,6 +580,7 @@ struct AddExpenseView: View {
             origPayerProfileID = expense.payerProfileID ?? ""
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
+            origBeneficiaryCSV = selectedBeneficiaryCSV
         }
     }
 
@@ -540,9 +605,11 @@ struct AddExpenseView: View {
             expense.categoryRaw = selectedCategory?.name
             expense.paidBy = selectedPayer?.name
             expense.payerProfileID = selectedPayer?.profileID
+            expense.payerMemberID = selectedPayer?.id
             expense.date = date
             expense.note = note
             expense.createdAt = .now
+            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
 
             expense.sheet = record
             // category は Expense と同じストア (= sheet と同じストア) に居る前提でのみ紐付ける
