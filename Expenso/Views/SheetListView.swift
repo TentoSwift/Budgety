@@ -78,7 +78,7 @@ struct SheetListView: View {
         switch demo {
         case "addGroup":
             showingAddSheet = true
-        case "detail", "addExpense", "share", "editGroup", "editExpense", "calendar", "templates":
+        case "detail", "addExpense", "share", "editGroup", "editExpense", "calendar", "templates", "stats":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 if let first = sheets.first { path = [first.objectID] }
             }

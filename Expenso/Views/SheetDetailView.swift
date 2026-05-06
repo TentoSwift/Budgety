@@ -46,6 +46,7 @@ struct SheetDetailView: View {
     @State private var selectedCategory: ExpenseCategory?
     @State private var demoOpenCalendar: Bool = false
     @State private var demoOpenTemplates: Bool = false
+    @State private var demoOpenStats: Bool = false
     @AppStorage("expenseSortOption") private var sortOptionRaw: String = SortOption.dateDesc.rawValue
 
     /// シート配下の Expense を直接観測。`record.expenses` 経由だと子の attribute 変更
@@ -207,6 +208,8 @@ struct SheetDetailView: View {
                 demoOpenCalendar = true
             case "templates":
                 demoOpenTemplates = true
+            case "stats":
+                demoOpenStats = true
             default: break
             }
         }
@@ -215,6 +218,9 @@ struct SheetDetailView: View {
         }
         .navigationDestination(isPresented: $demoOpenTemplates) {
             TemplateListView(record: record)
+        }
+        .navigationDestination(isPresented: $demoOpenStats) {
+            StatsView(record: record)
         }
     }
 
