@@ -170,12 +170,14 @@ final class PurchaseManager: ObservableObject {
             }
         }
 
-        // 自分の Premium 状態を Core Data 側にミラー:
-        //   - 自分が所有するシート → ExpenseSheet.ownerIsPremium
-        //   - 参加中シートの自分の ParticipantProfile.isPremium
-        // CloudKit 同期で他参加者にも届くので、彼らの「シート上限・カテゴリ上限」
-        // 判定にも使える。
-        await Self.propagatePremiumFlag(nowPremium)
+        // 自分の Premium 状態を Core Data 側にミラー (ExpenseSheet.ownerIsPremium /
+        // ParticipantProfile.isPremium) するが、毎回の refresh では走らせない:
+        // 走るたびに viewContext の fetch + save が main actor を握り、現在進行中の
+        // 招待処理 (= 同じ main actor の CloudKit op) と競合して固まるケースがあった。
+        // 状態が「変わった時」だけ書き込めば十分。
+        if wasPremium != nowPremium {
+            await Self.propagatePremiumFlag(nowPremium)
+        }
     }
 
     /// `AppStore.sync` 後にもう 1 度 `Transaction.currentEntitlements` を
