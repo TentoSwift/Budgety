@@ -695,6 +695,18 @@ struct AddExpenseView: View {
                         Image(systemName: "xmark")
                     }
                     .tint(.primary)
+                    .confirmationDialog(
+                        "変更を破棄しますか?",
+                        isPresented: $showDiscardConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("変更を破棄", role: .destructive) {
+                            dismiss()
+                        }
+                        Button("編集を続ける", role: .cancel) {}
+                    } message: {
+                        Text("入力中の内容は保存されません。")
+                    }
                 }
                 if case .create = mode {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -793,18 +805,6 @@ struct AddExpenseView: View {
             shouldAllowDismiss: { !hasUnsavedChanges },
             onAttempt: { showDiscardConfirm = true }
         )
-        .confirmationDialog(
-            "変更を破棄しますか?",
-            isPresented: $showDiscardConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("変更を破棄", role: .destructive) {
-                dismiss()
-            }
-            Button("編集を続ける", role: .cancel) {}
-        } message: {
-            Text("入力中の内容は保存されません。")
-        }
     }
 
     /// OCR で取れた候補を、ユーザーがまだ手で入れていないフィールドだけに適用する。
