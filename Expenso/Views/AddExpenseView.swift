@@ -685,11 +685,11 @@ struct AddExpenseView: View {
                 note: note,
                 onChange: markDirty
             ))
-            // 注: `.interactiveDismissDisabled(true)` を併用すると
-            // `isModalInPresentation = true` が立ち、スワイプジェスチャ自体が
-            // 不発になって delegate の `shouldDismiss` が呼ばれない。
-            // delegate を返り値 false にする (= shouldDismiss false) ことで
-            // SwiftUI 側のブロックは要らなくなるので外す。
+            // `interactiveDismissDisabled` で `isModalInPresentation = true` を
+            // 立てると、スワイプは UIKit 側でブロックされた上で
+            // `presentationControllerDidAttemptToDismiss` が呼ばれる。
+            // ブリッジ側はそれを `onAttempt` に流す。
+            .interactiveDismissDisabled(hasUnsavedChanges)
             .onAttemptToDismiss(
                 shouldAllowDismiss: { !hasUnsavedChanges },
                 onAttempt: { showDiscardConfirm = true }

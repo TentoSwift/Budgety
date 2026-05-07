@@ -45,8 +45,6 @@ private struct AttemptToDismissView: UIViewControllerRepresentable {
         let vc = UIViewController()
         vc.view.backgroundColor = .clear
         vc.view.isUserInteractionEnabled = false
-        // sheet の presentationController に届くタイミングは layout 後なので
-        // 1 フレーム遅らせて delegate を差し込む。
         DispatchQueue.main.async { [weak vc] in
             attachDelegate(from: vc, to: context.coordinator)
         }
@@ -55,7 +53,6 @@ private struct AttemptToDismissView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
         context.coordinator.host = self
-        // VC が再 attach されるなど delegate が外れる可能性があるので毎回付け直す。
         DispatchQueue.main.async { [weak uiViewController] in
             attachDelegate(from: uiViewController, to: context.coordinator)
         }
@@ -63,18 +60,27 @@ private struct AttemptToDismissView: UIViewControllerRepresentable {
 
     /// `vc` から親をたどって `presentingViewController != nil` の VC
     /// (= 実際にシートとして提示されているホスト) を見つけ、その
-    /// presentationController.delegate に Coordinator を差し込む。
-    /// 親がまだ繋がっていない場合は次の runloop で再試行する。
+    /// `presentationController.delegate` を Coordinator に差し替える。
+    /// 元の delegate (SwiftUI が `dismiss()` バインディング更新のために
+    /// セットしているもの) は Coordinator が forwarding で参照する。
     private func attachDelegate(from vc: UIViewController?, to coordinator: Coordinator) {
         guard let vc else { return }
         if let host = sheetHost(from: vc) {
-            host.presentationController?.delegate = coordinator
+            install(on: host, coordinator: coordinator)
         } else {
             DispatchQueue.main.async { [weak vc] in
                 guard let vc, let host = sheetHost(from: vc) else { return }
-                host.presentationController?.delegate = coordinator
+                install(on: host, coordinator: coordinator)
             }
         }
+    }
+
+    private func install(on host: UIViewController, coordinator: Coordinator) {
+        guard let pc = host.presentationController else { return }
+        // すでに自分が刺さっているなら何もしない (再 update での無限ループ防止)
+        if pc.delegate === coordinator { return }
+        coordinator.originalDelegate = pc.delegate
+        pc.delegate = coordinator
     }
 
     /// 親チェーンを上がって、`presentingViewController != nil` の VC を返す。
@@ -87,14 +93,50 @@ private struct AttemptToDismissView: UIViewControllerRepresentable {
         return nil
     }
 
+    /// SwiftUI が `.sheet` 用に元から差している delegate を踏みつぶさないように、
+    /// 我々が処理しないメソッドは ObjC forwarding で素通しする。
     final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
         var host: AttemptToDismissView
+        weak var originalDelegate: UIAdaptivePresentationControllerDelegate?
+
         init(host: AttemptToDismissView) { self.host = host }
 
+        // `isModalInPresentation == true` (= interactiveDismissDisabled) で
+        // スワイプがブロックされた時に呼ばれるフック。ここで確認ダイアログを出す。
+        func presentationControllerDidAttemptToDismiss(_ presentationController: UIPresentationController) {
+            if !host.shouldAllowDismiss() {
+                host.onAttempt()
+            }
+            originalDelegate?.presentationControllerDidAttemptToDismiss?(presentationController)
+        }
+
+        // `interactiveDismissDisabled(false)` だった場合のフェイルセーフ。
+        // shouldDismiss を返すことでスワイプ自体もブロックできる。
         func presentationControllerShouldDismiss(_ presentationController: UIPresentationController) -> Bool {
-            if host.shouldAllowDismiss() { return true }
-            host.onAttempt()
-            return false
+            if !host.shouldAllowDismiss() {
+                host.onAttempt()
+                return false
+            }
+            return originalDelegate?.presentationControllerShouldDismiss?(presentationController) ?? true
+        }
+
+        // 以下、明示的に元 delegate に転送するメソッド (SwiftUI が isPresented
+        // バインディングを更新するために使っているもの)。
+        func presentationControllerWillDismiss(_ presentationController: UIPresentationController) {
+            originalDelegate?.presentationControllerWillDismiss?(presentationController)
+        }
+
+        func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+            originalDelegate?.presentationControllerDidDismiss?(presentationController)
+        }
+
+        // それ以外のメソッドはまるごと元 delegate に投げる。
+        override func responds(to aSelector: Selector!) -> Bool {
+            super.responds(to: aSelector) || (originalDelegate?.responds(to: aSelector) ?? false)
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            originalDelegate
         }
     }
 }
