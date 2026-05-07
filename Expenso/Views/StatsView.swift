@@ -253,6 +253,9 @@ struct StatsView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
+                    if isGeneratingInsights {
+                        ProgressView().controlSize(.small)
+                    }
                     Button {
                         Task { await regenerateInsights(force: true) }
                     } label: {
@@ -263,10 +266,18 @@ struct StatsView: View {
                     .disabled(isGeneratingInsights)
                 }
 
-                if isGeneratingInsights, (insights?.isEmpty ?? true) {
+                if let insights, !insights.isEmpty {
+                    // ストリーミング中もこの分岐に入って、生成済みカードから順に出す
+                    VStack(spacing: 8) {
+                        ForEach(insights) { insight in
+                            insightCard(insight)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                } else if isGeneratingInsights {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("分析中...").foregroundStyle(.secondary).font(.caption)
+                        Text("分析中…").foregroundStyle(.secondary).font(.caption)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -274,12 +285,6 @@ struct StatsView: View {
                         RoundedRectangle(cornerRadius: 14)
                             .fill(Color(.secondarySystemGroupedBackground))
                     )
-                } else if let insights, !insights.isEmpty {
-                    VStack(spacing: 8) {
-                        ForEach(insights) { insight in
-                            insightCard(insight)
-                        }
-                    }
                 } else if let err = insightsError {
                     Text(err)
                         .font(.caption)
@@ -310,8 +315,11 @@ struct StatsView: View {
                 .font(.title3)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 4) {
-                Text(insight.title).font(.subheadline.weight(.semibold))
-                Text(insight.body).font(.caption).foregroundStyle(.secondary)
+                Text(insight.title.asAttributedMarkdown)
+                    .font(.subheadline.weight(.semibold))
+                Text(insight.body.asAttributedMarkdown)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -327,6 +335,7 @@ struct StatsView: View {
     }
 
     /// 統計データから context を組み立てて LLM を呼ぶ。
+    /// ストリーミングで部分応答を受け取り、出来たものから順に画面に表示する。
     /// - Parameter force: `true` ならすでに insights があっても再生成する (refresh ボタン用)。
     @MainActor
     private func regenerateInsights(force: Bool = false) async {
@@ -342,14 +351,19 @@ struct StatsView: View {
 
         isGeneratingInsights = true
         insightsError = nil
-        defer { isGeneratingInsights = false }
+        insights = nil
 
         let context = buildInsightsContext()
-        let result = await StatsInsightsGenerator.generate(context: context)
+        let result = await StatsInsightsGenerator.generate(context: context) { partial in
+            // partial が来るたびに UI を更新 (= ストリーミング表示)
+            withAnimation(.easeOut(duration: 0.15)) {
+                insights = partial.isEmpty ? nil : partial
+            }
+        }
+        isGeneratingInsights = false
         if let result, !result.isEmpty {
             insights = result
-        } else {
-            insights = nil
+        } else if insights == nil {
             insightsError = "気づきを生成できませんでした"
         }
     }

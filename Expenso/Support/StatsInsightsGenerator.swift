@@ -47,9 +47,17 @@ enum StatsInsightsGenerator {
         SystemLanguageModel.default.availability == .available
     }
 
-    /// 統計サマリ context から 3〜5 個の気づきを生成する。
-    /// - Returns: 利用不可・エラー時は `nil` または空配列で返す。
-    static func generate(context: Context) async -> [ResolvedInsight]? {
+    /// 統計サマリ context から 3〜5 個の気づきをストリーミング生成する。
+    /// 部分応答が来るたびに `onUpdate` を呼んで、UI を逐次更新できるようにする。
+    /// - Parameters:
+    ///   - context: LLM に渡すサマリ
+    ///   - onUpdate: 部分応答を受け取って UI を更新するクロージャ (MainActor で呼ばれる)
+    /// - Returns: 最終リスト。利用不可・エラー時は `nil`。
+    @MainActor
+    static func generate(
+        context: Context,
+        onUpdate: @MainActor @escaping ([ResolvedInsight]) -> Void = { _ in }
+    ) async -> [ResolvedInsight]? {
         guard isAvailable else { return nil }
 
         let instructions = """
@@ -70,36 +78,42 @@ enum StatsInsightsGenerator {
           * info: 中立的な事実
         - 「減少」「削減」「節約」「下回った」などの語が含まれ、それがユーザーにとって望ましい場合は必ず positive を選ぶこと。
         - title は 20 文字以内・絵文字なし・句読点で終わらない。
-        - body は 1〜2 文・具体的な数値を含める。
+        - body は 1〜2 文・具体的な数値を含める。**強調したい数値や語句には Markdown の太字 (`**...**`) を使ってよい**。
         """
 
         do {
             let session = LanguageModelSession(instructions: instructions)
-            let response = try await session.respond(
+            let stream = session.streamResponse(
                 to: context.prompt,
                 generating: StatsInsightsOutput.self
             )
-            return response.content.insights.map { resolve($0) }
+            var lastResolved: [ResolvedInsight] = []
+            for try await partial in stream {
+                let snapshot = partial.content
+                // PartiallyGenerated.insights は optional 配列、各要素のフィールドも optional
+                let items = (snapshot.insights ?? []).compactMap { p -> ResolvedInsight? in
+                    guard let title = p.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !title.isEmpty,
+                          let body = p.body?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !body.isEmpty else { return nil }
+                    let sev: ResolvedInsight.Severity
+                    switch (p.severity ?? "info").lowercased() {
+                    case "positive": sev = .positive
+                    case "warning":  sev = .warning
+                    default:         sev = .info
+                    }
+                    return ResolvedInsight(title: title, body: body, severity: sev)
+                }
+                lastResolved = items
+                onUpdate(items)
+            }
+            return lastResolved
         } catch {
             #if DEBUG
             print("⚠️ StatsInsightsGenerator: failed: \(error)")
             #endif
             return nil
         }
-    }
-
-    private static func resolve(_ raw: StatsInsight) -> ResolvedInsight {
-        let sev: ResolvedInsight.Severity
-        switch raw.severity.lowercased() {
-        case "positive": sev = .positive
-        case "warning":  sev = .warning
-        default:         sev = .info
-        }
-        return ResolvedInsight(
-            title: raw.title.trimmingCharacters(in: .whitespacesAndNewlines),
-            body: raw.body.trimmingCharacters(in: .whitespacesAndNewlines),
-            severity: sev
-        )
     }
 
     // MARK: - Context construction

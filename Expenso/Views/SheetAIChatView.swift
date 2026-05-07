@@ -102,7 +102,7 @@ struct SheetAIChatView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        Text(.init(msg.text))
+                        Text(msg.text.asAttributedMarkdown)
                             .textSelection(.enabled)
                     }
                 }
