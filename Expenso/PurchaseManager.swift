@@ -155,86 +155,12 @@ final class PurchaseManager: ObservableObject {
         let nowPremium = !ids.intersection(Self.premiumProductIDs).isEmpty
         UserDefaults.standard.set(nowPremium, forKey: Self.isPremiumKey)
 
-        // Premium が切れた検出時:
-        // 1) AppStore.sync を 1 度かけて transient 失敗で本物の Premium ユーザーの
-        //    共有を誤消去しないように再確認
-        // 2) それでも非 Premium が確定したら、自分が所有する全 CKShare の参加者を
-        //    削除 + 公開リンクを無効化 (= 共有を実質解除)
-        // 3) 通知を投げて UI に「Premium が終了しました。共有を解除しました」を出す
+        // 期限切れ検知時は通知だけ。auto-revoke / Core Data 書き込みは
+        // CloudKit op (招待中の persistUpdatedShare) と main actor で競合して
+        // 「招待を準備中」が固まる原因になっていたため、Chefie 仕様に揃えて
+        // ここでは触らない方針に戻す。
         if wasPremium && !nowPremium {
-            Task { @MainActor in
-                let confirmedExpired = await Self.confirmExpiry()
-                guard confirmedExpired else { return }
-                await ShareCoordinator.shared.revokeAllOwnedShares()
-                NotificationCenter.default.post(name: .expensoPremiumExpired, object: nil)
-            }
-        }
-
-        // 自分の Premium 状態を Core Data 側にミラー (ExpenseSheet.ownerIsPremium /
-        // ParticipantProfile.isPremium) するが、毎回の refresh では走らせない:
-        // 走るたびに viewContext の fetch + save が main actor を握り、現在進行中の
-        // 招待処理 (= 同じ main actor の CloudKit op) と競合して固まるケースがあった。
-        // 状態が「変わった時」だけ書き込めば十分。
-        if wasPremium != nowPremium {
-            await Self.propagatePremiumFlag(nowPremium)
-        }
-    }
-
-    /// `AppStore.sync` 後にもう 1 度 `Transaction.currentEntitlements` を
-    /// 走査し、本当に Premium が無いか確認する。transient 失敗での誤判定を抑える。
-    /// - Returns: 再確認しても非 Premium なら `true` (= 解除を実行してよい)
-    @MainActor
-    private static func confirmExpiry() async -> Bool {
-        try? await AppStore.sync()
-        var ids: Set<String> = []
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let t) = result, t.revocationDate == nil {
-                ids.insert(t.productID)
-            }
-        }
-        let stillNotPremium = ids.intersection(premiumProductIDs).isEmpty
-        if !stillNotPremium {
-            // transient だった → Premium 状態を再確立
-            UserDefaults.standard.set(true, forKey: isPremiumKey)
-            shared.purchasedIDs = ids
-        }
-        return stillNotPremium
-    }
-
-    /// 全シートを走査し、自分の Premium 状態をミラーリングする。
-    /// `viewContext` を main で触るので `@MainActor` 必須。
-    @MainActor
-    private static func propagatePremiumFlag(_ premium: Bool) async {
-        let pc = PersistenceController.shared
-        let ctx = pc.container.viewContext
-        let myRecordName = UserProfileStore.shared.userRecordName ?? ""
-
-        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        let sheets = (try? ctx.fetch(req)) ?? []
-
-        var dirty = false
-        for sheet in sheets {
-            // 自分が所有するシート (Private store) は ownerIsPremium をミラー。
-            if sheet.isOwnedByCurrentUser {
-                if sheet.ownerIsPremium != premium {
-                    sheet.ownerIsPremium = premium
-                    dirty = true
-                }
-            }
-            // すべてのシートで、自分の ParticipantProfile に isPremium を反映。
-            // (オーナーでも自分の ParticipantProfile を持つ運用)
-            if !myRecordName.isEmpty,
-               let profiles = sheet.participantProfiles as? Set<ParticipantProfile>,
-               let mine = profiles.first(where: { $0.recordName == myRecordName }) {
-                if mine.isPremium != premium {
-                    mine.isPremium = premium
-                    mine.updatedAt = .now
-                    dirty = true
-                }
-            }
-        }
-        if dirty {
-            pc.save()
+            NotificationCenter.default.post(name: .expensoPremiumExpired, object: nil)
         }
     }
 
