@@ -15,6 +15,7 @@ struct SheetListView: View {
     ) private var sheets: FetchedResults<ExpenseSheet>
 
     @State private var showingAddSheet = false
+    @State private var showingSettings = false
     @State private var path: [NSManagedObjectID] = []
 
     var body: some View {
@@ -52,8 +53,13 @@ struct SheetListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink {
-                        SettingsView()
+                    // SettingsView 自身が NavigationStack を持つため、ここを
+                    // NavigationLink で push すると nested NavigationStack に
+                    // なって 1 回目の push が即座に pop される。
+                    // sheet 提示なら SettingsView の内側 NavigationStack が
+                    // 独立したコンテキストになり問題なく動く。
+                    Button {
+                        showingSettings = true
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -68,6 +74,9 @@ struct SheetListView: View {
             }
             .sheet(isPresented: $showingAddSheet) {
                 AddSheetView()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .onAppear { applyDemoLaunch() }
         }
