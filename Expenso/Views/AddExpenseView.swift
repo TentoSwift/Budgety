@@ -15,6 +15,7 @@ struct AddExpenseView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let mode: Mode
 
@@ -417,23 +418,7 @@ struct AddExpenseView: View {
     private var photoSection: some View {
         Section("写真 (任意)") {
             if let data = photoData, let img = UIImage(data: data) {
-                HStack(spacing: 12) {
-                    Image(uiImage: img)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 64, height: 64)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Label("差し替え", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    Spacer()
-                    Button(role: .destructive) {
-                        photoData = nil
-                        selectedPhotoItem = nil
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                }
+                photoRow(image: img)
             } else {
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Label("写真を追加", systemImage: "photo.on.rectangle.angled")
@@ -448,6 +433,46 @@ struct AddExpenseView: View {
                     // 大きいので JPEG で軽く圧縮 + 長辺リサイズしてから保存する。
                     photoData = Self.compressForStorage(raw)
                 }
+            }
+        }
+    }
+
+    /// 写真本体 + 差し替え/削除ボタンの行。Dynamic Type が AX サイズの時は
+    /// 2 行レイアウト (サムネが上、ボタン群が下) に折り返して、
+    /// 1 行に詰まって崩れるのを防ぐ。
+    @ViewBuilder
+    private func photoRow(image: UIImage) -> some View {
+        let thumb = Image(uiImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        let replaceButton = PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+            Label("差し替え", systemImage: "arrow.triangle.2.circlepath")
+        }
+        let deleteButton = Button(role: .destructive) {
+            photoData = nil
+            selectedPhotoItem = nil
+        } label: {
+            Label("削除", systemImage: "trash")
+        }
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                thumb
+                HStack(spacing: 16) {
+                    replaceButton
+                    Spacer()
+                    deleteButton
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                thumb
+                replaceButton
+                Spacer()
+                deleteButton
+                    .labelStyle(.iconOnly)
             }
         }
     }

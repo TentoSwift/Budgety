@@ -702,6 +702,7 @@ private struct DateHeaderView: View {
 
 private struct ExpenseRowView: View {
     @ObservedObject var expense: Expense
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// 支払/受取の人がいればカテゴリアイコンの右下にアバターを重ねる。
     /// (居なければカテゴリアイコンのみ)
@@ -727,52 +728,75 @@ private struct ExpenseRowView: View {
         }
     }
 
-    var body: some View {
-        HStack(spacing: 12) {
-            categoryIconWithPayer
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(expense.displayTitle.isEmpty ? expense.categoryDisplayName : expense.displayTitle)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                if showSubtitle {
-                    HStack(spacing: 6) {
-                        let displayName = expense.displayPaidBy
-                        if !displayName.isEmpty {
-                            // アバターはカテゴリアイコンに重ねて表示しているので、
-                            // 字幕には名前のみ出す
-                            Text(displayName)
-                                .foregroundStyle(expense.payerTint)
-                        }
-                        if let note = expense.note, !note.isEmpty {
-                            if !displayName.isEmpty { Text("·").foregroundStyle(.secondary) }
-                            Text(note)
-                                .lineLimit(1)
-                                .foregroundStyle(.secondary)
-                        }
+    @ViewBuilder
+    private var titleAndSubtitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(expense.displayTitle.isEmpty ? expense.categoryDisplayName : expense.displayTitle)
+                .font(.body)
+                .foregroundStyle(.primary)
+            if showSubtitle {
+                HStack(spacing: 6) {
+                    let displayName = expense.displayPaidBy
+                    if !displayName.isEmpty {
+                        Text(displayName)
+                            .foregroundStyle(expense.payerTint)
                     }
-                    .font(.caption)
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(spacing: 4) {
-                    if expense.generatedFromRuleID != nil {
-                        Image(systemName: "repeat")
-                            .font(.caption2)
+                    if let note = expense.note, !note.isEmpty {
+                        if !displayName.isEmpty { Text("·").foregroundStyle(.secondary) }
+                        Text(note)
+                            .lineLimit(1)
                             .foregroundStyle(.secondary)
                     }
-                    Text(expense.formattedSignedAmount)
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.primary)
                 }
-                if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {
-                    Text(expense.resolvedCurrencyCode)
+                .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var amountAndCurrency: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 4) {
+                if expense.generatedFromRuleID != nil {
+                    Image(systemName: "repeat")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
+                Text(expense.formattedSignedAmount)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.primary)
+            }
+            if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {
+                Text(expense.resolvedCurrencyCode)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    var body: some View {
+        // Dynamic Type が AX サイズに上がるとアイコン+タイトル+金額の 3 段が
+        // 横一列に収まらず崩れる。AX 以上では 2 行レイアウトに切り替える:
+        //   行 1: [アイコン] [タイトル + サブタイトル]
+        //   行 2:                                 [金額 (右寄せ)]
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 12) {
+                    categoryIconWithPayer
+                    titleAndSubtitle
+                    Spacer()
+                }
+                HStack {
+                    Spacer()
+                    amountAndCurrency
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                categoryIconWithPayer
+                titleAndSubtitle
+                Spacer()
+                amountAndCurrency
             }
         }
     }
