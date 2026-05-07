@@ -703,6 +703,7 @@ struct AddExpenseView: View {
                     if let sheet = contextSheet {
                         NavigationLink {
                             CategoryPickerView(selected: $selectedCategory, record: sheet, kind: kind)
+                                .modifier(discardDialogModifier)
                         } label: {
                             HStack {
                                 Text("カテゴリ")
@@ -739,6 +740,7 @@ struct AddExpenseView: View {
                             fallbackPaidBy: payerFallbackName,
                             fallbackProfileID: payerFallbackProfileID
                         )
+                        .modifier(discardDialogModifier)
                     } label: {
                         HStack {
                             Text(kind.partyLabel)
@@ -752,6 +754,7 @@ struct AddExpenseView: View {
                     Section {
                         NavigationLink {
                             BeneficiaryPickerView(selected: $selectedBeneficiaries, record: sheet)
+                                .modifier(discardDialogModifier)
                         } label: {
                             HStack {
                                 Text("受益者")
@@ -813,6 +816,7 @@ struct AddExpenseView: View {
                         Image(systemName: "xmark")
                     }
                     .tint(.primary)
+                    .modifier(discardDialogModifier)
                 }
                 if case .create = mode {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -911,30 +915,26 @@ struct AddExpenseView: View {
             shouldAllowDismiss: { !hasUnsavedChanges },
             onAttempt: { showDiscardConfirm = true }
         )
-        // ダイアログも root に置く: CategoryPickerView や PayerPickerView を
-        // push 中にスワイプ / xmark / 「定期項目を編集」が発火しても、
-        // どの nav 階層に居ても確実に表示されるようにする。
-        // (ツールバーボタンに付けると、push されて隠れている時に出ない)
-        .confirmationDialog(
-            "変更を破棄しますか?",
+    }
+
+    /// xmark / 各サブ view に共通で当てる「変更を破棄しますか?」ダイアログ。
+    /// 同じ `$showDiscardConfirm` バインディングなので、その時点で
+    /// 表示中の view (= xmark を含む AddExpenseView 本体 or push 済みサブ view)
+    /// に dialog アンカーがあれば、そこからシートが開く。
+    private var discardDialogModifier: some ViewModifier {
+        DiscardConfirmModifier(
             isPresented: $showDiscardConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("変更を破棄", role: .destructive) {
+            onDiscard: {
                 if let rule = pendingEditRuleAction {
                     onEditRule?(rule)
                     pendingEditRuleAction = nil
                 }
                 dismiss()
-            }
-            Button("編集を続ける", role: .cancel) {
-                // 「定期項目を編集」由来でダイアログを出していた場合、
-                // キャンセルされたので Rule ハンドオフも放棄する。
+            },
+            onContinue: {
                 pendingEditRuleAction = nil
             }
-        } message: {
-            Text("入力中の内容は保存されません。")
-        }
+        )
     }
 
     /// OCR で取れた候補を、ユーザーがまだ手で入れていないフィールドだけに適用する。
@@ -1339,6 +1339,29 @@ struct AddExpenseView: View {
         rule.startDate = Calendar.current.startOfDay(for: startDate)
         rule.endDate = hasEndDate ? Calendar.current.startOfDay(for: endDate) : nil
         return rule
+    }
+}
+
+/// 「変更を破棄しますか?」ダイアログを複数の anchor (xmark / サブ view の戻るボタン)
+/// に同じバインディングで適用するための共有 ViewModifier。
+/// SwiftUI の `.confirmationDialog` はアンカー view が画面に存在しないと表示できない
+/// ので、push 階層をまたいでも確実に出せるよう、各サブ view にも当てる。
+private struct DiscardConfirmModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let onDiscard: () -> Void
+    let onContinue: () -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            "変更を破棄しますか?",
+            isPresented: $isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("変更を破棄", role: .destructive, action: onDiscard)
+            Button("編集を続ける", role: .cancel, action: onContinue)
+        } message: {
+            Text("入力中の内容は保存されません。")
+        }
     }
 }
 
