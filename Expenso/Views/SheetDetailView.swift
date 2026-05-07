@@ -629,39 +629,35 @@ private struct SummaryCard: View {
     }
 
     /// 支出 / 収入の内訳行。AX サイズでは横一列に収まらないので、
-    /// 縦 2 行 (= 各 1 行を full-width) に切り替える。
+    /// `AnyLayout` で V/H を切替 (WWDC24 推奨パターン)。
     @ViewBuilder
     private func expenseIncomeBreakdown(expense: Decimal, income: Decimal) -> some View {
-        let expenseLabel = Label {
-            Text(CurrencyCatalog.format(expense, code: code))
-                .monospacedDigit()
-        } icon: {
-            Image(systemName: "minus.circle")
-        }
-        .foregroundStyle(.secondary)
+        let layout: AnyLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 24))
 
-        let incomeLabel = Label {
-            Text(CurrencyCatalog.format(income, code: code))
-                .monospacedDigit()
-        } icon: {
-            Image(systemName: "plus.circle")
-        }
-        .foregroundStyle(.secondary)
+        layout {
+            Label {
+                Text(CurrencyCatalog.format(expense, code: code))
+                    .monospacedDigit()
+            } icon: {
+                Image(systemName: "minus.circle")
+            }
+            .foregroundStyle(.secondary)
 
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 6) {
-                expenseLabel
-                incomeLabel
+            Label {
+                Text(CurrencyCatalog.format(income, code: code))
+                    .monospacedDigit()
+            } icon: {
+                Image(systemName: "plus.circle")
             }
-            .font(.subheadline)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            HStack(spacing: 24) {
-                expenseLabel
-                incomeLabel
-            }
-            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
+        .font(.subheadline)
+        .frame(
+            maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+            alignment: .leading
+        )
     }
 
     private var hasMultipleCurrencies: Bool {

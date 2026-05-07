@@ -773,19 +773,13 @@ struct AddExpenseView: View {
 
                 Section("日時") {
                     DatePicker("日付", selection: $date, displayedComponents: [.date])
-                    if dynamicTypeSize.isAccessibilitySize {
-                        // AX では 1 行に 3 個入らないので、縦並びにして
-                        // chips を full-width にする。
-                        VStack(alignment: .leading, spacing: 8) {
-                            datePresetButton("今日", offset: 0)
-                            datePresetButton("昨日", offset: -1)
-                            datePresetButton("一昨日", offset: -2)
-                        }
-                    } else {
-                        HStack(spacing: 8) {
-                            datePresetButton("今日", offset: 0)
-                            datePresetButton("昨日", offset: -1)
-                            datePresetButton("一昨日", offset: -2)
+                    // WWDC24 「ダイナミックタイプの導入」で紹介された AnyLayout を
+                    // 使い、AX では VStack (縦)、それ以外は HStack (横) に。
+                    datePresetLayout {
+                        datePresetButton("今日", offset: 0)
+                        datePresetButton("昨日", offset: -1)
+                        datePresetButton("一昨日", offset: -2)
+                        if !dynamicTypeSize.isAccessibilitySize {
                             Spacer()
                         }
                     }
@@ -854,6 +848,10 @@ struct AddExpenseView: View {
                     }
                     .tint(.primary)
                     .modifier(discardDialogModifier)
+                    // 長押しで Large Content Viewer (= 拡大ラベル) を表示
+                    .accessibilityShowsLargeContentViewer {
+                        Label("キャンセル", systemImage: "xmark")
+                    }
                 }
                 if case .create = mode {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -874,6 +872,9 @@ struct AddExpenseView: View {
                             Image(systemName: "text.viewfinder")
                         }
                         .tint(.primary)
+                        .accessibilityShowsLargeContentViewer {
+                            Label("レシートから読み込み", systemImage: "text.viewfinder")
+                        }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -882,6 +883,9 @@ struct AddExpenseView: View {
                             Image(systemName: "doc.on.doc")
                         }
                         .tint(.primary)
+                        .accessibilityShowsLargeContentViewer {
+                            Label("テンプレから入力", systemImage: "doc.on.doc")
+                        }
                     }
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 }
@@ -893,6 +897,9 @@ struct AddExpenseView: View {
                     }
                     .disabled(!canSave)
                     .tint(sheetTint)
+                    .accessibilityShowsLargeContentViewer {
+                        Label("保存", systemImage: "checkmark")
+                    }
                 }
             }
             .confirmationDialog(
@@ -952,6 +959,14 @@ struct AddExpenseView: View {
             shouldAllowDismiss: { !hasUnsavedChanges },
             onAttempt: { showDiscardConfirm = true }
         )
+    }
+
+    /// AX で縦 (VStack)、通常で横 (HStack) に切り替える `AnyLayout`。
+    /// (WWDC 24 「ダイナミックタイプの導入」推奨パターン)
+    private var datePresetLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
     }
 
     /// 種別 Picker。AX サイズでは segmented が切れて崩れるので menu に切り替える。
