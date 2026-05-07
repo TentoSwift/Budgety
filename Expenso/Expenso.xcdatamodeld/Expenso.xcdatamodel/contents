@@ -81,6 +81,7 @@
         <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="payerMemberID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="photoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
         <attribute name="title" optional="YES" attributeType="String" defaultValueString=""/>
         <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseCategory" inverseName="expenses" inverseEntity="ExpenseCategory"/>
         <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" renamingIdentifier="group" destinationEntity="ExpenseSheet" inverseName="expenses" inverseEntity="ExpenseSheet"/>

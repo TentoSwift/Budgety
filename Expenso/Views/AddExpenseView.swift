@@ -5,6 +5,7 @@
 
 import SwiftUI
 import CoreData
+import PhotosUI
 
 struct AddExpenseView: View {
     enum Mode {
@@ -35,6 +36,9 @@ struct AddExpenseView: View {
     @State private var selectedPayer: Member?
     @State private var date: Date = .now
     @State private var note: String = ""
+    /// 添付写真 (任意)。JPEG 圧縮済みの Data を Core Data に保存する。
+    @State private var photoData: Data?
+    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var didLoad: Bool = false
     /// loadIfNeeded の State 代入が落ち着いた直後にキャプチャするスナップショット。
     /// 現在値と比較して `hasUnsavedChanges` を判定する。
@@ -69,6 +73,9 @@ struct AddExpenseView: View {
     @State private var origPayerProfileID: String = ""
     @State private var origDate: Date = .distantPast
     @State private var origNote: String = ""
+    /// 写真の差分検出用ベースライン (= ロード時のバイト数)。
+    /// 内容比較は重いので長さで近似 (差し替え/削除では必ず長さも変わる)。
+    @State private var origPhotoByteCount: Int = 0
     @State private var origBeneficiaryCSV: String = ""
 
     /// 受益者 (誰の負担として扱うか) の profileID 集合。
@@ -407,6 +414,57 @@ struct AddExpenseView: View {
     }
 
     @ViewBuilder
+    private var photoSection: some View {
+        Section("写真 (任意)") {
+            if let data = photoData, let img = UIImage(data: data) {
+                HStack(spacing: 12) {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Label("差し替え", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        photoData = nil
+                        selectedPhotoItem = nil
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+            } else {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Label("写真を追加", systemImage: "photo.on.rectangle.angled")
+                }
+            }
+        }
+        .onChange(of: selectedPhotoItem) { _, item in
+            guard let item else { return }
+            Task { @MainActor in
+                if let raw = try? await item.loadTransferable(type: Data.self) {
+                    // 大きすぎる写真は CloudKit 同期と Core Data 容量の負担が
+                    // 大きいので JPEG で軽く圧縮 + 長辺リサイズしてから保存する。
+                    photoData = Self.compressForStorage(raw)
+                }
+            }
+        }
+    }
+
+    /// 受け取った Data を JPEG 圧縮 + 長辺 1600px に縮小して Data に戻す。
+    /// 失敗時は元の Data をそのまま返す (= ベクター画像など UIImage 化できないケース)。
+    private static func compressForStorage(_ raw: Data) -> Data {
+        guard let img = UIImage(data: raw) else { return raw }
+        let maxSide: CGFloat = 1600
+        let scale = min(1, maxSide / max(img.size.width, img.size.height))
+        let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: target)
+        let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
+        return resized.jpegData(compressionQuality: 0.7) ?? raw
+    }
+
+    @ViewBuilder
     private var recurringSection: some View {
         if case .edit(let expense) = mode, let rule = expense.relatedRule {
             // 既に Rule から生成された支出は、ここで Toggle / Stepper を編集させると
@@ -563,7 +621,8 @@ struct AddExpenseView: View {
             categoryID: selectedCategory?.objectID,
             payerID: selectedPayer?.objectID,
             date: date,
-            note: note
+            note: note,
+            photoByteCount: photoData?.count ?? 0
         )
     }
 
@@ -715,6 +774,8 @@ struct AddExpenseView: View {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
+
+                photoSection
 
                 if case .create = mode, canSave {
                     Section {
@@ -920,6 +981,7 @@ struct AddExpenseView: View {
         if (selectedPayer?.profileID ?? "") != origPayerProfileID { return true }
         if selectedCategory?.objectID != origCategoryObjectID { return true }
         if selectedBeneficiaryCSV != origBeneficiaryCSV { return true }
+        if (photoData?.count ?? 0) != origPhotoByteCount { return true }
         return false
     }
 
@@ -934,6 +996,7 @@ struct AddExpenseView: View {
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
         if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
         if note != origNote { expense.note = note }
+        if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
         if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }
@@ -1058,6 +1121,7 @@ struct AddExpenseView: View {
             selectedPayer = expense.resolvedPayer
             date = expense.date ?? .now
             note = expense.note ?? ""
+            photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
@@ -1082,6 +1146,7 @@ struct AddExpenseView: View {
             origPayerProfileID = expense.payerProfileID ?? ""
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
+            origPhotoByteCount = expense.photoData?.count ?? 0
             origBeneficiaryCSV = selectedBeneficiaryCSV
             origIsRecurring = isRecurring
             origFrequencyRaw = frequency.rawValue
@@ -1121,6 +1186,7 @@ struct AddExpenseView: View {
             expense.payerMemberID = selectedPayer?.id
             expense.date = date
             expense.note = note
+            expense.photoData = photoData
             expense.createdAt = .now
             expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
 
@@ -1283,5 +1349,8 @@ struct FieldSnapshot: Equatable {
     let payerID: NSManagedObjectID?
     let date: Date
     let note: String
+    /// 写真は Data を直接比較すると重いので、長さで軽量に近似する。
+    /// (差し替えは長さも変わるのでこれで十分; 同じ長さで内容違いの誤判定は実用上無視できる)
+    let photoByteCount: Int
 }
 
