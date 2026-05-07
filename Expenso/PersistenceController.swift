@@ -5,8 +5,9 @@
 
 import CoreData
 import CloudKit
+import Combine
 
-final class PersistenceController {
+final class PersistenceController: ObservableObject {
     static let shared = PersistenceController()
 
     let container: NSPersistentCloudKitContainer
@@ -14,7 +15,15 @@ final class PersistenceController {
     var privateStore: NSPersistentStore?
     var sharedStore: NSPersistentStore?
 
+    /// CloudKit からの初回 import が完了したか。Free 上限の判定に使う:
+    /// 完了前にシート作成を許すと、後から sync で来た既存シートと合わせて
+    /// 上限超過になってしまうため、ゲート側でこのフラグが false の間は
+    /// 「同期待ち」として作成をブロックする。
+    /// 一度 true になったら UserDefaults に永続化し、次回起動時は最初から true。
+    @Published private(set) var initialSyncComplete: Bool = UserDefaults.standard.bool(forKey: PersistenceController.initialSyncCompleteKey)
+
     private static let cloudKitContainerIdentifier = "iCloud.com.tento.Expenso"
+    private static let initialSyncCompleteKey = "ExpensoInitialSyncComplete"
 
     /// `save()` で configuration mismatch を検知した時に立てるフラグ。
     /// 次回起動時にこのフラグが立っていれば、ストアを無条件で破棄してから loadPersistentStores する。
@@ -119,6 +128,28 @@ final class PersistenceController {
                 self.privateStore = self.container.persistentStoreCoordinator.persistentStore(for: description.url!)
             } else if let sharedURL, description.url == sharedURL {
                 self.sharedStore = self.container.persistentStoreCoordinator.persistentStore(for: description.url!)
+            }
+        }
+
+        // CloudKit の初回 import が終わったら initialSyncComplete を立てる。
+        // 同期トリガでない (= 一度立ったらそのまま) なので 1 度だけ拾えれば十分。
+        NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: container,
+            queue: .main
+        ) { [weak self] note in
+            guard let self else { return }
+            guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                as? NSPersistentCloudKitContainer.Event,
+                  event.endDate != nil,
+                  event.type == .import
+            else { return }
+            // .import が 1 回でも完了 (エラー含む) で sync 経路は確立済み。
+            // 失敗時もブロックし続けると永久に作成不可になる UX なので
+            // 終了 = OK とみなして flag を立てる。
+            if !self.initialSyncComplete {
+                self.initialSyncComplete = true
+                UserDefaults.standard.set(true, forKey: Self.initialSyncCompleteKey)
             }
         }
 

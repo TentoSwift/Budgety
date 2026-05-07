@@ -17,6 +17,7 @@ struct SheetListView: View {
     @State private var showingAddSheet = false
     @State private var showingSettings = false
     @State private var showingPaywall = false
+    @State private var showSyncWaitingAlert = false
     @State private var path: [NSManagedObjectID] = []
 
     var body: some View {
@@ -82,17 +83,27 @@ struct SheetListView: View {
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
+            .alert("同期完了を待っています", isPresented: $showSyncWaitingAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("iCloud から既存のシートを取得中です。少し待ってからもう一度お試しください。")
+            }
             .onAppear { applyDemoLaunch() }
         }
     }
 
-    /// 新しいシートを追加しようとした時のゲート。
-    /// 自分が所有しているシートが Free 上限 (3) を超えていたら、
-    /// AddSheetView の代わりに PaywallView を提示。
+    /// 新しいシートを追加しようとした時のゲート。3 値で分岐:
+    /// - `.allowed`: そのまま追加画面を出す
+    /// - `.waitingForSync`: CloudKit 初回 import 完了待ち → アラートで「同期待ち」を案内
+    /// - `.overLimit`: Free 上限到達 → Paywall を提示
     private func tryShowAddSheet() {
-        if PurchaseManager.canCreateOwnedSheet() {
+        switch PurchaseManager.sheetCreationGate() {
+        case .allowed:
             showingAddSheet = true
-        } else {
+        case .waitingForSync:
+            showSyncWaitingAlert = true
+            Haptics.warning()
+        case .overLimit:
             showingPaywall = true
             Haptics.warning()
         }
