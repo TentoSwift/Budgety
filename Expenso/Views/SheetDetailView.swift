@@ -122,10 +122,11 @@ struct SheetDetailView: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(record.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        // iOS 26: 検索バーを 1 個のバーボタンとして畳み込み、タップで展開する
-        // (UIKit の `UINavigationItem.searchBarPlacementBarButtonItem` 相当)
-        .searchable(text: $searchText, prompt: Text("支出を検索"))
-        .searchToolbarBehavior(.minimize)
+        // iOS 26: 検索バーは bottomBar の DefaultToolbarItem に置き、`+` を ToolbarItem で
+        // 並列に並べる。ToolbarSpacer で間を空ける。
+        // (Liquid Glass デザインの推奨パターン:
+        //  https://qiita.com/RS6/items/2f55281499ef7bad96b2)
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出を検索"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -134,11 +135,13 @@ struct SheetDetailView: View {
                     Image(systemName: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
                 Button {
                     showingAddExpense = true
                 } label: {
-                    Image(systemName: "plus")
+                    Label("追加", systemImage: "plus")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
