@@ -516,6 +516,7 @@ struct AddExpenseView: View {
                         selectedCategory = nil
                         recomputeTitleSuggestion()
                     }
+                    .listRowBackground(Color.clear)
                 }
 
                 if case .create = mode {
