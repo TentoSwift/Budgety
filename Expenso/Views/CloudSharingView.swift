@@ -436,55 +436,19 @@ struct CloudSharingView: View {
     private func sendInvitation() async {
         isProcessing = true
         errorMessage = nil
-        // 入力中の TextField のキーボードを下げてから async に入る。
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil, from: nil, for: nil
-        )
-
-        // CloudKit (NSPersistentCloudKitContainer.persistUpdatedShare) は
-        // ネットワーク状況によっては実際の処理が成功しても async 完了通知が
-        // 帰ってこないケースがあり、`await` が永久に解けず UI が固まる。
-        // 20 秒で打ち切って、ローカル CKShare に participant が反映されていれば
-        // 成功とみなしてリカバリする。
-        let inviteTask: Task<InvitationResult, Error> = Task { @MainActor in
-            try await ShareCoordinator.shared.invite(
+        do {
+            let result = try await ShareCoordinator.shared.invite(
                 email: trimmedEmail,
                 permission: permission,
                 to: record
             )
-        }
-        let timeoutTask = Task {
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
-            inviteTask.cancel()
-        }
-        defer { timeoutTask.cancel() }
-
-        do {
-            let result = try await inviteTask.value
             existingShare = result.share
             pendingURL = result.url
             email = ""
             participantsRefresh += 1
             Haptics.success()
         } catch {
-            // タイムアウトでキャンセルされた場合: ローカルの CKShare を見て、
-            // 既に参加者が追加されていればサイレントに成功扱い。
-            if inviteTask.isCancelled,
-               let share = ShareCoordinator.shared.existingShare(for: record),
-               let url = share.url,
-               share.participants.contains(where: { $0.role != .owner })
-            {
-                existingShare = share
-                pendingURL = url
-                email = ""
-                participantsRefresh += 1
-                Haptics.success()
-            } else if inviteTask.isCancelled {
-                errorMessage = "招待を送信中に時間がかかりすぎたため中止しました。少し待ってから画面を開き直すと反映されている場合があります。"
-            } else {
-                errorMessage = error.localizedDescription
-            }
+            errorMessage = error.localizedDescription
         }
         isProcessing = false
     }
