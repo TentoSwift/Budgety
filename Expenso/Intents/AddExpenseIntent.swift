@@ -183,7 +183,8 @@ struct AddExpenseIntent: AppIntent {
         //   - "未分類のまま" sentinel (id = skipCategoryID)
         var options: [ExpenseCategoryEntity] = []
         if let suggestedCat {
-            // 推奨はカテゴリ自身のシンボル + 色を使い、subtitle は "提案" だけにする
+            // 推奨はカテゴリ symbol (色付き) + apple.intelligence を横並びにした composite アイコン。
+            // subtitle は "提案" のみ (シート名は出さない)。
             options.append(ExpenseCategoryEntity(
                 id: suggestedCat.objectID.uriRepresentation().absoluteString,
                 name: suggestedCat.displayName,
@@ -191,7 +192,7 @@ struct AddExpenseIntent: AppIntent {
                 kindRaw: suggestedCat.kindRaw ?? TransactionKind.expense.rawValue,
                 symbol: suggestedCat.displaySymbol,
                 colorHex: suggestedCat.displayColorHex,
-                iconData: ExpenseCategoryEntity.renderColoredSymbol(
+                iconData: ExpenseCategoryEntity.renderAISuggestionSymbol(
                     suggestedCat.displaySymbol,
                     colorHex: suggestedCat.displayColorHex
                 )

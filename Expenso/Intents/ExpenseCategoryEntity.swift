@@ -79,10 +79,11 @@ extension ExpenseCategoryEntity {
     @MainActor
     static func from(_ cat: ExpenseCategory) -> ExpenseCategoryEntity {
         let colorHex = cat.displayColorHex
+        // 通常のカテゴリは subtitle を空 (= シート名は表示しない)
         return ExpenseCategoryEntity(
             id: cat.objectID.uriRepresentation().absoluteString,
             name: cat.displayName,
-            sheetName: cat.sheet?.displayName ?? "",
+            sheetName: "",
             kindRaw: cat.kindRaw ?? TransactionKind.expense.rawValue,
             symbol: cat.displaySymbol,
             colorHex: colorHex,
@@ -90,7 +91,7 @@ extension ExpenseCategoryEntity {
         )
     }
 
-    /// SF Symbol を `colorHex` のヒエラルキカル色で描画して PNG Data を返す。
+    /// SF Symbol を `colorHex` の色で描画して PNG Data を返す。
     /// 失敗時は nil (= displayRepresentation で systemName フォールバック)。
     @MainActor
     static func renderColoredSymbol(_ name: String, colorHex: String) -> Data? {
@@ -98,5 +99,29 @@ extension ExpenseCategoryEntity {
         let cfg = UIImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
         guard let symbol = UIImage(systemName: name, withConfiguration: cfg) else { return nil }
         return symbol.withTintColor(color, renderingMode: .alwaysOriginal).pngData()
+    }
+
+    /// AI 提案用: カテゴリのカラー symbol + apple.intelligence を横並びで合成して PNG Data を返す。
+    @MainActor
+    static func renderAISuggestionSymbol(_ name: String, colorHex: String) -> Data? {
+        let color = UIColor(Color(hex: colorHex) ?? .blue)
+        let mainCfg = UIImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
+        let aiCfg = UIImage.SymbolConfiguration(pointSize: 56, weight: .semibold)
+
+        guard let main = UIImage(systemName: name, withConfiguration: mainCfg)?
+            .withTintColor(color, renderingMode: .alwaysOriginal),
+              let ai = UIImage(systemName: "apple.intelligence", withConfiguration: aiCfg)?
+                .withTintColor(.systemPurple, renderingMode: .alwaysOriginal)
+        else { return renderColoredSymbol(name, colorHex: colorHex) }
+
+        let gap: CGFloat = 12
+        let canvasW = main.size.width + gap + ai.size.width
+        let canvasH = max(main.size.height, ai.size.height)
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: canvasW, height: canvasH))
+        let composed = renderer.image { _ in
+            main.draw(at: CGPoint(x: 0, y: (canvasH - main.size.height) / 2))
+            ai.draw(at: CGPoint(x: main.size.width + gap, y: (canvasH - ai.size.height) / 2))
+        }
+        return composed.pngData()
     }
 }
