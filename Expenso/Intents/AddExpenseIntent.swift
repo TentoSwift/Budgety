@@ -33,11 +33,18 @@ struct AddExpenseIntent: AppIntent {
     )
     var amount: Double
 
+    @Parameter(
+        title: "カテゴリ (任意)",
+        description: "未指定の場合、FoundationModels がタイトルから推測します。"
+    )
+    var category: ExpenseCategoryEntity?
+
     @Parameter(title: "メモ (任意)", default: "")
     var note: String
 
     static var parameterSummary: some ParameterSummary {
         Summary("\(\.$sheet) に \(\.$title) (\(\.$amount)) を追加") {
+            \.$category
             \.$note
         }
     }
@@ -78,6 +85,21 @@ struct AddExpenseIntent: AppIntent {
         expense.note = note
         expense.createdAt = .now
 
+        // カテゴリ解決: ユーザー指定 → シート内のカテゴリへマップ → AI 推測フォールバック
+        let resolvedCategory = await resolveCategory(
+            chosen: category,
+            sheet: coreSheet,
+            title: trimmedTitle,
+            ctx: ctx,
+            sheetStore: sheetStore
+        )
+        if let cat = resolvedCategory {
+            expense.categoryRaw = cat.name
+            if cat.objectID.persistentStore == sheetStore {
+                expense.category = cat
+            }
+        }
+
         // 支払者: 自分 (UserProfileStore のキャッシュから埋める)
         let profile = UserProfileStore.shared
         if let rn = profile.userRecordName, !rn.isEmpty {
@@ -105,6 +127,52 @@ struct AddExpenseIntent: AppIntent {
                 supporting: "支出を追加しました"
             )
         )
+    }
+
+    /// 入力カテゴリ → シート内の `ExpenseCategory` を返す。
+    /// 1. ユーザーが指定 → そのシート内で同名 (+ 支出 kind) を探してマッチ
+    /// 2. 未指定 (or マッチなし) → FoundationModels で推測
+    /// 3. それでも無ければ nil (= 未分類で保存)
+    @MainActor
+    private func resolveCategory(
+        chosen: ExpenseCategoryEntity?,
+        sheet: ExpenseSheet,
+        title: String,
+        ctx: NSManagedObjectContext,
+        sheetStore: NSPersistentStore?
+    ) async -> ExpenseCategory? {
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let kindCats = cats.filter { c in
+            let raw = c.kindRaw ?? ""
+            return raw == TransactionKind.expense.rawValue ||
+                   raw.isEmpty
+        }
+        // 1) ユーザー指定があれば、そのシート内で同名のカテゴリを探す
+        if let chosen {
+            // 完全一致で同 objectID
+            if let url = URL(string: chosen.id),
+               let oid = ctx.persistentStoreCoordinator?
+                .managedObjectID(forURIRepresentation: url),
+               let exact = try? ctx.existingObject(with: oid) as? ExpenseCategory,
+               exact.sheet?.objectID == sheet.objectID {
+                return exact
+            }
+            // 名前で同シートを検索
+            if let match = kindCats.first(where: { $0.displayName == chosen.name }) {
+                return match
+            }
+        }
+        // 2) AI 推測フォールバック
+        guard CategoryAISuggestor.isAvailable else { return nil }
+        let names = kindCats.map { $0.displayName }
+        guard !names.isEmpty else { return nil }
+        let suggested = await CategoryAISuggestor.suggest(
+            title: title,
+            kind: .expense,
+            categories: names
+        )
+        guard let suggested else { return nil }
+        return kindCats.first(where: { $0.displayName == suggested })
     }
 }
 
