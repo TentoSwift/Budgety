@@ -40,6 +40,10 @@ struct AddExpenseView: View {
     /// 現在値と比較して `hasUnsavedChanges` を判定する。
     @State private var loadedSnapshot: FieldSnapshot?
     @State private var showDiscardConfirm: Bool = false
+    /// 「変更を破棄」を選んだ時に、単に閉じるだけでなく Rule 編集ハンドオフも
+    /// 走らせるためのキャリア。nil の時は通常の閉じる、Rule が入っている時は
+    /// onEditRule(rule) 経由で SheetDetailView に渡す。
+    @State private var pendingEditRuleAction: RecurringRule?
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
     @State private var showingTemplatePicker: Bool = false
@@ -411,8 +415,15 @@ struct AddExpenseView: View {
             //   その Rule の編集 view を直接開く動線にする。
             Section {
                 Button {
-                    onEditRule?(rule)
-                    dismiss()
+                    if hasUnsavedChanges {
+                        // 未保存の変更があれば、いったんダイアログで確認。
+                        // 破棄を選ばれたらそのまま onEditRule にハンドオフ。
+                        pendingEditRuleAction = rule
+                        showDiscardConfirm = true
+                    } else {
+                        onEditRule?(rule)
+                        dismiss()
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "repeat")
@@ -747,9 +758,17 @@ struct AddExpenseView: View {
                         titleVisibility: .visible
                     ) {
                         Button("変更を破棄", role: .destructive) {
+                            if let rule = pendingEditRuleAction {
+                                onEditRule?(rule)
+                                pendingEditRuleAction = nil
+                            }
                             dismiss()
                         }
-                        Button("編集を続ける", role: .cancel) {}
+                        Button("編集を続ける", role: .cancel) {
+                            // 「定期項目を編集」由来でダイアログを出していた場合、
+                            // キャンセルされたので Rule ハンドオフも放棄する。
+                            pendingEditRuleAction = nil
+                        }
                     } message: {
                         Text("入力中の内容は保存されません。")
                     }
