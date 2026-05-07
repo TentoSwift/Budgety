@@ -143,6 +143,7 @@ struct SheetDetailView: View {
                 } label: {
                     Label("追加", systemImage: "plus")
                 }
+                .tint(record.tint)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

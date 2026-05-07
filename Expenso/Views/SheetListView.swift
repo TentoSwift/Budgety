@@ -82,6 +82,10 @@ struct SheetListView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 if let first = sheets.first { path = [first.objectID] }
             }
+        case "detailGreen":
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                if sheets.count > 1 { path = [sheets[1].objectID] }
+            }
         default:
             break
         }
