@@ -750,6 +750,7 @@ struct AddExpenseView: View {
                 )
             }
         }
+        .tint(contextSheet?.tint ?? .accentColor)
     }
 
     /// OCR で取れた候補を、ユーザーがまだ手で入れていないフィールドだけに適用する。
