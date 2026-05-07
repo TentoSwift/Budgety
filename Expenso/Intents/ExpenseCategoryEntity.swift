@@ -10,6 +10,8 @@
 
 import AppIntents
 import CoreData
+import UIKit
+import SwiftUI
 
 struct ExpenseCategoryEntity: AppEntity {
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
@@ -22,12 +24,20 @@ struct ExpenseCategoryEntity: AppEntity {
     var sheetName: String
     var kindRaw: String
     var symbol: String
+    var colorHex: String
+    /// カテゴリの色付き SF Symbol を事前にラスタライズした PNG データ。
+    /// `displayRepresentation` から毎回呼ばれるたびに描画するのを避けるため pre-render する。
+    var iconData: Data?
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(
+        let image: DisplayRepresentation.Image? = {
+            if let data = iconData { return DisplayRepresentation.Image(data: data) }
+            return DisplayRepresentation.Image(systemName: symbol)
+        }()
+        return DisplayRepresentation(
             title: "\(name)",
             subtitle: "\(sheetName)",
-            image: DisplayRepresentation.Image(systemName: symbol)
+            image: image
         )
     }
 }
@@ -68,12 +78,25 @@ struct ExpenseCategoryEntityQuery: EntityQuery {
 extension ExpenseCategoryEntity {
     @MainActor
     static func from(_ cat: ExpenseCategory) -> ExpenseCategoryEntity {
-        ExpenseCategoryEntity(
+        let colorHex = cat.displayColorHex
+        return ExpenseCategoryEntity(
             id: cat.objectID.uriRepresentation().absoluteString,
             name: cat.displayName,
             sheetName: cat.sheet?.displayName ?? "",
             kindRaw: cat.kindRaw ?? TransactionKind.expense.rawValue,
-            symbol: cat.displaySymbol
+            symbol: cat.displaySymbol,
+            colorHex: colorHex,
+            iconData: renderColoredSymbol(cat.displaySymbol, colorHex: colorHex)
         )
+    }
+
+    /// SF Symbol を `colorHex` のヒエラルキカル色で描画して PNG Data を返す。
+    /// 失敗時は nil (= displayRepresentation で systemName フォールバック)。
+    @MainActor
+    static func renderColoredSymbol(_ name: String, colorHex: String) -> Data? {
+        let color = UIColor(Color(hex: colorHex) ?? .blue)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
+        guard let symbol = UIImage(systemName: name, withConfiguration: cfg) else { return nil }
+        return symbol.withTintColor(color, renderingMode: .alwaysOriginal).pngData()
     }
 }

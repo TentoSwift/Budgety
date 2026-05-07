@@ -183,12 +183,18 @@ struct AddExpenseIntent: AppIntent {
         //   - "未分類のまま" sentinel (id = skipCategoryID)
         var options: [ExpenseCategoryEntity] = []
         if let suggestedCat {
+            // 推奨はカテゴリ自身のシンボル + 色を使い、subtitle は "提案" だけにする
             options.append(ExpenseCategoryEntity(
                 id: suggestedCat.objectID.uriRepresentation().absoluteString,
                 name: suggestedCat.displayName,
-                sheetName: "AI 提案",
+                sheetName: "提案",
                 kindRaw: suggestedCat.kindRaw ?? TransactionKind.expense.rawValue,
-                symbol: "apple.intelligence"
+                symbol: suggestedCat.displaySymbol,
+                colorHex: suggestedCat.displayColorHex,
+                iconData: ExpenseCategoryEntity.renderColoredSymbol(
+                    suggestedCat.displaySymbol,
+                    colorHex: suggestedCat.displayColorHex
+                )
             ))
         }
         let sortedOthers = kindCats
@@ -202,13 +208,15 @@ struct AddExpenseIntent: AppIntent {
             name: "未分類のまま",
             sheetName: "(カテゴリなしで保存)",
             kindRaw: "",
-            symbol: "questionmark.circle"
+            symbol: "questionmark.circle",
+            colorHex: "#8E8E93",
+            iconData: nil
         ))
 
         let dialog: IntentDialog = {
             if let suggestedCat {
                 return IntentDialog(
-                    "「\(title)」のカテゴリを選んでください。AI 提案: 「\(suggestedCat.displayName)」"
+                    "「\(title)」のカテゴリを選んでください。提案: 「\(suggestedCat.displayName)」"
                 )
             }
             return IntentDialog("「\(title)」のカテゴリを選んでください。")
