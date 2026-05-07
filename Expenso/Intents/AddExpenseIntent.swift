@@ -85,8 +85,8 @@ struct AddExpenseIntent: AppIntent {
         expense.note = note
         expense.createdAt = .now
 
-        // カテゴリ解決: ユーザー指定 → シート内のカテゴリへマップ → AI 推測フォールバック
-        let resolvedCategory = await resolveCategory(
+        // カテゴリ解決: ユーザー指定 → シート内のカテゴリへマップ → AI 推測 → 確認ダイアログ
+        let resolvedCategory = try await resolveCategory(
             chosen: category,
             sheet: coreSheet,
             title: trimmedTitle,
@@ -121,9 +121,10 @@ struct AddExpenseIntent: AppIntent {
             Decimal(amount),
             code: coreSheet.resolvedDefaultCurrencyCode
         )
+        let categoryNote = resolvedCategory.map { " /  \($0.displayName)" } ?? ""
         return .result(
             dialog: IntentDialog(
-                full: "「\(coreSheet.displayName)」に「\(trimmedTitle)」(\(amountDisplay)) を追加しました",
+                full: "「\(coreSheet.displayName)」に「\(trimmedTitle)」(\(amountDisplay)\(categoryNote)) を追加しました",
                 supporting: "支出を追加しました"
             )
         )
@@ -131,8 +132,8 @@ struct AddExpenseIntent: AppIntent {
 
     /// 入力カテゴリ → シート内の `ExpenseCategory` を返す。
     /// 1. ユーザーが指定 → そのシート内で同名 (+ 支出 kind) を探してマッチ
-    /// 2. 未指定 (or マッチなし) → FoundationModels で推測
-    /// 3. それでも無ければ nil (= 未分類で保存)
+    /// 2. 未指定 → FoundationModels で推測 → ユーザーに確認ダイアログを出す
+    /// 3. 拒否・利用不可 → nil (= 未分類で保存)
     @MainActor
     private func resolveCategory(
         chosen: ExpenseCategoryEntity?,
@@ -140,7 +141,7 @@ struct AddExpenseIntent: AppIntent {
         title: String,
         ctx: NSManagedObjectContext,
         sheetStore: NSPersistentStore?
-    ) async -> ExpenseCategory? {
+    ) async throws -> ExpenseCategory? {
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
         let kindCats = cats.filter { c in
             let raw = c.kindRaw ?? ""
@@ -149,7 +150,6 @@ struct AddExpenseIntent: AppIntent {
         }
         // 1) ユーザー指定があれば、そのシート内で同名のカテゴリを探す
         if let chosen {
-            // 完全一致で同 objectID
             if let url = URL(string: chosen.id),
                let oid = ctx.persistentStoreCoordinator?
                 .managedObjectID(forURIRepresentation: url),
@@ -157,22 +157,38 @@ struct AddExpenseIntent: AppIntent {
                exact.sheet?.objectID == sheet.objectID {
                 return exact
             }
-            // 名前で同シートを検索
             if let match = kindCats.first(where: { $0.displayName == chosen.name }) {
                 return match
             }
         }
-        // 2) AI 推測フォールバック
+
+        // 2) AI 推測 + 確認ダイアログ
         guard CategoryAISuggestor.isAvailable else { return nil }
         let names = kindCats.map { $0.displayName }
         guard !names.isEmpty else { return nil }
-        let suggested = await CategoryAISuggestor.suggest(
+        let suggestedName = await CategoryAISuggestor.suggest(
             title: title,
             kind: .expense,
             categories: names
         )
-        guard let suggested else { return nil }
-        return kindCats.first(where: { $0.displayName == suggested })
+        guard let suggestedName,
+              let suggestedCat = kindCats.first(where: { $0.displayName == suggestedName })
+        else { return nil }
+
+        // ユーザーに「この提案を使うか?」を確認 (Yes/No ダイアログ)
+        let suggestedEntity = ExpenseCategoryEntity.from(suggestedCat)
+        do {
+            let accepted = try await $category.requestConfirmation(
+                for: suggestedEntity,
+                dialog: IntentDialog(
+                    "「\(title)」のカテゴリは「\(suggestedCat.displayName)」で良いですか? (AI が推測しました)"
+                )
+            )
+            return accepted ? suggestedCat : nil
+        } catch {
+            // ユーザーがキャンセル → 未分類で保存
+            return nil
+        }
     }
 }
 
