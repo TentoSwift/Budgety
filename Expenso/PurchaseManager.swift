@@ -166,14 +166,30 @@ final class PurchaseManager: ObservableObject {
         //     (= 過去に確認済み) ので、必ず transition (wasPremium && !nowPremium)
         //     の時だけ走らせる。
         Self.purchaseLog.debug("refreshEntitlements: was=\(wasPremium) now=\(nowPremium) ids=\(ids.joined(separator: ","))")
-        if wasPremium && !nowPremium {
-            Self.purchaseLog.debug("Premium transition detected → run expiry path")
+
+        // 解除すべき状態を 2 種類検知:
+        //   A. 真の transition (wasPremium && !nowPremium) — toast を出す
+        //   B. 状態不整合 (!nowPremium かつ active な共有が残っている)
+        //      — 過去に transition を取りこぼしている → 黙って revoke だけ
+        // どちらも `confirmExpiry()` (= AppStore.sync 後の再確認) を挟むので
+        // transient な StoreKit 失敗で誤検知して revoke してしまうのを防ぐ。
+        // active 共有が無いのに refresh のたびに confirmExpiry を走らせるのは
+        // 無駄なので、まず `hasActiveOwnedShares()` で fast-path skip する。
+        if !nowPremium {
+            let isTransition = wasPremium
             Task { @MainActor in
+                let hasActive = await ShareCoordinator.shared.hasActiveOwnedShares()
+                guard hasActive else {
+                    Self.purchaseLog.debug("non-premium but no active shares; skip")
+                    return
+                }
                 let confirmedExpired = await Self.confirmExpiry()
-                Self.purchaseLog.debug("confirmExpiry → expired=\(confirmedExpired)")
+                Self.purchaseLog.debug("non-premium + active shares; confirmExpiry → \(confirmedExpired)")
                 guard confirmedExpired else { return }
                 await Self.performExpiryRevoke()
-                NotificationCenter.default.post(name: .expensoPremiumExpired, object: nil)
+                if isTransition {
+                    NotificationCenter.default.post(name: .expensoPremiumExpired, object: nil)
+                }
             }
         }
     }

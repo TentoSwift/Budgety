@@ -55,6 +55,11 @@ struct ExpensoApp: App {
                 }
                 .task {
                     await PurchaseManager.shared.refreshEntitlements()
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["EXPENSO_DEBUG_REVOKE"] == "1" {
+                        await PurchaseManager.runExpiryRevokeForDebug()
+                    }
+                    #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     let ctx = persistenceController.container.viewContext
