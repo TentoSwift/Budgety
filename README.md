@@ -61,5 +61,6 @@ CloudKitとの統合（NSPersistentCloudKitContainer）と
 設計判断・技術選定・UI/UX設計は自分で行いました。
 
 ## ライセンス
+© 2026 Tento Ishino. All rights reserved.
 
-学習・参考目的での閲覧は歓迎します。商用利用や派生アプリのリリースはご相談ください。
+このソースコードは閲覧・参照目的でのみ公開されています。利用・複製・改変・再配布は許可されていません。
