@@ -6,14 +6,70 @@
 import UIKit
 import CloudKit
 import CoreData
+import BackgroundTasks
+import os
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    static let backgroundRefreshIdentifier = "com.tento.Expenso.refresh"
+    private static let bgLog = Logger(subsystem: "com.tento.Expenso", category: "bgtask")
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // BGAppRefreshTask の handler 登録は launch のかなり早いタイミングで
+        // 行わないと iOS から拒否される。AppDelegate の didFinish... は
+        // SwiftUI App の `.task` よりも前なので確実。
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.backgroundRefreshIdentifier,
+            using: nil
+        ) { task in
+            Self.handleAppRefresh(task: task as! BGAppRefreshTask)
+        }
+        Self.scheduleAppRefresh()
+        return true
+    }
+
     func application(_ application: UIApplication,
                      configurationForConnecting connectingSceneSession: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
         let configuration = UISceneConfiguration(name: "Default", sessionRole: connectingSceneSession.role)
         configuration.delegateClass = SceneDelegate.self
         return configuration
+    }
+
+    /// 次回の background refresh を OS に予約する。実際にいつ走るかは iOS が決める
+    /// (= 数時間〜数日。ユーザーの利用パターンや充電状態で変わる)。
+    static func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: backgroundRefreshIdentifier)
+        // 最短 30 分後以降に実行 (実際はもっと先になることが多い)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            bgLog.debug("scheduleAppRefresh: queued (>= 30min)")
+        } catch {
+            bgLog.error("scheduleAppRefresh: \(error.localizedDescription)")
+        }
+    }
+
+    /// 実際に iOS が起こしてくれた時の処理。
+    /// `BGAppRefreshTask` は最大 ~30 秒の予算しかないので、軽い refresh のみ。
+    private static func handleAppRefresh(task: BGAppRefreshTask) {
+        bgLog.debug("handleAppRefresh: fired")
+        // 次回ぶんを必ず予約 (= 失敗で連鎖終了するのを防ぐ)
+        scheduleAppRefresh()
+
+        // 予算切れの時は走っている処理を諦めさせる expirationHandler を登録
+        let work = Task { @MainActor in
+            await PurchaseManager.shared.refreshEntitlements()
+            // refreshEntitlements の中で hasActive + confirmExpiry を経て
+            // 必要なら revokeAllOwnedShares が走る。
+            bgLog.debug("handleAppRefresh: refreshEntitlements done")
+            task.setTaskCompleted(success: true)
+        }
+        task.expirationHandler = {
+            bgLog.error("handleAppRefresh: expired before completion")
+            work.cancel()
+            task.setTaskCompleted(success: false)
+        }
     }
 }
 

@@ -82,7 +82,8 @@ struct ExpensoApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
-                    if newPhase == .active {
+                    switch newPhase {
+                    case .active:
                         Task { await PurchaseManager.shared.refreshEntitlements() }
                         let ctx = persistenceController.container.viewContext
                         RecurringExpenseGenerator.generateAll(in: ctx)
@@ -92,6 +93,12 @@ struct ExpensoApp: App {
                             }
                             UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
                         }
+                    case .background:
+                        // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。
+                        // iOS は背景時にしか走らせないので、この瞬間がチャンス。
+                        AppDelegate.scheduleAppRefresh()
+                    default:
+                        break
                     }
                 }
         }
