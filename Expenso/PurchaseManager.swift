@@ -209,25 +209,15 @@ extension PurchaseManager {
         return count < FreeTierLimits.categoriesPerSheet
     }
 
-    /// 新しい (= 自分所有の) シートを作成できるかの 3 値ゲート。
-    /// - `.allowed`: そのまま作成して OK
-    /// - `.waitingForSync`: CloudKit からの初回 import がまだ。後から既存シート
-    ///    が降ってきて上限超過になる恐れがあるので一旦ブロック
-    /// - `.overLimit`: Free 上限到達 → Paywall 案内
+    /// 新しい (= 自分所有の) シートを作成できるかの 2 値ゲート。
     enum SheetCreationGate {
         case allowed
-        case waitingForSync
         case overLimit
     }
 
     @MainActor
     static func sheetCreationGate() -> SheetCreationGate {
         if isCurrentUserPremium { return .allowed }
-        // 初回 import がまだ完了していない時は、既に CloudKit 上に上限分の
-        // シートがある可能性を排除できないので保守的に block。
-        if !PersistenceController.shared.initialSyncComplete {
-            return .waitingForSync
-        }
         let ctx = PersistenceController.shared.container.viewContext
         let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
         let sheets = (try? ctx.fetch(req)) ?? []
