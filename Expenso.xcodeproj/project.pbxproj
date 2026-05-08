@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
 		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 /* End PBXBuildFile section */
 
@@ -42,6 +43,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A0010000A0010000A0010000 /* MemojiView in Frameworks */,
+				2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +87,7 @@
 			name = Expenso;
 			packageProductDependencies = (
 				A0030000A0030000A0030000 /* MemojiView */,
+				2D84845F2FADB766001AB1B6 /* CustomPicker */,
 			);
 			productName = Expenso;
 			productReference = 2DDCE11E2FA8974700A42F60 /* Expenso.app */;
@@ -116,6 +119,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */,
+				2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2DDCE11F2FA8974700A42F60 /* Products */;
@@ -367,6 +371,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TentoSwift/CustomPicker.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/emrearmagan/MemojiView";
@@ -378,6 +390,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2D84845F2FADB766001AB1B6 /* CustomPicker */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */;
+			productName = CustomPicker;
+		};
 		A0030000A0030000A0030000 /* MemojiView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */;

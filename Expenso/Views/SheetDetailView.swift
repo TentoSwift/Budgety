@@ -5,6 +5,7 @@
 
 import SwiftUI
 import CoreData
+import CustomPicker
 
 struct SheetDetailView: View {
     @ObservedObject var record: ExpenseSheet
@@ -23,15 +24,30 @@ struct SheetDetailView: View {
         }
     }
 
-    enum SortOption: String, CaseIterable, Identifiable {
-        case dateDesc, dateAsc, amountDesc, amountAsc
-        var id: String { rawValue }
+    /// 並び替えの「軸」。方向 (asc/desc) は `sortAscending` で別管理。
+    /// `CustomPicker.Item` プロトコル準拠 — Menu 内で軸選択 + 昇順/降順トグルが
+    /// 一体化された UI を出すために、`label` (軸名) / `firstLabel` (asc 時の説明) /
+    /// `secondLabel` (desc 時の説明) を提供する。
+    enum SortField: String, CaseIterable, Hashable, Item {
+        case date
+        case amount
+
         var label: String {
             switch self {
-            case .dateDesc: "新しい順"
-            case .dateAsc: "古い順"
-            case .amountDesc: "金額が多い順"
-            case .amountAsc: "金額が少ない順"
+            case .date:   "日付"
+            case .amount: "金額"
+            }
+        }
+        var firstLabel: String {  // 昇順時
+            switch self {
+            case .date:   "古い順"
+            case .amount: "少ない順"
+            }
+        }
+        var secondLabel: String { // 降順時
+            switch self {
+            case .date:   "新しい順"
+            case .amount: "多い順"
             }
         }
     }
@@ -55,7 +71,10 @@ struct SheetDetailView: View {
     @State private var pendingEditRule: RecurringRule?
     @State private var showRecurringListAutoEdit: Bool = false
     @State private var recurringListAutoEdit: RecurringRule?
-    @AppStorage("expenseSortOption") private var sortOptionRaw: String = SortOption.dateDesc.rawValue
+    @AppStorage("expenseSortField") private var sortFieldRaw: String = SortField.date.rawValue
+    /// `true` = 昇順 (古い順 / 少ない順), `false` = 降順 (新しい順 / 多い順)。
+    /// デフォルトは降順 = 新しい順。
+    @AppStorage("expenseSortAscending") private var sortAscending: Bool = false
 
     /// シート配下の Expense を直接観測。`record.expenses` 経由だと子の attribute 変更
     /// (date / amount 等) で SwiftUI 再描画が走らず、編集後に古い日付グループに残り続けてしまう。
@@ -70,8 +89,15 @@ struct SheetDetailView: View {
         )
     }
 
-    private var sortOption: SortOption {
-        SortOption(rawValue: sortOptionRaw) ?? .dateDesc
+    private var sortField: SortField {
+        SortField(rawValue: sortFieldRaw) ?? .date
+    }
+
+    private var sortFieldBinding: Binding<SortField> {
+        Binding(
+            get: { self.sortField },
+            set: { self.sortFieldRaw = $0.rawValue }
+        )
     }
 
     // MARK: - Filtering
@@ -92,11 +118,11 @@ struct SheetDetailView: View {
                     || ($0.note ?? "").lowercased().contains(q)
             }
         }
-        switch sortOption {
-        case .dateDesc:   list.sort { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-        case .dateAsc:    list.sort { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
-        case .amountDesc: list.sort { $0.amountDecimal > $1.amountDecimal }
-        case .amountAsc:  list.sort { $0.amountDecimal < $1.amountDecimal }
+        switch (sortField, sortAscending) {
+        case (.date, true):    list.sort { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+        case (.date, false):   list.sort { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        case (.amount, true):  list.sort { $0.amountDecimal < $1.amountDecimal }
+        case (.amount, false): list.sort { $0.amountDecimal > $1.amountDecimal }
         }
         return list
     }
@@ -182,11 +208,13 @@ struct SheetDetailView: View {
                         }
                     }
                     Divider()
-                    Picker("並び順", selection: $sortOptionRaw) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.label).tag(opt.rawValue)
-                        }
-                    }
+                    // CustomPicker: 軸選択 + 昇順/降順トグルが 1 つの Menu Section に
+                    // まとまる。選択軸の行は Toggle 化されて asc/desc を切替できる。
+                    CustomPickerView(
+                        selection: sortFieldBinding,
+                        isSortAscending: $sortAscending,
+                        title: "並び順"
+                    )
                     Divider()
                     Button {
                         showingEditGroup = true

@@ -63,6 +63,17 @@ struct SettlementView: View {
         }
         .navigationTitle("精算")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("期間", selection: $period) {
+                    ForEach(SettlementPeriod.allCases) { p in
+                        Text(p.label).tag(p)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .task(id: record.objectID) { recompute() }
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
             recompute()
@@ -75,22 +86,16 @@ struct SettlementView: View {
 
     @ViewBuilder
     private var periodSection: some View {
-        Section {
-            Picker("期間", selection: $period) {
-                ForEach(SettlementPeriod.allCases) { p in
-                    Text(p.label).tag(p)
-                }
-            }
-            .pickerStyle(.segmented)
-            if period == .custom {
+        if period == .custom {
+            Section {
                 DatePicker("開始", selection: $customStart, displayedComponents: .date)
                 DatePicker("終了", selection: $customEnd, in: customStart..., displayedComponents: .date)
-            }
-        } header: {
-            Text("期間")
-        } footer: {
-            if let label = currentPeriodSummary {
-                Text(label).font(.caption2)
+            } header: {
+                Text("期間")
+            } footer: {
+                if let label = currentPeriodSummary {
+                    Text(label).font(.caption2)
+                }
             }
         }
     }
