@@ -26,7 +26,7 @@ struct PaywallView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Expenso Premium")
+            .navigationTitle("Budgety Premium")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

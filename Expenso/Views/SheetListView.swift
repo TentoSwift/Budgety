@@ -47,7 +47,7 @@ struct SheetListView: View {
                     }
                 }
             }
-            .navigationTitle("Expenso")
+            .navigationTitle("Budgety")
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet {
                     SheetDetailView(record: sheet)

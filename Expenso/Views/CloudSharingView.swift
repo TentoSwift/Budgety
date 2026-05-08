@@ -348,7 +348,7 @@ struct CloudSharingView: View {
         Section {
             if let url = resolvedURL {
                 ShareLink(item: url,
-                          subject: Text("Expenso「\(record.displayName)」への招待"),
+                          subject: Text("Budgety「\(record.displayName)」への招待"),
                           message: Text(invitationMessage(url: url))) {
                     Label("AirDrop ・ メッセージ ・ 他のアプリ", systemImage: "square.and.arrow.up")
                 }
@@ -396,7 +396,7 @@ struct CloudSharingView: View {
 
     private func invitationMessage(url: URL) -> String {
         """
-        Expenso のシート「\(record.displayName)」に招待します。
+        Budgety のシート「\(record.displayName)」に招待します。
         下のリンクをタップして参加してください:
         \(url.absoluteString)
         """

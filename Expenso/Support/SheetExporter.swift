@@ -150,7 +150,7 @@ enum SheetExporter {
              font: titleFont, color: primaryColor)
         y += titleFont.lineHeight + 8
 
-        draw("Expenso レポート (\(df.string(from: .now)) 出力)",
+        draw("Budgety レポート (\(df.string(from: .now)) 出力)",
              at: CGPoint(x: margin, y: y), font: subFont, color: secondaryColor)
         y += subFont.lineHeight + 24
 

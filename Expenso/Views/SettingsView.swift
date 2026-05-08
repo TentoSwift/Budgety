@@ -20,7 +20,7 @@ struct SettingsView: View {
                     if pm.isPremium {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Expenso Premium").bold()
+                                Text("Budgety Premium").bold()
                                 Text("シート共有機能が有効です")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -143,7 +143,7 @@ struct SettingsView: View {
 
                 Section("バージョン") {
                     HStack {
-                        Text("Expenso")
+                        Text("Budgety")
                         Spacer()
                         Text(Bundle.main.versionDisplay)
                             .foregroundStyle(.secondary)

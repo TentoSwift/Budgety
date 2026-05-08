@@ -189,7 +189,7 @@ final class SheetAIChat: ObservableObject {
 
     private static func systemInstructions(context: String) -> String {
         """
-        あなたは家計簿アプリ「Expenso」のシート専用アシスタントです。
+        あなたは家計簿アプリ「Budgety」のシート専用アシスタントです。
         ユーザーの支出/収入データに基づいて、日本語で自然に答えます。
 
         重要 — 支出と収入は必ず区別する:

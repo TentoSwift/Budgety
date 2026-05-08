@@ -195,7 +195,7 @@ final class ShareCoordinator {
         }
         let result = try await container.share([sheet], to: nil)
         let share = result.1
-        share[CKShare.SystemFieldKey.title] = "Expenso: \(sheet.displayName)" as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = "Budgety: \(sheet.displayName)" as CKRecordValue
         share.publicPermission = .none
         return share
     }

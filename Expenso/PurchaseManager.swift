@@ -15,7 +15,7 @@ final class PurchaseManager: ObservableObject {
 
     enum Plan: String, CaseIterable, Identifiable {
         case monthly = "com.tento.Expenso.premium.monthly"
-        case yearly  = "com.tento.Expenso.premium.yearly"
+        case yearly  = "com.tento.Budgety.premium.yearly"
         case lifetime = "com.tento.Expenso.premium.lifetime"
 
         var id: String { rawValue }

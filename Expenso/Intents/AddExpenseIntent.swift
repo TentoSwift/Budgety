@@ -14,7 +14,7 @@ import Foundation
 struct AddExpenseIntent: AppIntent {
     static var title: LocalizedStringResource = "支出を追加"
     static var description = IntentDescription(
-        "Expenso のシートに支出を 1 件記録します。今日の日付・支払者は自分が使われます。"
+        "Budgety のシートに支出を 1 件記録します。今日の日付・支払者は自分が使われます。"
     )
     /// Shortcuts 経由で実行された時の振る舞い:
     /// - openAppWhenRun = false → アプリは前面に出ない (= 完全バックグラウンド実行)
