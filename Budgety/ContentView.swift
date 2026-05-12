@@ -14,8 +14,3 @@ struct ContentView: View {
         SheetListView()
     }
 }
-
-#Preview {
-    ContentView()
-        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
-}

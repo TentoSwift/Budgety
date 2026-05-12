@@ -14,8 +14,8 @@ final class PurchaseManager: ObservableObject {
     static let shared = PurchaseManager()
 
     enum Plan: String, CaseIterable, Identifiable {
-        case monthly = "com.tento.Budgety.premium.monthly"
-        case yearly  = "com.tento.Budgety.premium.yearly"
+        case monthly = "com.tento.Budgety.subscription.monthly"
+        case yearly  = "com.tento.Budgety.subscription.yearly"
         case lifetime = "com.tento.Budgety.premium.lifetime"
 
         var id: String { rawValue }
