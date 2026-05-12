@@ -22,7 +22,7 @@ final class PersistenceController: ObservableObject {
     /// 一度 true になったら UserDefaults に永続化し、次回起動時は最初から true。
     @Published private(set) var initialSyncComplete: Bool = UserDefaults.standard.bool(forKey: PersistenceController.initialSyncCompleteKey)
 
-    private static let cloudKitContainerIdentifier = "iCloud.com.tento.Expenso"
+    private static let cloudKitContainerIdentifier = "iCloud.com.tento.budgety"
     private static let initialSyncCompleteKey = "ExpensoInitialSyncComplete"
 
     /// `save()` で configuration mismatch を検知した時に立てるフラグ。

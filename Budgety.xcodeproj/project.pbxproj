@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2D18B4CC2FB31606006F2C29 /* Budgety For watchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2D18B4CC2FB31606006F2C29 /* Budgety For watchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
 		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 /* End PBXBuildFile section */
@@ -257,6 +257,7 @@
 /* Begin PBXTargetDependency section */
 		2D18B4CB2FB31606006F2C29 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilter = ios;
 			target = 2D18B4C12FB31605006F2C29 /* Budgety For watchOS Watch App */;
 			targetProxy = 2D18B4CA2FB31606006F2C29 /* PBXContainerItemProxy */;
 		};
@@ -270,12 +271,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20250512;
+				CURRENT_PROJECT_VERSION = 202505121;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Budgety-For-watchOS-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Budgety For watchOS";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -305,12 +307,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20250512;
+				CURRENT_PROJECT_VERSION = 202505121;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Budgety-For-watchOS-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Budgety For watchOS";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -462,7 +465,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202605126;
+				CURRENT_PROJECT_VERSION = 202605128;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -485,7 +488,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -503,7 +509,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 202605126;
+				CURRENT_PROJECT_VERSION = 202605128;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -526,7 +532,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
