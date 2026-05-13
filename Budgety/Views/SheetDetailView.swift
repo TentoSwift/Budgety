@@ -67,7 +67,10 @@ struct SheetDetailView: View {
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
+    @State private var showingDeleteConfirm: Bool = false
+    @State private var showingLeaveConfirm: Bool = false
     @State private var exportShareItem: ExportShareItem?
+    @Environment(\.dismiss) private var dismiss
     @State private var demoOpenStats: Bool = false
     @State private var demoOpenChat: Bool = false
     /// AddExpenseView から「定期項目を編集」が押された時にセットされる。
@@ -269,6 +272,21 @@ struct SheetDetailView: View {
                     } label: {
                         Label("PDF レポート", systemImage: "doc.richtext")
                     }
+                    Divider()
+                    // 削除/離脱はオーナー or 参加者で分岐
+                    if record.isOwnedByCurrentUser {
+                        Button(role: .destructive) {
+                            showingDeleteConfirm = true
+                        } label: {
+                            Label("シートを削除", systemImage: "trash")
+                        }
+                    } else {
+                        Button(role: .destructive) {
+                            showingLeaveConfirm = true
+                        } label: {
+                            Label("このシートから離脱", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -295,6 +313,31 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $showingShare) {
             CloudSharingView(record: record)
+        }
+        .alert("シートを削除しますか?", isPresented: $showingDeleteConfirm) {
+            Button("削除", role: .destructive) {
+                Task { @MainActor in
+                    viewContext.delete(record)
+                    PersistenceController.shared.save()
+                    Haptics.warning()
+                    dismiss()
+                }
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("「\(record.displayName)」とこのシートの全ての支出データが完全に削除されます。共有している場合は参加者からも見えなくなります。この操作は取り消せません。")
+        }
+        .alert("このシートから離脱しますか?", isPresented: $showingLeaveConfirm) {
+            Button("離脱", role: .destructive) {
+                Task { @MainActor in
+                    try? await ShareCoordinator.shared.leaveSharedSheet(record)
+                    Haptics.warning()
+                    dismiss()
+                }
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
             // 「定期項目を編集」経由で閉じた時だけ、RecurringListView に

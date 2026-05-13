@@ -80,7 +80,7 @@ struct iCloudStatusBanner: View {
 
     @MainActor
     private func refresh() async {
-        let container = CKContainer(identifier: "iCloud.com.tento.Expenso")
+        let container = CKContainer(identifier: "iCloud.com.tento.budgety")
         do {
             status = try await container.accountStatus()
         } catch {

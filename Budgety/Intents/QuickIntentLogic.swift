@@ -155,7 +155,17 @@ enum QuickIntentLogic {
             ctx.assign(expense, to: store)
         }
         expense.amount = NSDecimalNumber(value: amount)
-        expense.currencyCode = sheet.resolvedDefaultCurrencyCode
+        // 通貨指定 (任意): ISO 4217 (大文字3文字)。CurrencyCatalog 内に存在すれば採用、
+        // それ以外 (= 未指定 or 未対応コード) は sheet のデフォルト通貨にフォールバック。
+        expense.currencyCode = {
+            if let raw = (parsed["currency"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+               !raw.isEmpty,
+               CurrencyCatalog.all.contains(where: { $0.code == raw }) {
+                return raw
+            }
+            return sheet.resolvedDefaultCurrencyCode
+        }()
         expense.kindRaw = kind.rawValue
         expense.date = date
         expense.title = title

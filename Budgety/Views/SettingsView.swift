@@ -282,7 +282,7 @@ struct SettingsView: View {
 
     @MainActor
     private func refreshAccountStatus() async {
-        let container = CKContainer(identifier: "iCloud.com.tento.Expenso")
+        let container = CKContainer(identifier: "iCloud.com.tento.budgety")
         do {
             iCloudAccountStatus = try await container.accountStatus()
         } catch {

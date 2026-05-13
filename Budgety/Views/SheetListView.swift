@@ -49,7 +49,7 @@ struct SheetListView: View {
                                 SheetRowView(record: sheet)
                             }
                         }
-                        .onDelete(perform: deleteGroups)
+                        // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
                 }
             }
@@ -174,22 +174,6 @@ struct SheetListView: View {
             }
         default:
             break
-        }
-    }
-
-    private func deleteGroups(at offsets: IndexSet) {
-        let targets = offsets.map { sheets[$0] }
-        Task { @MainActor in
-            for sheet in targets {
-                if sheet.isOwnedByCurrentUser {
-                    viewContext.delete(sheet)
-                } else {
-                    // 参加シートはローカルだけ purge。オーナー側を削除しない。
-                    try? await ShareCoordinator.shared.leaveSharedSheet(sheet)
-                }
-            }
-            PersistenceController.shared.save()
-            Haptics.warning()
         }
     }
 }

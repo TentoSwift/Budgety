@@ -29,7 +29,7 @@ final class UserProfileStore: ObservableObject {
         static let profileUpdatedAt   = "userProfile.profileUpdatedAt"
     }
     private static let photoFileName = "userProfile.photo.jpg"
-    private static let containerID = "iCloud.com.tento.Expenso"
+    private static let containerID = "iCloud.com.tento.budgety"
 
     @Published var displayName: String {
         didSet {

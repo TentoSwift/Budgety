@@ -482,7 +482,7 @@ struct CloudSharingView: View {
     }
 
     private func checkICloudStatus() async {
-        let status = try? await CKContainer(identifier: "iCloud.com.tento.Expenso").accountStatus()
+        let status = try? await CKContainer(identifier: "iCloud.com.tento.budgety").accountStatus()
         await MainActor.run {
             iCloudHint = Self.hint(for: status)
         }
