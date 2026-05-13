@@ -245,6 +245,60 @@ final class UserProfileStore: ObservableObject {
         if didChange, ctx.hasChanges { try? ctx.save() }
     }
 
+    /// グローバルプロフィール (displayName / colorHex / photoData) を、override されていない
+    /// 既存の ParticipantProfile に伝搬する。
+    ///
+    /// override 判定: `PP.updatedAt < profileUpdatedAt` (= シート単位編集で更新されていない)。
+    /// シート単位編集された PP は `updatedAt` がグローバルより新しいため、ここでは触らない。
+    ///
+    /// 呼び出しタイミング:
+    /// - グローバルプロフィール変更直後 (`applyDeviceLocalProfileEdit` 内)
+    /// - アプリ起動時 (= 別端末で更新された profileUpdatedAt が hydrate で来た後)
+    func propagateProfileToAllSheets(in ctx: NSManagedObjectContext) {
+        guard let recordName = userRecordName, !recordName.isEmpty else { return }
+        let globalUpdatedAt = profileUpdatedAt ?? .distantPast
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        guard let sheets = try? ctx.fetch(sheetReq) else { return }
+        let now = Date()
+        var didChange = false
+        for sheet in sheets {
+            let existing = (sheet.participantProfiles as? Set<ParticipantProfile>)?
+                .first(where: { $0.recordName == recordName })
+            if let existing {
+                // override 保護: PP の updatedAt がグローバル profileUpdatedAt より新しいなら
+                // シート単位で明示的に編集されている扱い → 触らない。
+                if let ppUpdated = existing.updatedAt,
+                   ppUpdated > globalUpdatedAt {
+                    continue
+                }
+                // 差分があれば更新 (= 同じ値なら touch しない)
+                let dn = resolvedDisplayName
+                let cc = avatarBgColorHex ?? "#5B8DEF"
+                let pd = photoData
+                if existing.displayName != dn
+                    || existing.colorHex != cc
+                    || existing.photoData != pd {
+                    existing.displayName = dn
+                    existing.colorHex    = cc
+                    existing.photoData   = pd
+                    existing.updatedAt   = now
+                    didChange = true
+                }
+            } else {
+                // PP 未作成 → 新規作成
+                writeParticipantProfile(
+                    into: sheet, recordName: recordName,
+                    displayName: resolvedDisplayName,
+                    colorHex: avatarBgColorHex ?? "#5B8DEF",
+                    photoData: photoData,
+                    ctx: ctx, now: now
+                )
+                didChange = true
+            }
+        }
+        if didChange, ctx.hasChanges { try? ctx.save() }
+    }
+
     private func writeParticipantProfile(
         into sheet: ExpenseSheet,
         recordName: String,
@@ -281,6 +335,8 @@ final class UserProfileStore: ObservableObject {
     func applyDeviceLocalProfileEdit(in ctx: NSManagedObjectContext) {
         ensureSelfMemberExists(in: ctx)
         profileUpdatedAt = .now
+        // override されていない全シートの自分の PP にグローバルプロフィール変更を伝搬
+        propagateProfileToAllSheets(in: ctx)
     }
 
     /// 1 シート単位のプロフィール編集を保存する。

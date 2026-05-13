@@ -71,6 +71,9 @@ struct ExpensoApp: App {
                     let ctx = persistenceController.container.viewContext
                     // 別端末で先にプロフィールが設定されていれば、同期で来た ParticipantProfile から取り込む
                     UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
+                    // 別端末で更新されたグローバルプロフィールを、override されていない
+                    // 既存シートの ParticipantProfile に伝搬する。
+                    UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
                     // 定期項目の未生成 occurrence を Expense に展開
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
@@ -100,6 +103,7 @@ struct ExpensoApp: App {
                                 await UserProfileStore.shared.ensureUserRecordNameLoaded()
                             }
                             UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
+                            UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
                         }
                     case .background:
                         // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。
