@@ -210,6 +210,8 @@ final class PersistenceController: ObservableObject {
         cleanupOrphanExpenses()
         // CloudKit 再同期で孤児が降臨することがあるので継続監視
         attachOrphanCleanupObserver()
+        // 同じ参加者の Member プロフィール (名前/色/写真) を最新 ParticipantProfile に揃える
+        syncMembersFromParticipantProfiles()
 
         let stored = UserDefaults.standard.integer(forKey: Self.migrationRevisionKey)
         guard stored < Self.currentMigrationRevision else { return }
@@ -219,6 +221,75 @@ final class PersistenceController: ObservableObject {
         mergeDuplicateMembers()
 
         UserDefaults.standard.set(Self.currentMigrationRevision, forKey: Self.migrationRevisionKey)
+    }
+
+    /// 既存 Member の denormalized プロフィール (= name / colorHex / photoData) を、
+    /// 同じ Apple ID (recordName 一致) を持つ最新の ParticipantProfile に揃える。
+    /// 加えて、Member.recordName が空のまま放置されている古いデータには PP から逆引きで
+    /// recordName を補完する (= 同名一致)。
+    ///
+    /// これで「同じ支払者なのにアイコンが古い/別人」「編集画面で選択されない」を解消する。
+    /// 起動時に毎回走らせるが、O(M + P) で軽量。
+    private func syncMembersFromParticipantProfiles() {
+        let ctx = container.viewContext
+        let ppReq = NSFetchRequest<ParticipantProfile>(entityName: "ParticipantProfile")
+        guard let allPPs = try? ctx.fetch(ppReq), !allPPs.isEmpty else { return }
+        let memberReq = NSFetchRequest<Member>(entityName: "Member")
+        guard let allMembers = try? ctx.fetch(memberReq), !allMembers.isEmpty else { return }
+
+        // recordName ごとに最新 (updatedAt 降順) の PP を 1 つ選ぶ
+        var latestByRecordName: [String: ParticipantProfile] = [:]
+        for pp in allPPs {
+            guard let rn = pp.recordName, !rn.isEmpty else { continue }
+            let cur = latestByRecordName[rn]
+            let curAt = cur?.updatedAt ?? .distantPast
+            let ppAt = pp.updatedAt ?? .distantPast
+            if cur == nil || ppAt > curAt {
+                latestByRecordName[rn] = pp
+            }
+        }
+        // displayName → 最新 PP (recordName 逆引きの補助用)
+        var latestByName: [String: ParticipantProfile] = [:]
+        for pp in allPPs {
+            guard let n = pp.displayName, !n.isEmpty,
+                  let rn = pp.recordName, !rn.isEmpty else { continue }
+            let cur = latestByName[n]
+            let curAt = cur?.updatedAt ?? .distantPast
+            let ppAt = pp.updatedAt ?? .distantPast
+            if cur == nil || ppAt > curAt {
+                latestByName[n] = pp
+            }
+            _ = rn
+        }
+
+        var didChange = false
+        for member in allMembers {
+            // 1) Member.recordName が空 → 同名 PP から借りる
+            if (member.recordName ?? "").isEmpty,
+               let name = member.name, !name.isEmpty,
+               let pp = latestByName[name],
+               let rn = pp.recordName, !rn.isEmpty {
+                member.recordName = rn
+                didChange = true
+            }
+            // 2) recordName 一致 → 最新 PP の displayName / colorHex / photoData を Member に同期
+            guard let rn = member.recordName, !rn.isEmpty,
+                  let pp = latestByRecordName[rn] else { continue }
+            if let dn = pp.displayName, !dn.isEmpty, member.name != dn {
+                member.name = dn
+                didChange = true
+            }
+            if let cc = pp.colorHex, !cc.isEmpty, member.colorHex != cc {
+                member.colorHex = cc
+                didChange = true
+            }
+            if member.photoData != pp.photoData {
+                member.photoData = pp.photoData
+                didChange = true
+            }
+            if didChange { member.updatedAt = .now }
+        }
+        if didChange, ctx.hasChanges { try? ctx.save() }
     }
 
     /// `expense.sheet == nil` の Expense を削除する。
