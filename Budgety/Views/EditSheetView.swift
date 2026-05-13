@@ -23,6 +23,7 @@ struct EditSheetView: View {
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
     @State private var showProfileEditor: Bool = false
+    @State private var showingPaywall: Bool = false
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
     private var selfParticipantProfile: ParticipantProfile? {
@@ -218,29 +219,54 @@ struct EditSheetView: View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 6)
         let tint = Color(hex: selectedColor) ?? .blue
         return LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(SheetSymbols.options, id: \.self) { sym in
-                Button {
-                    selectedSymbol = sym
-                } label: {
-                    ZStack {
-                        if selectedSymbol == sym {
-                            Circle()
-                                .stroke(Color.primary.opacity(0.35), lineWidth: 3)
-                                .frame(width: 46, height: 46)
-                        }
-                        Circle()
-                            .fill(selectedSymbol == sym ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color(.tertiarySystemBackground)))
-                            .frame(width: 38, height: 38)
-                        Image(systemName: sym)
-                            .foregroundStyle(selectedSymbol == sym ? .white : Color.primary)
-                            .font(.callout.weight(.medium))
-                    }
-                    .frame(height: 46)
-                }
-                .buttonStyle(.plain)
+            ForEach(SheetSymbols.allOptions, id: \.self) { sym in
+                sheetIconButton(sym, tint: tint)
             }
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showingPaywall) { PaywallView() }
+    }
+
+    @ViewBuilder
+    private func sheetIconButton(_ sym: String, tint: Color) -> some View {
+        let isSelected = selectedSymbol == sym
+        // 既に保存済みの symbol は救済 (= 後で Premium が切れても再選択できる)
+        let isLocked = SheetSymbols.isPremiumSymbol(sym)
+            && !PurchaseManager.shared.isPremium
+            && sym != origSymbol
+        Button {
+            if isLocked {
+                showingPaywall = true
+                Haptics.warning()
+            } else {
+                selectedSymbol = sym
+            }
+        } label: {
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.35), lineWidth: 3)
+                        .frame(width: 46, height: 46)
+                }
+                Circle()
+                    .fill(isSelected ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color(.tertiarySystemBackground)))
+                    .frame(width: 38, height: 38)
+                Image(systemName: sym)
+                    .foregroundStyle(isSelected ? .white : Color.primary)
+                    .font(.callout.weight(.medium))
+                    .opacity(isLocked ? 0.45 : 1)
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(3)
+                        .background(Circle().fill(Color.accentColor))
+                        .offset(x: 13, y: 13)
+                }
+            }
+            .frame(height: 46)
+        }
+        .buttonStyle(.plain)
     }
 
     private var currencyPicker: some View {

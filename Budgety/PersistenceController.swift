@@ -131,6 +131,7 @@ final class PersistenceController: ObservableObject {
             }
         }
 
+
         // CloudKit のイベントを監視して initialSyncComplete を立てる。
         // - `.import` 完了: 既存データが降りてきた → 開放 (= 既存ユーザー)
         // - `.setup` 完了 + 8 秒経過: import が来なかった = 空クラウド → 開放 (= 新規ユーザー)

@@ -98,6 +98,39 @@ enum QuickIntentLogic {
             sheet = first
         }
 
+        // Premium 制限: 自分がオーナーのシートへの MCP 経由追加は Premium 必須。
+        // 共有シート (= 他人がオーナーで Premium 提供してくれている) は無料で追加可能。
+        if !PurchaseManager.shared.isPremium && sheet.isOwnedByCurrentUser {
+            return [
+                "ok": false,
+                "error": "Premium 限定機能です。自分がオーナーのシート「\(sheet.displayName)」への MCP 経由の追加には Budgety Premium が必要です。他の Premium ユーザーが共有してくれているシートには無料で追加できます。",
+                "sheet": sheet.displayName,
+                "premiumRequired": true
+            ]
+        }
+
+        // パスワードロック判定
+        let lock = SheetLockManager.shared
+        if lock.hasPassword(for: sheet) {
+            let provided = (parsed["password"] as? String) ?? ""
+            if provided.isEmpty {
+                return [
+                    "ok": false,
+                    "error": "sheet \"\(sheet.displayName)\" is locked. Provide `password` to add.",
+                    "sheet": sheet.displayName,
+                    "locked": true
+                ]
+            }
+            if !lock.unlock(sheet, withPassword: provided) {
+                return [
+                    "ok": false,
+                    "error": "incorrect password for sheet \"\(sheet.displayName)\".",
+                    "sheet": sheet.displayName,
+                    "locked": true
+                ]
+            }
+        }
+
         // カテゴリ決定 (= kind に応じて AI 提案 / 最初の同 kind カテゴリ)
         let allKindCats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
             .filter { $0.kind == kind }
@@ -199,7 +232,34 @@ enum QuickIntentLogic {
         req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         req.sortDescriptors = [NSSortDescriptor(keyPath: \Expense.date, ascending: true)]
 
-        let expenses = (try? ctx.fetch(req)) ?? []
+        let allExpenses = (try? ctx.fetch(req)) ?? []
+
+        // Premium 制限 + ロックの扱い:
+        // - 非 Premium + 自分がオーナーのシート → 除外 (Premium 必須)
+        // - 共有シート (他人がオーナー) → 無料で取得可能
+        // - ロック済シート → password 一致なら通す、それ以外は除外
+        let lock = SheetLockManager.shared
+        let isPremium = PurchaseManager.shared.isPremium
+        let providedPassword = (parsed["password"] as? String) ?? ""
+        var omittedPremiumCount = 0
+        var omittedLockedCount = 0
+        let expenses = allExpenses.filter { e in
+            guard let s = e.sheet else { return false }
+            // Premium 制限
+            if !isPremium && s.isOwnedByCurrentUser {
+                omittedPremiumCount += 1
+                return false
+            }
+            // ロック
+            if lock.hasPassword(for: s) {
+                if providedPassword.isEmpty || !lock.unlock(s, withPassword: providedPassword) {
+                    omittedLockedCount += 1
+                    return false
+                }
+            }
+            return true
+        }
+
         let payloadOut: [[String: Any]] = expenses.map { e in
             [
                 "date": ISO8601DateFormatter().string(from: e.date ?? Date()),
@@ -221,13 +281,27 @@ enum QuickIntentLogic {
             return PeriodOption(rawValue: periodStr)?.label ?? "今月"
         }()
 
-        return [
+        var result: [String: Any] = [
             "period": periodLabel,
             "from": ISO8601DateFormatter().string(from: dateRange.start),
             "to":   ISO8601DateFormatter().string(from: dateRange.end),
             "count": payloadOut.count,
             "expenses": payloadOut
         ]
+        var warnings: [String] = []
+        if omittedPremiumCount > 0 {
+            result["premiumOmitted"] = omittedPremiumCount
+            result["premiumRequired"] = true
+            warnings.append("Omitted \(omittedPremiumCount) entries from sheets you own. MCP access to your own sheets requires Budgety Premium. Sheets shared by other Premium users are accessible for free.")
+        }
+        if omittedLockedCount > 0 {
+            result["lockedOmitted"] = omittedLockedCount
+            warnings.append("Omitted \(omittedLockedCount) entries from locked sheets. Provide `password` to include them.")
+        }
+        if !warnings.isEmpty {
+            result["warning"] = warnings.joined(separator: " ")
+        }
+        return result
     }
 
     // MARK: - Helpers

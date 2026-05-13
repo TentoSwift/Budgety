@@ -16,6 +16,7 @@ struct ExpensoApp: App {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var shareToast: String?
+    @State private var premiumExpiredAlertShown: Bool = false
 
     var body: some Scene {
         WindowGroup {
@@ -43,7 +44,12 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoPremiumExpired)) { _ in
-                    showToast("Premium が終了しました。自分が作成した共有を解除しました。")
+                    premiumExpiredAlertShown = true
+                }
+                .alert("Premium が終了しました", isPresented: $premiumExpiredAlertShown) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text("自分が作成した共有とシートロックを解除しました。")
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoSaveFailed)) { note in
                     let message = (note.userInfo?["message"] as? String) ?? "保存に失敗しました"
@@ -67,6 +73,8 @@ struct ExpensoApp: App {
                     UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
                     // 定期項目の未生成 occurrence を Expense に展開
                     RecurringExpenseGenerator.generateAll(in: ctx)
+                    // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
+                    SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
                 }
                 // CloudKit が新しいデータを取り込んだら ParticipantProfile から再 hydrate。
                 // 通知は viewContext へのマージ完了より早く飛ぶことがあるため、
@@ -97,6 +105,10 @@ struct ExpensoApp: App {
                         // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。
                         // iOS は背景時にしか走らせないので、この瞬間がチャンス。
                         AppDelegate.scheduleAppRefresh()
+                        // バックグラウンドに移ったらシートロックを全て再要求 (= 次回フォアグラウンドで再入力)
+                        Task { @MainActor in
+                            SheetLockManager.shared.lockAll()
+                        }
                     default:
                         break
                     }

@@ -43,10 +43,10 @@ struct AddExpenseIntent: AppIntent {
     var note: String
 
     @Parameter(
-        title: "日付",
-        description: "支出の日付。Shortcuts では「現在の日付」変数を割り当てると実行時刻になります。"
+        title: "日付 (任意)",
+        description: "未指定の場合は現在時刻で記録します。"
     )
-    var date: Date
+    var date: Date?
 
     @Parameter(
         title: "日付テキスト (任意)",
@@ -60,13 +60,15 @@ struct AddExpenseIntent: AppIntent {
     )
     var sheetName: String?
 
+    // Summary のメイン行には日時を出さない (= Shortcuts.app で日時を聞かない)。
+    // 日時は「詳細を表示」配下に隠し、必要な時 (自動化など) だけ任意指定。
     static var parameterSummary: some ParameterSummary {
         Summary("\(\.$sheet) に \(\.$title) (\(\.$amount)) を追加") {
             \.$category
+            \.$note
             \.$date
             \.$dateText
             \.$sheetName
-            \.$note
         }
     }
 
@@ -314,17 +316,17 @@ struct AddExpenseIntent: AppIntent {
     /// 「未分類のまま」を表す sentinel id
     static let skipCategoryID = "__expenso_skip_category__"
 
-    /// `dateText` が ISO8601 で解釈できればそれを優先、ダメなら `date` を使う。
-    static func resolveDate(date: Date, dateText: String?) -> Date {
-        guard let text = dateText?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty
-        else { return date }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: text) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        if let d = f.date(from: text) { return d }
-        return date
+    /// `dateText` が ISO8601 で解釈できればそれを優先、なければ `date`、それも未指定なら `.now`。
+    static func resolveDate(date: Date?, dateText: String?) -> Date {
+        if let text = dateText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = f.date(from: text) { return d }
+            f.formatOptions = [.withInternetDateTime]
+            if let d = f.date(from: text) { return d }
+        }
+        return date ?? .now
     }
 }
 

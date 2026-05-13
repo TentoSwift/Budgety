@@ -20,6 +20,8 @@ struct SheetListView: View {
     @State private var showSyncWaitingAlert = false
     @State private var showOfflineAlert = false
     @State private var path: [NSManagedObjectID] = []
+    @State private var didRestorePath = false
+    @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -54,7 +56,9 @@ struct SheetListView: View {
             .navigationTitle("Budgety")
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet {
-                    SheetDetailView(record: sheet)
+                    LockedSheetGate(record: sheet) {
+                        SheetDetailView(record: sheet)
+                    }
                 }
             }
             .toolbar {
@@ -97,8 +101,42 @@ struct SheetListView: View {
             } message: {
                 Text("シートの新規作成には iCloud との同期が必要です。Wi-Fi またはモバイル通信に接続してから再度お試しください。")
             }
-            .onAppear { applyDemoLaunch() }
+            .onAppear {
+                applyDemoLaunch()
+                restoreLastOpenedSheetIfNeeded()
+            }
+            .onChange(of: sheets.count) { _, _ in
+                restoreLastOpenedSheetIfNeeded()
+            }
+            .onChange(of: path) { _, newPath in
+                // 末尾のシート URI を覚えておき、次回起動時に復元する
+                if let last = newPath.last {
+                    lastOpenedSheetURI = last.uriRepresentation().absoluteString
+                } else {
+                    lastOpenedSheetURI = ""
+                }
+            }
         }
+    }
+
+    /// 前回開いていたシートを起動時に自動で開く。
+    /// `sheets` が空 (= CloudKit 初回 import 未完了) の段階では何もせず、
+    /// 後から sheets が更新された時点 (`onChange(of: sheets.count)`) に再試行する。
+    /// 一度成功したら以後は走らないように `didRestorePath` でガード。
+    private func restoreLastOpenedSheetIfNeeded() {
+        guard !didRestorePath else { return }
+        guard !lastOpenedSheetURI.isEmpty, sheets.first != nil else { return }
+        guard let coord = viewContext.persistentStoreCoordinator,
+              let url = URL(string: lastOpenedSheetURI),
+              let objectID = coord.managedObjectID(forURIRepresentation: url),
+              let _ = try? viewContext.existingObject(with: objectID) as? ExpenseSheet
+        else {
+            // URI 不正 / シートが削除済 → 復元失敗だが以後再試行しない
+            didRestorePath = true
+            return
+        }
+        path = [objectID]
+        didRestorePath = true
     }
 
     /// 新しいシートを追加しようとした時のゲート。3 値で分岐:
@@ -158,6 +196,7 @@ struct SheetListView: View {
 
 private struct SheetRowView: View {
     @ObservedObject var record: ExpenseSheet
+    @StateObject private var lockManager = SheetLockManager.shared
 
     var body: some View {
         HStack(spacing: 14) {
@@ -165,7 +204,43 @@ private struct SheetRowView: View {
             Text(record.displayName)
                 .font(.headline)
             Spacer()
+            if lockManager.hasPassword(for: record) {
+                Image(systemName: lockManager.isUnlocked(record) ? "lock.open.fill" : "lock.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// ロック対象シートの開封ゲート。未解錠なら SheetLockView を出し、
+/// 解錠後/最初からロック無しなら子コンテンツ (SheetDetailView) を表示。
+/// シートから離脱 (= NavigationStack で pop) すると再ロックする。
+private struct LockedSheetGate<Content: View>: View {
+    @ObservedObject var record: ExpenseSheet
+    let content: () -> Content
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var lockManager = SheetLockManager.shared
+
+    var body: some View {
+        Group {
+            if lockManager.isUnlocked(record) {
+                content()
+            } else {
+                SheetLockView(
+                    record: record,
+                    onUnlock: { /* state 更新で自動で content に切替 */ },
+                    onCancel: { dismiss() }
+                )
+            }
+        }
+        .onDisappear {
+            // シート画面から離れたら次回入る時にパスワード再要求
+            if lockManager.hasPassword(for: record) {
+                lockManager.lock(record)
+            }
+        }
     }
 }

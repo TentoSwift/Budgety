@@ -8,6 +8,8 @@
 	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.finance</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>パスワードでロックしたシートを Face ID で素早く開けるようにするために使用します。</string>
 	<key>CKSharingSupported</key>
 	<true/>
 	<key>UIBackgroundModes</key>

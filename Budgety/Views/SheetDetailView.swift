@@ -65,6 +65,8 @@ struct SheetDetailView: View {
     @State private var demoOpenCalendar: Bool = false
     @State private var demoOpenTemplates: Bool = false
     @State private var exportPaywall: Bool = false
+    @State private var lockPaywall: Bool = false
+    @State private var showingSetPassword: Bool = false
     @State private var exportShareItem: ExportShareItem?
     @State private var demoOpenStats: Bool = false
     @State private var demoOpenChat: Bool = false
@@ -228,6 +230,24 @@ struct SheetDetailView: View {
                     } label: {
                         Label("カテゴリを管理", systemImage: "tag.fill")
                     }
+                    // ロック設定はオーナーのみ。参加者 (= 非オーナー) はロック解除画面で
+                    // パスワードを入れて閲覧することしかできない。
+                    if record.isOwnedByCurrentUser {
+                        Button {
+                            if PurchaseManager.shared.isPremium {
+                                showingSetPassword = true
+                            } else {
+                                lockPaywall = true
+                                Haptics.warning()
+                            }
+                        } label: {
+                            if SheetLockManager.shared.hasPassword(for: record) {
+                                Label("ロック設定", systemImage: "lock.fill")
+                            } else {
+                                Label("シートをロック", systemImage: "lock")
+                            }
+                        }
+                    }
                     NavigationLink {
                         RecurringListView(record: record)
                     } label: {
@@ -259,6 +279,14 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $exportPaywall) {
             PaywallView()
+        }
+        .sheet(isPresented: $lockPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: $showingSetPassword) {
+            NavigationStack {
+                SetSheetPasswordView(record: record)
+            }
         }
         .sheet(item: $exportShareItem) { item in
             // CSV / PDF をまずプレビュー表示 → ユーザーが内容確認した上で

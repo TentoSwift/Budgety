@@ -178,13 +178,21 @@ final class PurchaseManager: ObservableObject {
         if !nowPremium {
             let isTransition = wasPremium
             Task { @MainActor in
-                let hasActive = await ShareCoordinator.shared.hasActiveOwnedShares()
-                guard hasActive else {
-                    Self.purchaseLog.debug("non-premium but no active shares; skip")
+                // 真の transition (Premium → 非 Premium) は必ず確認・解除。
+                // それ以外は「掃除すべき残骸」(= 共有 or ロック済みシート) があるかで判定。
+                let hasResidue: Bool = {
+                    if isTransition { return true }
+                    return Self.hasAnyOwnedLockedSheets()
+                }()
+                let hasActiveShares = isTransition || hasResidue
+                    ? await ShareCoordinator.shared.hasActiveOwnedShares()
+                    : false
+                guard isTransition || hasActiveShares || hasResidue else {
+                    Self.purchaseLog.debug("non-premium but nothing to clean; skip")
                     return
                 }
                 let confirmedExpired = await Self.confirmExpiry()
-                Self.purchaseLog.debug("non-premium + active shares; confirmExpiry → \(confirmedExpired)")
+                Self.purchaseLog.debug("non-premium with residue; confirmExpiry → \(confirmedExpired)")
                 guard confirmedExpired else { return }
                 await Self.performExpiryRevoke()
                 if isTransition {
@@ -194,12 +202,47 @@ final class PurchaseManager: ObservableObject {
         }
     }
 
+    /// 自分がオーナーで、かつパスワードロックが設定されているシートが 1 件以上あるか。
+    /// Premium 解除時の「掃除すべき残骸あり」判定の fast-path 用。
+    @MainActor
+    static func hasAnyOwnedLockedSheets() -> Bool {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        req.predicate = NSPredicate(format: "lockPasswordHash != nil AND lockPasswordHash != ''")
+        guard let sheets = try? ctx.fetch(req) else { return false }
+        return sheets.contains(where: { $0.isOwnedByCurrentUser })
+    }
+
+    /// 自分がオーナーのシートのパスワードロックを全て解除する。
+    /// - Returns: 解除した件数。
+    @MainActor
+    @discardableResult
+    static func clearOwnedSheetLocks() -> Int {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        req.predicate = NSPredicate(format: "lockPasswordHash != nil AND lockPasswordHash != ''")
+        guard let sheets = try? ctx.fetch(req) else { return 0 }
+        var count = 0
+        for sheet in sheets where sheet.isOwnedByCurrentUser {
+            SheetLockManager.shared.clearPassword(for: sheet)
+            count += 1
+        }
+        return count
+    }
+
     /// 期限切れ確定時の共有解除処理。テスト用に Settings から
     /// `runExpiryRevokeForDebug()` でも呼べるよう独立メソッドにしてある。
+    /// - 共有 (CKShare) の解除に加え、自分がオーナーのシートのパスワードロックも解除する。
+    ///   ロックは Premium 機能なので、Premium が切れたユーザーがロック解除手段を失わないよう
+    ///   自動で外す (= ロック画面で詰まないようにする)。
     @MainActor
     static func performExpiryRevoke() async {
         let ok = await ShareCoordinator.shared.revokeAllOwnedShares()
         purchaseLog.debug("revokeAllOwnedShares returned \(ok)")
+        let clearedLocks = clearOwnedSheetLocks()
+        if clearedLocks > 0 {
+            purchaseLog.debug("cleared sheet locks: count=\(clearedLocks)")
+        }
     }
 
     #if DEBUG

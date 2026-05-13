@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V15">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V16">
     <entity name="ExpenseCategory" representedClassName="ExpenseCategory" syncable="YES" codeGenerationType="class">
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#888888"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -16,6 +16,8 @@
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="defaultCurrencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="lockPasswordHash" optional="YES" attributeType="String"/>
+        <attribute name="lockPasswordSalt" optional="YES" attributeType="String"/>
         <attribute name="monthlyBudget" optional="YES" attributeType="Decimal" defaultValueString="0"/>
         <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
