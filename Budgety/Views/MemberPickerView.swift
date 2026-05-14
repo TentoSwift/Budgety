@@ -133,6 +133,15 @@ struct MemberPickerView: View {
                     } else {
                         Text("self userRecordName: (empty)")
                     }
+                    // 自分の photoData がローカルにあるか確認 (= UserProfileStore.photoData)
+                    if let bytes = profile.photoData?.count, bytes > 0 {
+                        Text("self photoData: ✓ \(bytes) bytes")
+                    } else {
+                        Text("self photoData: ✗ (nil or 0 bytes)")
+                    }
+                    Text("self displayName: \(profile.resolvedDisplayName)")
+                    Text("self avatarBgColorHex: \(profile.avatarBgColorHex ?? "(empty)")")
+                    Text("self profileUpdatedAt: \(profile.profileUpdatedAt.map { ISO8601DateFormatter().string(from: $0) } ?? "(nil)")")
                     if let s = selected {
                         Text("selected: \(s.name ?? "(nil)")  rec: \(s.recordName ?? "(empty)")")
                     } else {
