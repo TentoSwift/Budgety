@@ -72,6 +72,7 @@ struct MemberPickerView: View {
 
     var body: some View {
         List {
+            if BuildInfo.isInternalBuild { debugHeaderSection }
             unspecifiedSection
             // Member の有無に依存せず、UserProfileStore のプロフィールから直接「自分」を表示。
             // 選択時に Member を ensure する。
@@ -88,6 +89,41 @@ struct MemberPickerView: View {
         // CKShare の参加者更新もここで拾って再描画させる
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
             Task { await loadShare() }
+        }
+    }
+
+    /// DEBUG セクション: 現在の Expense の payer 識別情報 + selected の id を表示
+    @ViewBuilder
+    private var debugHeaderSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("DEBUG").font(.system(size: 9, weight: .bold)).foregroundStyle(.orange)
+                Group {
+                    if let pid = fallbackProfileID, !pid.isEmpty {
+                        Text("Expense.payerProfileID: \(pid)")
+                    } else {
+                        Text("Expense.payerProfileID: (empty)")
+                    }
+                    if let name = fallbackPaidBy, !name.isEmpty {
+                        Text("Expense.paidBy: \(name)")
+                    } else {
+                        Text("Expense.paidBy: (empty)")
+                    }
+                    if let rn = profile.userRecordName, !rn.isEmpty {
+                        Text("self userRecordName: \(rn)")
+                    } else {
+                        Text("self userRecordName: (empty)")
+                    }
+                    if let s = selected {
+                        Text("selected: \(s.name ?? "(nil)")  rec: \(s.recordName ?? "(empty)")")
+                    } else {
+                        Text("selected: (nil)")
+                    }
+                }
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            }
         }
     }
 
