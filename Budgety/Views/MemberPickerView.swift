@@ -92,6 +92,25 @@ struct MemberPickerView: View {
         }
     }
 
+
+    /// DEBUG: 現在のシートに紐付く ParticipantProfile を 1 行にエンコードして返す。
+    /// recordName / displayName / photoData 有無 / colorHex / updatedAt を含む。
+    private var sheetParticipantProfilesDebug: [String] {
+        guard let record else { return ["(no sheet)"] }
+        let profiles = ((record.participantProfiles as? Set<ParticipantProfile>) ?? [])
+            .sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
+        if profiles.isEmpty { return ["(no participant profiles)"] }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return profiles.map { p in
+            let rn = (p.recordName ?? "").isEmpty ? "(empty)" : String((p.recordName ?? "").prefix(20))
+            let dn = (p.displayName ?? "").isEmpty ? "(empty)" : (p.displayName ?? "")
+            let hasPhoto = (p.photoData?.count ?? 0) > 0
+            let color = p.colorHex ?? "(empty)"
+            let ts = p.updatedAt.map { f.string(from: $0) } ?? "(nil)"
+            return "  rn:\(rn)  name:\(dn)  photo:\(hasPhoto ? "✓" : "✗")  color:\(color)  upd:\(ts)"
+        }
+    }
     /// DEBUG セクション: 現在の Expense の payer 識別情報 + selected の id を表示
     @ViewBuilder
     private var debugHeaderSection: some View {
@@ -130,6 +149,10 @@ struct MemberPickerView: View {
                     // legacy
                     ForEach(legacyPayers) { lp in
                         Text("  [legacy] \(lp.name)  \(lp.profileID ?? "(empty)")")
+                    }
+                    Text("--- sheet PPs ---")
+                    ForEach(sheetParticipantProfilesDebug, id: \.self) { line in
+                        Text(line)
                     }
                 }
                 .font(.system(size: 10, design: .monospaced))
