@@ -197,11 +197,20 @@ struct MemberPickerView: View {
     private func selfRowContent(avatar: AnyView, name: String, isSelected: Bool) -> some View {
         HStack(spacing: 12) {
             avatar
-            Text(name)
-                .foregroundStyle(.primary)
-            Text("自分")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(name)
+                        .foregroundStyle(.primary)
+                    Text("自分")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                DebugIDBadge(
+                    memberID: selfMember?.id,
+                    recordName: selfMember?.recordName ?? profile.userRecordName,
+                    extra: "self"
+                )
+            }
             Spacer()
             if isSelected {
                 Image(systemName: "checkmark").foregroundStyle(.tint)
@@ -275,6 +284,11 @@ struct MemberPickerView: View {
                             Text("過去の記録")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
+                            DebugIDBadge(
+                                memberID: info.memberID,
+                                recordName: info.profileID,
+                                extra: "legacy"
+                            )
                         }
                         Spacer()
                         if legacyRowIsSelected(info) {
@@ -402,6 +416,11 @@ struct MemberPickerView: View {
                     Text(p.role == .owner ? "オーナー" : (p.acceptanceStatus == .pending ? "招待中" : "参加者"))
                         .font(.caption2)
                         .foregroundStyle(p.acceptanceStatus == .pending ? .orange : .secondary)
+                    DebugIDBadge(
+                        memberID: allMembers.first(where: { $0.recordName == info.recordName })?.id,
+                        recordName: info.recordName,
+                        extra: "participant"
+                    )
                 }
                 Spacer()
                 if isSelected {
@@ -517,3 +536,35 @@ struct MemberPickerView: View {
     }
 }
 
+// MARK: - DEBUG ID badges
+
+private struct DebugIDBadge: View {
+    let memberID: UUID?
+    let recordName: String?
+    let extra: String?
+
+    init(memberID: UUID? = nil, recordName: String? = nil, extra: String? = nil) {
+        self.memberID = memberID
+        self.recordName = recordName
+        self.extra = extra
+    }
+
+    var body: some View {
+        #if DEBUG
+        HStack(spacing: 6) {
+            if let id = memberID {
+                Text("id:\(id.uuidString.prefix(8))")
+            }
+            if let rn = recordName, !rn.isEmpty {
+                Text("rec:\(rn.prefix(10))")
+            }
+            if let extra { Text(extra) }
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        #else
+        EmptyView()
+        #endif
+    }
+}
