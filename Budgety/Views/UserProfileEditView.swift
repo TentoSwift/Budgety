@@ -34,6 +34,24 @@ struct UserProfileEditView: View {
 
     var body: some View {
         NavigationStack {
+            if !BuildInfo.profileFeatureEnabled {
+                Form {
+                    Section {
+                        Label("プロフィール機能は一時的に無効化されています。", systemImage: "info.circle")
+                            .foregroundStyle(.secondary)
+                    } footer: {
+                        Text("シート上の参加者は iCloud アカウント名で自動的に表示されます。")
+                            .font(.caption)
+                    }
+                }
+                .navigationTitle("プロフィール")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("閉じる") { dismiss() }
+                    }
+                }
+            } else {
             Form {
                 avatarSection
                 nameSection
@@ -54,6 +72,7 @@ struct UserProfileEditView: View {
             .photosPicker(isPresented: $showPhotoPicker, selection: $pickerItem, matching: .images)
             .sheet(isPresented: $showMemojiEditor) {
                 MemojiEditorSheet(draftPhotoData: $draftPhotoData, draftBgColorHex: $draftBgColorHex)
+            }
             }
         }
     }

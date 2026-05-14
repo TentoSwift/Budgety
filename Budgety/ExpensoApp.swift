@@ -41,8 +41,7 @@ struct ExpensoApp: App {
                     let title = (note.userInfo?["shareTitle"] as? String) ?? "シート"
                     showToast("「\(title)」に参加しました")
                     // 共有相手にあなたが誰か分かるよう、プロフィール未設定なら設定 UI を出す
-                    if UserProfileStore.shared.isEmpty {
-                        // toast の上に sheet が被らないよう少し遅らせる
+                    if BuildInfo.profileFeatureEnabled, UserProfileStore.shared.isEmpty {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             showProfileSetupOnAccept = true
                         }
@@ -78,11 +77,10 @@ struct ExpensoApp: App {
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     let ctx = persistenceController.container.viewContext
-                    // 別端末で先にプロフィールが設定されていれば、同期で来た ParticipantProfile から取り込む
-                    UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
-                    // 別端末で更新されたグローバルプロフィールを、override されていない
-                    // 既存シートの ParticipantProfile に伝搬する。
-                    UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
+                    if BuildInfo.profileFeatureEnabled {
+                        UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
+                        UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
+                    }
                     // 定期項目の未生成 occurrence を Expense に展開
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
@@ -114,8 +112,10 @@ struct ExpensoApp: App {
                             if (UserProfileStore.shared.userRecordName ?? "").isEmpty {
                                 await UserProfileStore.shared.ensureUserRecordNameLoaded()
                             }
-                            UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
-                            UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
+                            if BuildInfo.profileFeatureEnabled {
+                                UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
+                                UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
+                            }
                         }
                     case .background:
                         // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。

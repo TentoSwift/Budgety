@@ -1409,7 +1409,9 @@ struct AddExpenseView: View {
                 expense.category = cat
             }
             // 自分の ParticipantProfile を同シートに ensure (まだ無ければ作成、あれば更新)
-            profile.ensureProfile(in: record, ctx: viewContext)
+            if BuildInfo.profileFeatureEnabled {
+                profile.ensureProfile(in: record, ctx: viewContext)
+            }
 
             // 繰り返し ON: Rule を作成して、この Expense を「最初の occurrence」として連結する。
             if isRecurring {

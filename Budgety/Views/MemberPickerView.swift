@@ -55,6 +55,7 @@ struct MemberPickerView: View {
     /// 自分の per-sheet ParticipantProfile (= シート単位の override 含む)。
     /// row のアバター/名前を Member ではなく PP 由来で出すための参照。
     private var selfPerSheetProfile: ParticipantProfile? {
+        guard BuildInfo.profileFeatureEnabled else { return nil }
         guard let record,
               let rn = profile.userRecordName, !rn.isEmpty,
               let profiles = record.participantProfiles as? Set<ParticipantProfile> else { return nil }
@@ -572,6 +573,7 @@ struct MemberPickerView: View {
 
     /// 同シート配下の ParticipantProfile を recordName 一致で引く
     private func participantProfile(for p: CKShare.Participant) -> ParticipantProfile? {
+        guard BuildInfo.profileFeatureEnabled else { return nil }
         guard let record = record,
               let rn = p.userIdentity.userRecordID?.recordName,
               !rn.isEmpty, rn != "_defaultOwner_", rn != "__defaultOwner__",

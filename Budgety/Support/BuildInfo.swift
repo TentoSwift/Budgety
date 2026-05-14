@@ -25,4 +25,8 @@ enum BuildInfo {
         return isTestFlight
         #endif
     }
+
+    /// プロフィール機能 (UserProfileStore / ParticipantProfile / UserProfileEditView 等) を有効化するか。
+    /// 一時的に CKShare.Participant 直接識別に切り替えるため false。元に戻すには true。
+    static let profileFeatureEnabled: Bool = false
 }

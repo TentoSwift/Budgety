@@ -168,7 +168,7 @@ struct AddExpenseIntent: AppIntent {
         expense.sheet = coreSheet
 
         // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
-        profile.ensureProfile(in: coreSheet, ctx: ctx)
+        if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx) }
 
         pc.save()
 
