@@ -623,10 +623,27 @@ final class PersistenceController: ObservableObject {
     /// 全データを削除する。Private ストアの全エンティティを削除し、Core Data 経由で
     /// CloudKit (private DB) にも反映される。共有シートの参加者ローカルでは削除できない
     /// 場合があるため、保存失敗時にエラーをユーザーに通知する。
+    /// 全データを完全リセットする。
+    /// 1. CKShare を全解除 (= 自分が作成した共有を停止)
+    /// 2. Core Data の全エンティティを削除 (Expense, ExpenseCategory, ExpenseSheet,
+    ///    Member, ParticipantProfile, RecurringRule, ExpenseTemplate)
+    /// 3. UserProfileStore (displayName / photoData / colorHex / userRecordName /
+    ///    selfMemberID / profileUpdatedAt) をリセット
+    /// 4. Budgety 関連の UserDefaults キー (シートロック・migration flag・最後に開いたシート等) を削除
     @MainActor
-    func eraseAllData() {
+    func eraseAllData() async {
+        // 1) CKShare を解除 (= 共有を停止)
+        #if !os(watchOS)
+        _ = await ShareCoordinator.shared.revokeAllOwnedShares()
+        #endif
+
+        // 2) Core Data 全エンティティ削除
         let ctx = container.viewContext
-        for entityName in ["Expense", "ExpenseCategory", "Member", "ExpenseSheet"] {
+        let entities = [
+            "Expense", "ExpenseCategory", "ExpenseSheet",
+            "Member", "ParticipantProfile", "RecurringRule", "ExpenseTemplate"
+        ]
+        for entityName in entities {
             let req = NSFetchRequest<NSManagedObject>(entityName: entityName)
             if let items = try? ctx.fetch(req) {
                 for item in items { ctx.delete(item) }
@@ -644,7 +661,37 @@ final class PersistenceController: ObservableObject {
                 object: nil,
                 userInfo: ["message": "削除に失敗しました: \(error.localizedDescription)"]
             )
+            return
         }
+
+        // 3) UserProfileStore をリセット
+        UserProfileStore.shared.resetAll()
+
+        // 4) Budgety 関連 UserDefaults をクリア
+        let ud = UserDefaults.standard
+        let prefixes = [
+            "BudgetySheetLock.",       // legacy
+            "BudgetySheetLockBio.",
+            "userProfile."
+        ]
+        let exactKeys = [
+            "displayName",
+            "lastOpenedSheetURI",
+            "ExpensoInitialSyncComplete",
+            "expensoMigrationRevision",
+            "expensoStoreNeedsReset"
+        ]
+        for (key, _) in ud.dictionaryRepresentation() {
+            if exactKeys.contains(key) || prefixes.contains(where: { key.hasPrefix($0) }) {
+                ud.removeObject(forKey: key)
+            }
+        }
+
+        NotificationCenter.default.post(
+            name: .expensoStoreReset,
+            object: nil,
+            userInfo: ["message": "すべてのデータを削除しました。アプリを再起動してください。"]
+        )
     }
 
     func cloudKitContainer() -> CKContainer {

@@ -96,6 +96,18 @@ final class UserProfileStore: ObservableObject {
         self.photoData = Self.readPhotoFromDisk()
     }
 
+    /// 「全データ削除」用: UserProfileStore のローカル状態を完全リセットする。
+    /// displayName / photoData / avatarBgColorHex / selfMemberID / userRecordName /
+    /// profileUpdatedAt を空に戻し、保存済みの photo.jpg ファイルも削除する。
+    func resetAll() {
+        displayName = ""
+        avatarBgColorHex = nil
+        photoData = nil      // setter が JPEG ファイル削除も行う
+        selfMemberID = nil
+        userRecordName = nil
+        profileUpdatedAt = nil
+    }
+
     // MARK: - Local file helpers
 
     private static var photoURL: URL {
