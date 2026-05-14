@@ -297,14 +297,99 @@ struct MemberPickerView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    mergeMenuItems(for: info)
+                }
             }
         } header: {
             Text("過去の支払者")
         } footer: {
-            Text("現在のシート参加者にいない名前で記録された支出があります。タップして選び直すか、上の参加者から正しい支払者を選んでください。")
+            Text("現在のシート参加者にいない名前で記録された支出があります。タップして選び直すか、行を長押し (右クリック) して「○○に統合する」を選んで一括正規化できます。")
                 .font(.caption2)
         }
     }
+
+    /// 「過去の支払者」行の context menu。シート参加者と自分を統合先候補として並べる。
+    @ViewBuilder
+    private func mergeMenuItems(for info: LegacyPayerInfo) -> some View {
+        // 「自分に統合」
+        if let myRN = profile.userRecordName, !myRN.isEmpty {
+            Button {
+                mergeLegacyPayer(info, toRecordName: myRN, toName: profile.resolvedDisplayName, toMemberID: profile.selfMemberID)
+            } label: {
+                Label("\(profile.resolvedDisplayName) (自分) に統合", systemImage: "arrow.merge")
+            }
+        }
+        // 参加者ごとに「○○に統合」
+        ForEach(otherParticipants, id: \.userIdentity.userRecordID) { p in
+            let pInfo = participantDisplayInfo(p)
+            if let rn = pInfo.recordName {
+                Button {
+                    let matchedMember = allMembers.first(where: { $0.recordName == rn })
+                    mergeLegacyPayer(info, toRecordName: rn, toName: pInfo.name, toMemberID: matchedMember?.id)
+                } label: {
+                    Label("\(pInfo.name) に統合", systemImage: "arrow.merge")
+                }
+            }
+        }
+        Divider()
+        Button(role: .destructive) {
+            clearLegacyPayer(info)
+        } label: {
+            Label("支払者を未選択に戻す", systemImage: "xmark.circle")
+        }
+    }
+
+    /// シート配下の Expense / RecurringRule / Template のうち、`legacy` と一致する payer 情報を持つものを
+    /// 一括で `(recordName, name, memberID)` に書き換える。
+    @MainActor
+    private func mergeLegacyPayer(_ legacy: LegacyPayerInfo, toRecordName: String, toName: String, toMemberID: UUID?) {
+        guard let record else { return }
+        let expReq = NSFetchRequest<Expense>(entityName: "Expense")
+        expReq.predicate = NSPredicate(format: "sheet == %@", record)
+        let expenses = (try? viewContext.fetch(expReq)) ?? []
+        var didChange = false
+        for e in expenses where matchesLegacy(e.paidBy, e.payerProfileID, e.payerMemberID, legacy) {
+            e.paidBy = toName
+            e.payerProfileID = toRecordName
+            e.payerMemberID = toMemberID
+            didChange = true
+        }
+        if didChange {
+            PersistenceController.shared.save()
+            Haptics.success()
+        }
+        dismiss()
+    }
+
+    /// 「未選択」に戻す。シート配下で legacy と一致する Expense の payer 情報を空にする。
+    @MainActor
+    private func clearLegacyPayer(_ legacy: LegacyPayerInfo) {
+        guard let record else { return }
+        let expReq = NSFetchRequest<Expense>(entityName: "Expense")
+        expReq.predicate = NSPredicate(format: "sheet == %@", record)
+        let expenses = (try? viewContext.fetch(expReq)) ?? []
+        var didChange = false
+        for e in expenses where matchesLegacy(e.paidBy, e.payerProfileID, e.payerMemberID, legacy) {
+            e.paidBy = ""
+            e.payerProfileID = ""
+            e.payerMemberID = nil
+            didChange = true
+        }
+        if didChange {
+            PersistenceController.shared.save()
+            Haptics.warning()
+        }
+        dismiss()
+    }
+
+    private func matchesLegacy(_ paidBy: String?, _ profileID: String?, _ memberID: UUID?, _ legacy: LegacyPayerInfo) -> Bool {
+        if let mid = legacy.memberID, mid == memberID { return true }
+        if let pid = legacy.profileID, !pid.isEmpty, pid == (profileID ?? "") { return true }
+        if (paidBy ?? "") == legacy.name { return true }
+        return false
+    }
+
 
     private func legacyRowIsSelected(_ info: LegacyPayerInfo) -> Bool {
         if let s = selected {
