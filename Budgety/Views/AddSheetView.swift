@@ -18,7 +18,6 @@ struct AddSheetView: View {
     @State private var selectedSymbol: String = "person.2.fill"
     @State private var defaultCurrencyCode: String = CurrencyCatalog.defaultCode
     @State private var budgetText: String = ""
-    @State private var showingProfileEditor: Bool = false
 
     /// AddSheetView を開いた時点でプロフィールが未設定だったかを記録。
     /// 一度入力したら以降のシートでは出さない (= 「最初のシート作成時のみ」UX)。
@@ -120,55 +119,11 @@ struct AddSheetView: View {
                         .disabled(!canSave)
                 }
             }
-            .sheet(isPresented: $showingProfileEditor) {
-                UserProfileEditView()
-            }
         }
     }
 
     @ViewBuilder
-    private var profileSection: some View {
-        Section {
-            if profile.isEmpty {
-                Button {
-                    showingProfileEditor = true
-                } label: {
-                    Label("プロフィールを設定", systemImage: "person.crop.circle.badge.plus")
-                        .foregroundStyle(Color.accentColor)
-                }
-            } else {
-                Button {
-                    showingProfileEditor = true
-                } label: {
-                    HStack(spacing: 12) {
-                        AvatarView(
-                            photoData: profile.photoData,
-                            displayName: profile.resolvedDisplayName,
-                            colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
-                            size: 44
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.resolvedDisplayName)
-                                .foregroundStyle(.primary)
-                                .fontWeight(.medium)
-                            Text("タップして変更")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "pencil")
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        } header: {
-            Text("あなたのプロフィール")
-        } footer: {
-            Text("シートで「自分」として表示されます。後で設定からも変更できます。")
-                .font(.caption2)
-        }
-    }
+    private var profileSection: some View { EmptyView() }
 
     private var currencyPicker: some View {
         Picker("通貨", selection: $defaultCurrencyCode) {

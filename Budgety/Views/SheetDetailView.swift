@@ -58,7 +58,6 @@ struct SheetDetailView: View {
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
     @State private var showingEditGroup = false
-    @State private var showingProfileEdit = false
     @State private var pendingDeleteExpense: Expense?
     @State private var searchText: String = ""
     @State private var selectedCategory: ExpenseCategory?
@@ -223,11 +222,6 @@ struct SheetDetailView: View {
                     } label: {
                         Label("シートを編集", systemImage: "pencil")
                     }
-                    Button {
-                        showingProfileEdit = true
-                    } label: {
-                        Label("このシートでのプロフィール", systemImage: "person.crop.circle")
-                    }
                     NavigationLink {
                         CategoryListView(record: record)
                     } label: {
@@ -357,9 +351,6 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $showingEditGroup) {
             EditSheetView(record: record)
-        }
-        .sheet(isPresented: $showingProfileEdit) {
-            UserProfileEditView(sheet: record)
         }
         .confirmationDialog(
             "この支出を削除しますか?",

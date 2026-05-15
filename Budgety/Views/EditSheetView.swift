@@ -22,7 +22,6 @@ struct EditSheetView: View {
     @State private var budgetText: String = ""
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
-    @State private var showProfileEditor: Bool = false
     @State private var showingPaywall: Bool = false
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
@@ -151,9 +150,6 @@ struct EditSheetView: View {
                 }
             }
             .onAppear { loadIfNeeded() }
-            .sheet(isPresented: $showProfileEditor) {
-                UserProfileEditView(sheet: record)
-            }
             .confirmationDialog(
                 record.isOwnedByCurrentUser
                     ? "「\(record.displayName)」を削除しますか?"
@@ -174,46 +170,7 @@ struct EditSheetView: View {
     }
 
     @ViewBuilder
-    private var profileSection: some View {
-        Section {
-            Button {
-                showProfileEditor = true
-            } label: {
-                HStack(spacing: 12) {
-                    if let pp = selfParticipantProfile {
-                        ObservedParticipantProfileAvatar(profile: pp, size: 44)
-                    } else {
-                        AvatarView(
-                            photoData: profile.photoData,
-                            displayName: profile.resolvedDisplayName,
-                            colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
-                            size: 44
-                        )
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(selfParticipantProfile?.displayName?.isEmpty == false
-                             ? selfParticipantProfile!.displayName!
-                             : profile.resolvedDisplayName)
-                            .foregroundStyle(.primary)
-                            .fontWeight(.medium)
-                        Text("プロフィールを編集")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .buttonStyle(.plain)
-        } header: {
-            Text("このシートでの自分")
-        } footer: {
-            Text("このシート内の表示専用です。シートごとに別々の名前 / アバターを設定できます。")
-                .font(.caption2)
-        }
-    }
+    private var profileSection: some View { EmptyView() }
 
     private var sheetIconGrid: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 6)

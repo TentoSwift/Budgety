@@ -17,8 +17,6 @@ struct ExpensoApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var shareToast: String?
     @State private var premiumExpiredAlertShown: Bool = false
-    /// シート参加直後にプロフィール未設定だった時、設定 UI を sheet で表示するフラグ。
-    @State private var showProfileSetupOnAccept: Bool = false
 
     var body: some Scene {
         WindowGroup {
@@ -41,11 +39,6 @@ struct ExpensoApp: App {
                     let title = (note.userInfo?["shareTitle"] as? String) ?? "シート"
                     showToast("「\(title)」に参加しました")
                     // 共有相手にあなたが誰か分かるよう、プロフィール未設定なら設定 UI を出す
-                    if BuildInfo.profileFeatureEnabled, UserProfileStore.shared.isEmpty {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            showProfileSetupOnAccept = true
-                        }
-                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAcceptanceFailed)) { note in
                     let message = (note.userInfo?["message"] as? String) ?? "共有の受諾に失敗しました"
@@ -98,9 +91,6 @@ struct ExpensoApp: App {
                         }
                         UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
                     }
-                }
-                .sheet(isPresented: $showProfileSetupOnAccept) {
-                    UserProfileEditView()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {

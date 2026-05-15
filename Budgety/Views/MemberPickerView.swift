@@ -266,11 +266,14 @@ struct MemberPickerView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                DebugIDBadge(
-                    memberID: selfMember?.id,
-                    recordName: selfMember?.recordName ?? profile.userRecordName,
-                    extra: "self"
-                )
+                if let rn = (selfMember?.recordName ?? profile.userRecordName), !rn.isEmpty {
+                    Text("ID: \(rn)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
             }
             Spacer()
             if isSelected {
@@ -345,11 +348,14 @@ struct MemberPickerView: View {
                             Text("過去の記録")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
-                            DebugIDBadge(
-                                memberID: info.memberID,
-                                recordName: info.profileID,
-                                extra: "legacy"
-                            )
+                            if let rn = info.profileID, !rn.isEmpty {
+                                Text("ID: \(rn)")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
                         }
                         Spacer()
                         if legacyRowIsSelected(info) {
@@ -544,11 +550,15 @@ struct MemberPickerView: View {
                     Text(p.role == .owner ? "オーナー" : (p.acceptanceStatus == .pending ? "招待中" : "参加者"))
                         .font(.caption2)
                         .foregroundStyle(p.acceptanceStatus == .pending ? .orange : .secondary)
-                    DebugIDBadge(
-                        memberID: allMembers.first(where: { $0.recordName == info.recordName })?.id,
-                        recordName: info.recordName,
-                        extra: "participant"
-                    )
+                    // participantID を常時表示 (= 全ビルドで見える)
+                    if let rn = info.recordName, !rn.isEmpty {
+                        Text("ID: \(rn)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
                 }
                 Spacer()
                 if isSelected {
