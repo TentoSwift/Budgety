@@ -725,39 +725,6 @@ struct MemberPickerView: View {
     }
 }
 
-// MARK: - Canonical ID for share participants
-
-extension CKShare.Participant {
-    /// 共有相手を全端末で一意に識別するための文字列。
-    /// `Expense.payerProfileID` や `Member.recordName` に保存し、シート参加者間で
-    /// 「払った相手」が解決できるようにする。
-    /// - role == .owner: userIdentity.userRecordID.recordName をそのまま使う。
-    ///   CKShare ではオーナー自身の view では `__defaultOwner__` placeholder に
-    ///   なるが、その場合は呼び出し側 (UserProfileStore.canonicalSelfID) で
-    ///   CKContainer.userRecordID().recordName を使うので nil を返す。
-    /// - role != .owner: lookupInfo.emailAddress (= 招待時の Apple ID) を使う。
-    ///   CKShare 内で参加者の userRecordID は viewer ごとに別空間になるが、
-    ///   email は全 viewer から同一値で見える唯一の安定キー。
-    var budgetyCanonicalID: String? {
-        let rn = userIdentity.userRecordID?.recordName ?? ""
-        if role == .owner {
-            if UserProfileStore.isSelfPlaceholderRecordName(rn) { return nil }
-            return rn.isEmpty ? nil : rn
-        }
-        if let email = userIdentity.lookupInfo?.emailAddress, !email.isEmpty {
-            return "email:" + email.lowercased()
-        }
-        if let phone = userIdentity.lookupInfo?.phoneNumber, !phone.isEmpty {
-            return "phone:" + phone
-        }
-        // フォールバック: 旧来通り recordName (placeholder でなければ)
-        if !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) {
-            return rn
-        }
-        return nil
-    }
-}
-
 // MARK: - DEBUG ID badges
 
 private struct DebugIDBadge: View {
