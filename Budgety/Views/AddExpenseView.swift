@@ -738,6 +738,10 @@ struct AddExpenseView: View {
                 size: 24
             )
             Text(name).foregroundStyle(.secondary)
+        } else if case .edit = mode {
+            // 編集モードで真に未指定 (payerProfileID / paidBy / payerMemberID 全部空)
+            // の場合は「未選択」と表示する。自分にフォールバックしない。
+            unspecifiedPayerPreview
         } else if let name = payerFallbackName {
             if case .edit(let expense) = mode {
                 PayerAvatar(
@@ -764,6 +768,22 @@ struct AddExpenseView: View {
                 size: 24
             )
             Text(profile.resolvedDisplayName).foregroundStyle(.secondary)
+        }
+    }
+
+    /// 編集モードで payer が真に未指定の時の preview。
+    /// 「？マーク dashed circle」+ 「未選択」テキストを薄色で出す。
+    private var unspecifiedPayerPreview: some View {
+        Group {
+            ZStack {
+                Circle()
+                    .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .frame(width: 24, height: 24)
+                Image(systemName: "questionmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text("未選択").foregroundStyle(.secondary)
         }
     }
 

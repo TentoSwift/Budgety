@@ -41,8 +41,10 @@ struct WatchHomeView: View {
                 } else {
                     TabView(selection: $selectedSheetID) {
                         ForEach(sheets, id: \.objectID) { sheet in
-                            WatchSheetPage(sheet: sheet)
-                                .tag(Optional(sheet.objectID))
+                            WatchLockedSheetGate(sheet: sheet) {
+                                WatchSheetPage(sheet: sheet)
+                            }
+                            .tag(Optional(sheet.objectID))
                         }
                     }
                     .tabViewStyle(.verticalPage)

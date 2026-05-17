@@ -18,7 +18,12 @@ struct BudgetyWatchApp: App {
         WindowGroup {
             WatchHomeView()
                 .environment(\.managedObjectContext, persistence.container.viewContext)
-                .environment(\.locale, Locale(identifier: "ja_JP"))
+                .task {
+                    // 起動時に自分の userRecordName をキャッシュ + selfMemberID (UUID) を生成。
+                    // 支出追加時に payerProfileID / payerMemberID として書き込むため。
+                    await UserProfileStore.shared.ensureUserRecordNameLoaded()
+                    _ = UserProfileStore.shared.ensureSelfMemberID()
+                }
         }
     }
 }

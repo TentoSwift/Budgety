@@ -33,16 +33,29 @@ struct ProfileEditView: View {
             Form {
                 avatarSection
                 nameSection
-                colorSection
+                // 写真が設定されているときは背景色は塗りに使われないので picker を隠す
+                if draftPhoto == nil {
+                    colorSection
+                }
             }
             .navigationTitle("プロフィール")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .accessibilityLabel("キャンセル")
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
+                    Button {
+                        save()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .accessibilityLabel("保存")
+                    }
                 }
             }
             .onAppear { loadIfNeeded() }

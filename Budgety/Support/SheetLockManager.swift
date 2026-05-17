@@ -14,7 +14,9 @@
 import Foundation
 import CryptoKit
 import CoreData
+#if canImport(LocalAuthentication) && !os(watchOS)
 import LocalAuthentication
+#endif
 import Combine
 
 @MainActor
@@ -97,6 +99,7 @@ final class SheetLockManager: ObservableObject {
         unlockedSheetURIs.insert(uriString(for: sheet))
     }
 
+    #if !os(watchOS)
     /// 生体認証で解錠を試みる (検証 + 解錠状態セットを一気に行う)。
     /// - Returns: 成功 = true、失敗 / 生体認証無効 = false
     func unlockWithBiometric(_ sheet: ExpenseSheet) async -> Bool {
@@ -133,6 +136,7 @@ final class SheetLockManager: ObservableObject {
             return false
         }
     }
+    #endif
 
     /// 生体認証 ON/OFF (デバイス毎)。
     func isBiometricEnabled(for sheet: ExpenseSheet) -> Bool {

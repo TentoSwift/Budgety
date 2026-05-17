@@ -17,7 +17,6 @@ struct BudgetyVisionApp: App {
         WindowGroup(id: "main") {
             BudgetyVisionContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .environment(\.locale, Locale(identifier: "ja_JP"))
                 .task {
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                 }

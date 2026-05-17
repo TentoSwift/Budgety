@@ -68,6 +68,10 @@ enum SettlementCalculator {
             return nil
             #endif
         }()
+        // 自分の ID 集合 = canonicalSelfIDs (canonical + 旧 userRecordName + knownSelfIDs)
+        // 名前 / 写真ベースのヒューリスティックは別アカウント誤検出を生むため使わない。
+        // 重複は精算画面の context menu 「自分に統合」で明示的に解消 → 統合された ID は
+        // knownSelfIDs に記憶され、以後自動的に self として扱われる。
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
         let selfCanonical = UserProfileStore.shared.canonicalSelfID(forShare: share)
             ?? UserProfileStore.shared.userRecordName
@@ -76,23 +80,23 @@ enum SettlementCalculator {
             (!selfCanonical.isEmpty && selfIDs.contains(pid)) ? selfCanonical : pid
         }
 
-        // メンバー集合を確定。Expense に出てくる payer/beneficiary もここに含めることで、
-        // 既にシートを退出した参加者の残高もきちんと反映される。
+        // メンバー集合 = 「現在のシートの参加者」だけ。
+        // - 自分の canonical (sheet が無くても userRecordName fallback)
+        // - 同シート配下の ParticipantProfile から拾った recordName
+        // Expense.payerProfileID が現参加者に無い (= 退出した参加者 / 旧 ID) 支出は
+        // この精算では対象外として skip する。
         var memberOrder: [String] = []
         var memberSet = Set<String>()
-        for raw in sheet.allMemberProfileIDs() {
-            let nid = normalize(raw)
-            if memberSet.insert(nid).inserted { memberOrder.append(nid) }
+        if !selfCanonical.isEmpty,
+           memberSet.insert(selfCanonical).inserted {
+            memberOrder.append(selfCanonical)
         }
-        for e in expenses {
-            if let p = e.payerProfileID, !p.isEmpty {
-                let nid = normalize(p)
-                if memberSet.insert(nid).inserted { memberOrder.append(nid) }
-            }
-            for b in e.beneficiaryIDList {
-                let nid = normalize(b)
-                if memberSet.insert(nid).inserted { memberOrder.append(nid) }
-            }
+        let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+        for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+            guard let rn = pp.recordName, !rn.isEmpty,
+                  rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+            let nid = normalize(rn)
+            if memberSet.insert(nid).inserted { memberOrder.append(nid) }
         }
 
         var balances: [String: Decimal] = [:]
@@ -107,11 +111,16 @@ enum SettlementCalculator {
                 missing.insert(from)
                 continue
             }
-            let beneficiaries = e.resolvedBeneficiaryIDs().map(normalize)
+            // 受益者 = expense.payerProfileID 由来の current 参加者のみ。
+            // 範囲外 ID は除外。残りが空なら skip。
+            let beneficiaries = e.resolvedBeneficiaryIDs()
+                .map(normalize)
+                .filter { memberSet.contains($0) }
             guard !beneficiaries.isEmpty else { continue }
-            // payer 不明 (legacy / インポート) の支出はスキップ
+            // payer 不明 (legacy / インポート) や 現参加者に居ない payer はスキップ
             guard let rawPayer = e.payerProfileID, !rawPayer.isEmpty else { continue }
             let payer = normalize(rawPayer)
+            guard memberSet.contains(payer) else { continue }
 
             let count = Decimal(beneficiaries.count)
             let perShare = roundToCurrency(converted / count, code: target)

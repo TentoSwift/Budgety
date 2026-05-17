@@ -60,6 +60,7 @@
 				"Support/Color+Hex.swift",
 				Support/Currency.swift,
 				Support/Notifications.swift,
+				Support/SheetLockManager.swift,
 				UserProfileStore.swift,
 			);
 			target = 2D18B4C12FB31605006F2C29 /* Budgety For watchOS Watch App */;

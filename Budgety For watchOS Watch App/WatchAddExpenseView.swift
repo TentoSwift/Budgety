@@ -186,6 +186,11 @@ struct WatchAddExpenseView: View {
         guard amount > 0 else { return }
         let dec = Decimal(amount)
         let expense = Expense(context: ctx)
+        // ストア割当は Expense 自体の作成直後にやる。Member などほかのエンティティを
+        // 触る前に固定しないと cross-store エラーになる。
+        if let store = sheet.objectID.persistentStore {
+            ctx.assign(expense, to: store)
+        }
         expense.amount = NSDecimalNumber(decimal: dec)
         expense.currencyCode = sheet.resolvedDefaultCurrencyCode
         expense.kindRaw = TransactionKind.expense.rawValue
@@ -195,8 +200,16 @@ struct WatchAddExpenseView: View {
         expense.createdAt = .now
         expense.sheet = sheet
         expense.category = effectiveCategory
-        if let store = sheet.objectID.persistentStore {
-            ctx.assign(expense, to: store)
+        // 支払者: 自分。watchOS では Member は触らず、payerProfileID と payerMemberID を
+        // UserProfileStore キャッシュから直接埋めるだけにする (ensureSelfMemberExists を
+        // 呼ぶと別ストアに Member が作られて cross-store クラッシュを起こす可能性あり)。
+        // 旧 userRecordName を入れておけば、iOS 側 auto-migration が共有シートの場合に
+        // email canonical へ書き換える。
+        let profile = UserProfileStore.shared
+        let mid = profile.ensureSelfMemberID()
+        expense.payerMemberID = mid
+        if let pid = profile.userRecordName, !pid.isEmpty {
+            expense.payerProfileID = pid
         }
         do {
             try ctx.save()

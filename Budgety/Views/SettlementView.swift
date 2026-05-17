@@ -55,6 +55,9 @@ struct SettlementView: View {
                     }
                     notesSection
                 }
+                if BuildInfo.isInternalBuild {
+                    debugSelfSection()
+                }
             } else {
                 Section {
                     HStack {
@@ -116,6 +119,9 @@ struct SettlementView: View {
         let share = ShareCoordinator.shared.existingShare(for: record)
         guard let canonical = profile.canonicalSelfID(forShare: share),
               !canonical.isEmpty, canonical != stalePID else { return }
+        // この ID は「自分」だと確定したので knownSelfIDs に記憶 →
+        // 以後の精算で別シートでも自動的に self として扱われる。
+        profile.rememberAsSelfID(stalePID)
         let ctx = viewContext
 
         // 1) Expense
@@ -277,6 +283,14 @@ struct SettlementView: View {
                 if isMe {
                     Text("自分").font(.caption2).foregroundStyle(.secondary)
                 }
+                if BuildInfo.isInternalBuild {
+                    Text("ID: \(bal.profileID)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
             }
             Spacer()
             balanceLabel(amount: bal.amount, currencyCode: currencyCode)
@@ -291,6 +305,35 @@ struct SettlementView: View {
                     Label("自分に統合する", systemImage: "arrow.merge")
                 }
             }
+            Button {
+                UIPasteboard.general.string = bal.profileID
+            } label: {
+                Label("ID をコピー", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    /// DEBUG セクション: 自分の canonical / userRecordName / knownSelfIDs を表示
+    @ViewBuilder
+    private func debugSelfSection() -> some View {
+        let share = ShareCoordinator.shared.existingShare(for: record)
+        let canonical = profile.canonicalSelfID(forShare: share) ?? "(nil)"
+        let urn = profile.userRecordName ?? "(nil)"
+        let known = profile.knownSelfIDs.sorted().joined(separator: ", ")
+        let pps = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+        Section("DEBUG") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("self canonical: \(canonical)")
+                Text("self userRecordName: \(urn)")
+                Text("knownSelfIDs: \(known.isEmpty ? "(empty)" : known)")
+                Text("--- sheet ParticipantProfiles (\(pps.count)) ---")
+                ForEach(pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }), id: \.objectID) { pp in
+                    Text("  rn:\(pp.recordName ?? "(nil)")  name:\(pp.displayName ?? "(nil)")")
+                }
+            }
+            .font(.caption2.monospaced())
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
         }
     }
 

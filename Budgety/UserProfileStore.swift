@@ -27,14 +27,41 @@ final class UserProfileStore: ObservableObject {
         static let userRecordName     = "userProfile.userRecordName"
         /// ローカルプロフィールの最終更新時刻。ParticipantProfile.updatedAt との LWW 比較に使う。
         static let profileUpdatedAt   = "userProfile.profileUpdatedAt"
+        /// 過去に使っていた displayName のセット (rename 履歴、debugging 用)。
+        static let pastDisplayNames   = "userProfile.pastDisplayNames"
+        /// 「自分の ID」として確定済みの recordName / canonical 集合。
+        /// 主にユーザーが精算画面で「自分に統合」を実行した時に追加する。
+        /// canonicalSelfIDs(forShare:) と組み合わせて self 判定の母集合になる。
+        static let knownSelfIDs       = "userProfile.knownSelfIDs"
     }
     private static let photoFileName = "userProfile.photo.jpg"
     private static let containerID = "iCloud.com.tento.budgety"
 
     @Published var displayName: String {
         didSet {
+            // 名前が変わったら旧名を pastDisplayNames に保存
+            // (cross-device で旧名のまま残った PP を「自分」として吸収するため)。
+            let oldTrim = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newTrim = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !oldTrim.isEmpty, oldTrim != newTrim, oldTrim != "自分" {
+                var past = pastDisplayNames
+                past.insert(oldTrim)
+                pastDisplayNames = past
+            }
             UserDefaults.standard.set(displayName, forKey: Keys.displayName)
             UserDefaults.standard.set(displayName, forKey: "displayName") // 後方互換
+        }
+    }
+
+    /// 過去に自分が使っていた displayName の集合 (rename 履歴)。
+    /// 「自分」「メンバー」など generic な名前は除外する想定。
+    var pastDisplayNames: Set<String> {
+        get {
+            let arr = (UserDefaults.standard.array(forKey: Keys.pastDisplayNames) as? [String]) ?? []
+            return Set(arr)
+        }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: Keys.pastDisplayNames)
         }
     }
 
@@ -186,11 +213,35 @@ final class UserProfileStore: ObservableObject {
     /// マッチング用: backward compat のため `userRecordName` (CKContainer.userRecordID 由来の
     /// 旧 ID) と canonical の両方を含む集合を返す。古い Expense.payerProfileID が
     /// 残っていても「自分」として検出できるようにする。
+    /// さらに `knownSelfIDs` (= ユーザーが「自分に統合」で確定した過去 ID) も合算する。
     func canonicalSelfIDs(forShare share: CKShare?) -> Set<String> {
-        var ids: Set<String> = []
+        var ids = knownSelfIDs
         if let urn = userRecordName, !urn.isEmpty { ids.insert(urn) }
         if let cid = canonicalSelfID(forShare: share), !cid.isEmpty { ids.insert(cid) }
         return ids
+    }
+
+    /// 「自分の ID」として確定済みの集合 (UserDefaults 永続化)。
+    var knownSelfIDs: Set<String> {
+        get {
+            let arr = (UserDefaults.standard.array(forKey: Keys.knownSelfIDs) as? [String]) ?? []
+            return Set(arr)
+        }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: Keys.knownSelfIDs)
+        }
+    }
+
+    /// 指定 ID を「自分の ID」として記憶する。
+    /// 精算画面の「自分に統合」など、明示的な統合操作から呼ぶ。
+    func rememberAsSelfID(_ id: String) {
+        let trimmed = id.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              trimmed != "_defaultOwner_", trimmed != "__defaultOwner__" else { return }
+        var set = knownSelfIDs
+        if set.insert(trimmed).inserted {
+            knownSelfIDs = set
+        }
     }
 
     #if !os(watchOS)
@@ -338,6 +389,17 @@ final class UserProfileStore: ObservableObject {
         return changed
     }
     #endif
+
+    /// Member エンティティを作らずに `selfMemberID` (UUID) だけを確保する。
+    /// watchOS のように Core Data の Member 操作で cross-store 問題が起きる環境向け。
+    /// payerMemberID として書き込めば iOS の auto-migration が canonical に正規化する。
+    @discardableResult
+    func ensureSelfMemberID() -> UUID {
+        if let id = selfMemberID { return id }
+        let new = UUID()
+        selfMemberID = new
+        return new
+    }
 
     // MARK: - Self Member (local-only convenience for member picker)
 
