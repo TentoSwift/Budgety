@@ -56,7 +56,10 @@ struct MacAddExpenseView: View {
         UserProfileStore.shared.canonicalSelfIDs(forShare: share)
     }
 
-    /// 自分以外の参加者の canonical ID 配列。CKShare.participants と PP を結合 dedup。
+    /// 自分以外の参加者の URN (= userRecordID.recordName) 配列。
+    /// iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
+    /// 一意に見えるようになったので、ID キーは URN で統一する。
+    /// PP.recordName も hydrate 時に URN で書かれているので一致する。
     private var otherProfileIDs: [String] {
         var result: [String] = []
         var seen = Set<String>()
@@ -64,11 +67,14 @@ struct MacAddExpenseView: View {
         seen.insert(selfProfileID)
         if let share {
             for p in share.participants {
-                guard let cid = p.budgetyCanonicalID, !cid.isEmpty,
-                      seen.insert(cid).inserted else { continue }
-                result.append(cid)
+                let rn = p.userIdentity.userRecordID?.recordName ?? ""
+                guard !rn.isEmpty,
+                      !UserProfileStore.isSelfPlaceholderRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
             }
         }
+        // PP からも補完 (CKShare がまだ取れていない場合のフォールバック)
         let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
         for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
             guard let rn = pp.recordName, !rn.isEmpty,
