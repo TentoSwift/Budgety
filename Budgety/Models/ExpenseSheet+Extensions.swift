@@ -149,7 +149,24 @@ extension ExpenseSheet {
     /// 色は CKShare からは取れないので PP の colorHex を併用する (なければ既定灰)。
     @MainActor
     func memberDisplayInfo(for profileID: String) -> (name: String, colorHex: String, photoData: Data?) {
-        if let myRN = UserProfileStore.shared.userRecordName, profileID == myRN {
+        // 自分判定: URN だけでなく canonical (email:..) や旧 ID も含めて広く拾う。
+        // これにより旧 "email:tento1209@icloud.com" などで保存された自分の行も
+        // "メンバー" にフォールバックされず "自分" 表示になる。
+        #if !os(watchOS)
+        let share = ShareCoordinator.shared.existingShare(for: self)
+        #else
+        let share: CKShare? = nil
+        #endif
+        let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
+        let selfEmailID: String? = {
+            if let e = UserProfileStore.shared.selfEmail?.lowercased(), !e.isEmpty {
+                return "email:" + e
+            }
+            return nil
+        }()
+        let isSelf = selfIDs.contains(profileID)
+            || (selfEmailID != nil && profileID == selfEmailID)
+        if isSelf {
             let store = UserProfileStore.shared
             return (
                 name: store.resolvedDisplayName,
@@ -163,7 +180,7 @@ extension ExpenseSheet {
 
         // 2) CKShare から都度引き直す (Apple ID 名)
         #if !os(watchOS)
-        if let share = ShareCoordinator.shared.existingShare(for: self),
+        if let share = share,
            let liveName = nameFromShare(share, profileID: profileID),
            !liveName.isEmpty {
             return (name: liveName, colorHex: fallbackColor, photoData: nil)
