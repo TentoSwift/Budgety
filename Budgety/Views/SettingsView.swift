@@ -15,7 +15,6 @@ struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showPaywall: Bool = false
     @State private var showEraseConfirm: Bool = false
-    @State private var showProfileEdit: Bool = false
     @State private var iCloudAccountStatus: CKAccountStatus = .couldNotDetermine
 
     var body: some View {
@@ -59,30 +58,22 @@ struct SettingsView: View {
                 }
 
                 Section("プロフィール") {
-                    Button {
-                        showProfileEdit = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            AvatarView(
-                                photoData: profile.photoData,
-                                displayName: profile.resolvedDisplayName,
-                                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
-                                size: 40
-                            )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(profile.resolvedDisplayName)
-                                    .foregroundStyle(.primary)
-                                Text("自端末での表示名・アバターを編集")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
+                    HStack(spacing: 12) {
+                        AvatarView(
+                            photoData: nil,
+                            displayName: profile.resolvedDisplayName,
+                            colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                            size: 40
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(profile.resolvedDisplayName)
+                                .foregroundStyle(.primary)
+                            Text("Apple ID の名前を使用")
                                 .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         }
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Section("カテゴリ") {
@@ -241,9 +232,6 @@ struct SettingsView: View {
             .navigationTitle("設定")
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
-            }
-            .sheet(isPresented: $showProfileEdit) {
-                ProfileEditView()
             }
             .task {
                 UserProfileStore.shared.ensureSelfMemberExists(in: viewContext)
