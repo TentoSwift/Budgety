@@ -17,8 +17,24 @@ import os
 final class BudgetyMacAppDelegate: NSObject, NSApplicationDelegate {
     private static let log = Logger(subsystem: "com.tento.budgety", category: "ShareAccept")
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.log.notice("BudgetyMacAppDelegate launched")
+    }
+
     func application(_ application: NSApplication,
                      userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        Self.log.notice("userDidAcceptCloudKitShareWith fired")
+        accept(metadata: metadata)
+    }
+
+    /// URL から CKShare.Metadata を取得して受諾する (手動貼り付け用)。
+    /// メール / Safari の自動 routing が効かない時の fallback。
+    @MainActor
+    func acceptShareURL(_ url: URL) async throws {
+        let containerID = "iCloud.com.tento.budgety"
+        let container = CKContainer(identifier: containerID)
+        Self.log.notice("Fetching metadata for URL: \(url.absoluteString, privacy: .public)")
+        let metadata = try await container.shareMetadata(for: url)
         accept(metadata: metadata)
     }
 

@@ -222,6 +222,9 @@ struct MacAddSheetView: View {
 
 struct BudgetyMacSettingsView: View {
     @StateObject private var profile = UserProfileStore.shared
+    @State private var shareURLText: String = ""
+    @State private var acceptInProgress: Bool = false
+    @State private var acceptMessage: String?
 
     var body: some View {
         Form {
@@ -243,10 +246,61 @@ struct BudgetyMacSettingsView: View {
                     }
                 }
             }
+            Section {
+                TextField("https://www.icloud.com/share/...", text: $shareURLText)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button {
+                        Task { await acceptURL() }
+                    } label: {
+                        if acceptInProgress {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("URL を貼り付けて参加")
+                        }
+                    }
+                    .disabled(shareURLText.isEmpty || acceptInProgress)
+                    Spacer()
+                }
+                if let acceptMessage {
+                    Text(acceptMessage)
+                        .font(.caption)
+                        .foregroundStyle(acceptMessage.contains("失敗") ? .red : .green)
+                }
+            } header: {
+                Text("共有シートに参加")
+            } footer: {
+                Text("メールで届いた共有リンク (https://www.icloud.com/share/... または cloudkit-... など) を貼り付けて参加できます。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
             }
         }
         .formStyle(.grouped)
+    }
+
+    @MainActor
+    private func acceptURL() async {
+        let trimmed = shareURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else {
+            acceptMessage = "URL の形式が正しくありません"
+            return
+        }
+        acceptInProgress = true
+        defer { acceptInProgress = false }
+        do {
+            // AppDelegate を取り出してメソッド経由で受諾
+            if let delegate = NSApp.delegate as? BudgetyMacAppDelegate {
+                try await delegate.acceptShareURL(url)
+                acceptMessage = "受諾を実行しました (シートが現れるまで数秒)"
+                shareURLText = ""
+            } else {
+                acceptMessage = "AppDelegate が見つかりません"
+            }
+        } catch {
+            acceptMessage = "失敗: \(error.localizedDescription)"
+        }
     }
 }
