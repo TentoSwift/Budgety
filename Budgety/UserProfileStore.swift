@@ -27,6 +27,9 @@ final class UserProfileStore: ObservableObject {
         static let userRecordName     = "userProfile.userRecordName"
         /// ローカルプロフィールの最終更新時刻。ParticipantProfile.updatedAt との LWW 比較に使う。
         static let profileUpdatedAt   = "userProfile.profileUpdatedAt"
+        /// 自分の Apple ID メールアドレス (CKUserIdentity.lookupInfo.emailAddress 由来)。
+        /// 旧 "email:..." canonical → URN 移行で「自分の email」判定に使う。
+        static let selfEmail          = "userProfile.selfEmail"
     }
     private static let photoFileName = "userProfile.photo.jpg"
     private static let containerID = "iCloud.com.tento.budgety"
@@ -61,6 +64,12 @@ final class UserProfileStore: ObservableObject {
         didSet { UserDefaults.standard.set(userRecordName, forKey: Keys.userRecordName) }
     }
 
+    /// 自分の Apple ID メールアドレス。`refreshAppleIDName` でキャッシュ。
+    /// 旧 "email:..." canonical の自分ぶんを URN に書き換える migration で使う。
+    @Published private(set) var selfEmail: String? {
+        didSet { UserDefaults.standard.set(selfEmail, forKey: Keys.selfEmail) }
+    }
+
     /// ローカルプロフィールの最終更新時刻。
     /// `propagateProfile` 成功時に更新し、`hydrateFromParticipantProfile` で PP の updatedAt と比較する。
     @Published private(set) var profileUpdatedAt: Date? {
@@ -92,6 +101,7 @@ final class UserProfileStore: ObservableObject {
             self.selfMemberID = nil
         }
         self.userRecordName = ud.string(forKey: Keys.userRecordName)
+        self.selfEmail = ud.string(forKey: Keys.selfEmail)
         self.profileUpdatedAt = ud.object(forKey: Keys.profileUpdatedAt) as? Date
         self.photoData = Self.readPhotoFromDisk()
     }
@@ -105,6 +115,7 @@ final class UserProfileStore: ObservableObject {
         photoData = nil      // setter が JPEG ファイル削除も行う
         selfMemberID = nil
         userRecordName = nil
+        selfEmail = nil
         profileUpdatedAt = nil
         PublicProfileSync.shared.clearCache()
     }
@@ -195,8 +206,13 @@ final class UserProfileStore: ObservableObject {
         // 自分の identity を取得
         do {
             let recID = CKRecord.ID(recordName: urn)
-            guard let identity = try await container.userIdentity(forUserRecordID: recID),
-                  let comps = identity.nameComponents else { return }
+            guard let identity = try await container.userIdentity(forUserRecordID: recID) else { return }
+            // メールも一緒にキャッシュ (旧 "email:..." canonical の自分ぶん migration 用)
+            if let email = identity.lookupInfo?.emailAddress?.lowercased(),
+               !email.isEmpty, selfEmail != email {
+                selfEmail = email
+            }
+            guard let comps = identity.nameComponents else { return }
             let formatter = PersonNameComponentsFormatter()
             formatter.style = .default
             let name = formatter.string(from: comps).trimmingCharacters(in: .whitespaces)
@@ -327,6 +343,34 @@ final class UserProfileStore: ObservableObject {
             // (3) beneficiaryProfileIDs (CSV) 内の自分の旧 ID を canonical に
             if let urn = userRecordName, !urn.isEmpty, urn != canonical {
                 totalChanged += rewriteBeneficiaryCSV(in: ctx, sheet: s, fromID: urn, toID: canonical)
+            }
+            // (4) "email:..." canonical → URN 移行
+            // 旧バージョンで自分や他人を email-based canonical で保存していた行を、
+            // CKShare.participants から取れる URN にリライトする。
+            if let share = ShareCoordinator.shared.existingShare(for: s) {
+                var emailToURN: [String: String] = [:]
+                for p in share.participants {
+                    let urn = p.userIdentity.userRecordID?.recordName ?? ""
+                    guard !urn.isEmpty,
+                          !Self.isSelfPlaceholderRecordName(urn) else { continue }
+                    if let email = p.userIdentity.lookupInfo?.emailAddress?.lowercased(),
+                       !email.isEmpty {
+                        emailToURN["email:" + email] = urn
+                    }
+                }
+                // 自分の email も追加 (CKShare では __defaultOwner__ で email が取れないため
+                // 別途 UserProfileStore.selfEmail からキャッシュ値を使う)
+                if let myEmail = selfEmail?.lowercased(), !myEmail.isEmpty,
+                   let myURN = userRecordName, !myURN.isEmpty {
+                    emailToURN["email:" + myEmail] = myURN
+                }
+                for (emailKey, urn) in emailToURN {
+                    totalChanged += rewriteByPayerProfileID(
+                        in: ctx, sheet: s, fromID: emailKey,
+                        toID: urn, toName: "", toMemberID: nil
+                    )
+                    totalChanged += rewriteBeneficiaryCSV(in: ctx, sheet: s, fromID: emailKey, toID: urn)
+                }
             }
         }
         if totalChanged > 0 {
