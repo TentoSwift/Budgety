@@ -2,14 +2,15 @@
 //  ProfileEditView.swift
 //  Budgety
 //
-//  ローカルの自分プロフィール (表示名 / アバター色 / 写真) を編集する最小 UI。
+//  ローカルの自分プロフィール (表示名 / アバター色) を編集する最小 UI。
 //  CKShare 経由で共有相手に届くのは iCloud アカウント名で、ここで設定する displayName は
 //  自端末で「自分」を表示するときのプリファレンスとして使われる。
+//
+//  写真機能は撤廃 (常にイニシャル + 背景色のアバター)。
 //
 
 import SwiftUI
 import CoreData
-import PhotosUI
 
 struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -18,9 +19,6 @@ struct ProfileEditView: View {
 
     @State private var draftName: String = ""
     @State private var draftColor: String = "#5B8DEF"
-    @State private var draftPhoto: Data? = nil
-    @State private var pickerItem: PhotosPickerItem? = nil
-    @State private var isLoadingPhoto: Bool = false
     @State private var didLoad: Bool = false
 
     private let palette: [String] = [
@@ -33,10 +31,7 @@ struct ProfileEditView: View {
             Form {
                 avatarSection
                 nameSection
-                // 写真が設定されているときは背景色は塗りに使われないので picker を隠す
-                if draftPhoto == nil {
-                    colorSection
-                }
+                colorSection
             }
             .navigationTitle("プロフィール")
             .navigationBarTitleDisplayMode(.inline)
@@ -59,7 +54,6 @@ struct ProfileEditView: View {
                 }
             }
             .onAppear { loadIfNeeded() }
-            .onChange(of: pickerItem) { _, _ in loadPhotoFromPicker() }
         }
     }
 
@@ -67,36 +61,15 @@ struct ProfileEditView: View {
         Section {
             HStack {
                 Spacer()
-                VStack(spacing: 12) {
-                    AvatarView(
-                        photoData: draftPhoto,
-                        displayName: draftName.isEmpty ? "自分" : draftName,
-                        colorHex: draftColor,
-                        size: 96
-                    )
-                    if isLoadingPhoto {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        HStack(spacing: 16) {
-                            PhotosPicker(selection: $pickerItem, matching: .images) {
-                                Label("写真を選択", systemImage: "photo")
-                                    .font(.callout)
-                            }
-                            if draftPhoto != nil {
-                                Button(role: .destructive) {
-                                    draftPhoto = nil
-                                    pickerItem = nil
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                        .font(.callout)
-                                }
-                            }
-                        }
-                    }
-                }
+                AvatarView(
+                    photoData: nil,
+                    displayName: draftName.isEmpty ? "自分" : draftName,
+                    colorHex: draftColor,
+                    size: 96
+                )
+                .padding(.vertical, 8)
                 Spacer()
             }
-            .padding(.vertical, 8)
         }
     }
 
@@ -133,42 +106,12 @@ struct ProfileEditView: View {
         didLoad = true
         draftName = profile.displayName
         draftColor = profile.avatarBgColorHex ?? "#5B8DEF"
-        draftPhoto = profile.photoData
-    }
-
-    private func loadPhotoFromPicker() {
-        guard let item = pickerItem else { return }
-        isLoadingPhoto = true
-        Task { @MainActor in
-            defer { isLoadingPhoto = false }
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                draftPhoto = downsize(data, maxDimension: 512)
-            }
-        }
-    }
-
-    /// 巨大な画像を 512px 程度に縮小して JPEG にする。CKAsset に乗せる前提でサイズを抑える。
-    private func downsize(_ data: Data, maxDimension: CGFloat) -> Data {
-        #if canImport(UIKit)
-        guard let img = UIImage(data: data) else { return data }
-        let w = img.size.width, h = img.size.height
-        let maxSide = max(w, h)
-        let scale = maxSide > maxDimension ? maxDimension / maxSide : 1
-        let newSize = CGSize(width: w * scale, height: h * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        let resized = renderer.image { _ in
-            img.draw(in: CGRect(origin: .zero, size: newSize))
-        }
-        return resized.jpegData(compressionQuality: 0.82) ?? data
-        #else
-        return data
-        #endif
     }
 
     private func save() {
         profile.updateProfile(
             displayName: draftName.trimmingCharacters(in: .whitespaces),
-            photoData: draftPhoto,
+            photoData: nil,
             avatarBgColorHex: draftColor
         )
         // Self Member の denormalized キャッシュも揃え、override されていない全シートの

@@ -96,6 +96,9 @@ struct ExpensoApp: App {
                         photoData: UserProfileStore.shared.photoData
                     )
                     await prefetchAllParticipantProfiles(in: ctx)
+                    // CKShare の participant nameComponents を PP にハイドレートして
+                    // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
+                    UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)
                     #if DEBUG
                     diagnoseAllShares(in: ctx)
                     #endif
@@ -115,6 +118,8 @@ struct ExpensoApp: App {
                             await UserProfileStore.shared.ensureUserRecordNameLoaded()
                         }
                         UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
+                        // CKShare の participant 情報も再ハイドレート (新 PP が syc されてきた可能性)
+                        UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in

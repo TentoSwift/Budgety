@@ -611,6 +611,59 @@ final class UserProfileStore: ObservableObject {
         if didChange, ctx.hasChanges { try? ctx.save() }
     }
 
+    #if !os(watchOS)
+    /// CKShare の各 participant の `userIdentity.nameComponents` を ParticipantProfile
+    /// にハイドレートする。`iCloud Extended Share Access` エンタイトルメント有効化後は
+    /// 他参加者の実名が CKShare 経由で取れるため、それを PP.displayName に反映して
+    /// アプリ内でのプロフィール設定なしに Apple ID 名を表示できるようにする。
+    ///
+    /// - 自分 (`__defaultOwner__` placeholder) は対象外。
+    /// - PP が無ければ作成、あれば差分があるときだけ updatedAt 更新。
+    /// - 色は触らない (色は per-user / per-sheet で UserProfileStore 経由)。
+    /// - 写真は触らない (Apple ID 写真は CKShare 経由でも取れないため)。
+    func hydrateParticipantProfilesFromShares(in ctx: NSManagedObjectContext) {
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        guard let sheets = try? ctx.fetch(sheetReq) else { return }
+        let nameFormatter = PersonNameComponentsFormatter()
+        nameFormatter.style = .default
+        var didChange = false
+        for sheet in sheets {
+            guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { continue }
+            guard let sheetStore = sheet.objectID.persistentStore else { continue }
+            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+
+            for p in share.participants {
+                let identity = p.userIdentity
+                let rn = identity.userRecordID?.recordName ?? ""
+                // self placeholder は飛ばす (実 URN が取れないため PP キーにできない)
+                if Self.isSelfPlaceholderRecordName(rn) { continue }
+                guard !rn.isEmpty else { continue }
+                guard let comps = identity.nameComponents else { continue }
+                let displayName = nameFormatter.string(from: comps)
+                guard !displayName.isEmpty else { continue }
+
+                if let existing = pps.first(where: { $0.recordName == rn }) {
+                    if existing.displayName != displayName {
+                        existing.displayName = displayName
+                        existing.updatedAt = .now
+                        didChange = true
+                    }
+                } else {
+                    let pp = ParticipantProfile(context: ctx)
+                    ctx.assign(pp, to: sheetStore)
+                    pp.recordName = rn
+                    pp.sheet = sheet
+                    pp.displayName = displayName
+                    pp.colorHex = "#8E8E93"
+                    pp.updatedAt = .now
+                    didChange = true
+                }
+            }
+        }
+        if didChange, ctx.hasChanges { try? ctx.save() }
+    }
+    #endif
+
     private func writeParticipantProfile(
         into sheet: ExpenseSheet,
         recordName: String,

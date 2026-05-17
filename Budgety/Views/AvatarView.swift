@@ -38,22 +38,15 @@ struct AvatarView: View {
     private var tint: Color { Color(hex: colorHex) ?? .blue }
 
     var body: some View {
-        if let data = photoData, let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.secondary.opacity(0.2), lineWidth: 0.5))
-        } else {
-            ZStack {
-                Circle().fill(tint.gradient)
-                Text(initial)
-                    .font(.system(size: size * 0.45, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: size, height: size)
+        // 写真機能は廃止。常にイニシャルアバター。
+        // photoData パラメータは backward compat のため残しているが無視する。
+        ZStack {
+            Circle().fill(tint.gradient)
+            Text(initial)
+                .font(.system(size: size * 0.45, weight: .semibold))
+                .foregroundStyle(.white)
         }
+        .frame(width: size, height: size)
     }
 }
 
