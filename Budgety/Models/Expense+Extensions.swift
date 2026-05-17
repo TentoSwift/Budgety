@@ -13,16 +13,16 @@ extension Expense {
 
     /// 支払者の表示名。`payerProfileID` (canonical) から動的に解決する。
     /// 解決順:
-    /// 1. ParticipantProfile.displayName (= 共有相手が設定した表示名、最優先)
-    /// 2. 自分 → UserProfileStore.resolvedDisplayName (= "自分" or 設定名)
-    /// 3. CKShare 参加者 → iCloud nameComponents (or email fallback)
+    /// 1. 自分 → UserProfileStore.resolvedDisplayName
+    /// 2. **CKShare 参加者 → iCloud nameComponents (都度取得)** ← 優先
+    /// 3. ParticipantProfile.displayName (= フォールバック、CKShare 未取得時)
     /// 4. ローカル Member.displayName (= 過去に picker で選んだキャッシュ)
     /// 5. 保存時の `paidBy` 文字列 (= 旧データ用 fallback)
     @MainActor
     var displayPaidBy: String {
-        if let n = resolvedParticipantProfile?.displayName, !n.isEmpty { return n }
         if let n = resolvedSelfDisplayName(), !n.isEmpty { return n }
         if let n = resolvedSharedParticipantName(), !n.isEmpty { return n }
+        if let n = resolvedParticipantProfile?.displayName, !n.isEmpty { return n }
         if let n = resolvedPayer?.displayName, !n.isEmpty { return n }
         return paidBy ?? ""
     }
@@ -64,19 +64,24 @@ extension Expense {
     }
 
     /// payerProfileID が CKShare の参加者 (オーナー含む) なら iCloud nameComponents を返す。
+    /// URN マッチを優先、email/phone ベース canonical (旧データ) もフォールバックで照合。
     @MainActor
     private func resolvedSharedParticipantName() -> String? {
         #if !os(watchOS)
         guard let pid = payerProfileID, !pid.isEmpty,
               let sheet = sheet,
               let share = ShareCoordinator.shared.existingShare(for: sheet) else { return nil }
-        // オーナー (= 参加者から見たら share.owner)
-        if let ownerRN = share.owner.userIdentity.userRecordID?.recordName,
-           pid == ownerRN {
+        // オーナー: URN 一致
+        let ownerRN = share.owner.userIdentity.userRecordID?.recordName ?? ""
+        if !UserProfileStore.isSelfPlaceholderRecordName(ownerRN), ownerRN == pid {
             return nameFromIdentity(share.owner.userIdentity)
         }
-        // 参加者: canonical ID 一致を探す
+        // 参加者: URN 一致を優先、無ければ budgetyCanonicalID (email 等) もチェック
         for p in share.participants {
+            let rn = p.userIdentity.userRecordID?.recordName ?? ""
+            if !UserProfileStore.isSelfPlaceholderRecordName(rn), rn == pid {
+                return nameFromIdentity(p.userIdentity)
+            }
             if let cid = p.budgetyCanonicalID, cid == pid {
                 return nameFromIdentity(p.userIdentity)
             }
