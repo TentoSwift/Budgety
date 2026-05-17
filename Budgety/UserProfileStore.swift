@@ -161,15 +161,15 @@ final class UserProfileStore: ObservableObject {
     }
 
     /// 自分の Apple ID 名 (`CKUserIdentity.nameComponents`) を取得して `displayName` に
-    /// 反映する。`CKContainer.discoverUserIdentity(withUserRecordID:)` を使うため、
-    /// 事前に `userDiscoverability` パーミッションを要求する必要がある。
+    /// 反映する。`CKContainer.userIdentity(forUserRecordID:)` を使うため、事前に
+    /// `userDiscoverability` パーミッションを要求する必要がある。
     ///
     /// 動作:
-    /// - userDiscoverability 未許可 → ダイアログを出す。拒否されたら何もしない。
-    /// - 自分の URN 未取得 → `ensureUserRecordNameLoaded` も合わせて呼ぶ。
-    /// - 取得した nameComponents をフォーマットして `displayName` に保存
-    ///   (UserProfileStore の既存値と異なる場合のみ更新)。
-    /// - `profileUpdatedAt` を `.now` に進めて propagate がトリガされるようにする。
+    /// - 初回起動時は許可ダイアログを表示。
+    /// - **許可** → Apple ID 名を取得して `displayName` を上書き。
+    /// - **拒否** → `displayName` を空にクリア (= `resolvedDisplayName` が "自分" に
+    ///   フォールバック)。プロフィール設定 UI を撤去したので、ここで強制的に統一する。
+    /// - 取得失敗 (ネットワーク等) は既存 `displayName` を維持。
     func refreshAppleIDName() async {
         await ensureUserRecordNameLoaded()
         guard let urn = userRecordName, !urn.isEmpty else { return }
@@ -177,10 +177,18 @@ final class UserProfileStore: ObservableObject {
         let container = CKContainer(identifier: Self.containerID)
 
         // パーミッション確認 (初回はダイアログ)
+        let status: CKContainer.ApplicationPermissionStatus
         do {
-            let status = try await container.requestApplicationPermission(.userDiscoverability)
-            guard status == .granted else { return }
+            status = try await container.requestApplicationPermission(.userDiscoverability)
         } catch {
+            return
+        }
+        guard status == .granted else {
+            // 拒否されたら表示は "自分" にフォールバック
+            if !displayName.isEmpty {
+                displayName = ""
+                profileUpdatedAt = .now
+            }
             return
         }
 
