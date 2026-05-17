@@ -160,6 +160,48 @@ final class UserProfileStore: ObservableObject {
         }
     }
 
+    /// 自分の Apple ID 名 (`CKUserIdentity.nameComponents`) を取得して `displayName` に
+    /// 反映する。`CKContainer.discoverUserIdentity(withUserRecordID:)` を使うため、
+    /// 事前に `userDiscoverability` パーミッションを要求する必要がある。
+    ///
+    /// 動作:
+    /// - userDiscoverability 未許可 → ダイアログを出す。拒否されたら何もしない。
+    /// - 自分の URN 未取得 → `ensureUserRecordNameLoaded` も合わせて呼ぶ。
+    /// - 取得した nameComponents をフォーマットして `displayName` に保存
+    ///   (UserProfileStore の既存値と異なる場合のみ更新)。
+    /// - `profileUpdatedAt` を `.now` に進めて propagate がトリガされるようにする。
+    func refreshAppleIDName() async {
+        await ensureUserRecordNameLoaded()
+        guard let urn = userRecordName, !urn.isEmpty else { return }
+
+        let container = CKContainer(identifier: Self.containerID)
+
+        // パーミッション確認 (初回はダイアログ)
+        do {
+            let status = try await container.requestApplicationPermission(.userDiscoverability)
+            guard status == .granted else { return }
+        } catch {
+            return
+        }
+
+        // 自分の identity を取得
+        do {
+            let recID = CKRecord.ID(recordName: urn)
+            guard let identity = try await container.userIdentity(forUserRecordID: recID),
+                  let comps = identity.nameComponents else { return }
+            let formatter = PersonNameComponentsFormatter()
+            formatter.style = .default
+            let name = formatter.string(from: comps).trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return }
+            if displayName != name {
+                displayName = name
+                profileUpdatedAt = .now
+            }
+        } catch {
+            // 取得失敗時は無視 (既存 displayName を維持)
+        }
+    }
+
     // MARK: - Canonical participant identity
 
     /// CKShare の「自分」エントリは userRecordID.recordName が `__defaultOwner__` に

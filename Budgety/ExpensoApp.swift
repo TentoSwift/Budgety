@@ -78,6 +78,8 @@ struct ExpensoApp: App {
                     #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
+                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)
+                    await UserProfileStore.shared.refreshAppleIDName()
                     let ctx = persistenceController.container.viewContext
                     if BuildInfo.profileFeatureEnabled {
                         UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
