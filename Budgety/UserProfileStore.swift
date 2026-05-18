@@ -257,24 +257,13 @@ final class UserProfileStore: ObservableObject {
     /// オーナー側と参加者側で別々の userRecordID 空間に居る場合があるため、
     /// recordName を直接使うと不整合になる。次のルールで揃える:
     /// - シートのオーナーが自分 → CKContainer.userRecordID().recordName
-    ///   (= 参加者から見える owner.userIdentity.userRecordID と一致する)
-    /// - シートの参加者が自分 → "email:" + 自分の email (= lookupInfo.emailAddress)
-    ///   (= オーナーから見える participant.userIdentity.lookupInfo と一致する)
-    /// - share が無い (非共有シート) → userRecordName (従来通り)
+    /// - **常に `userRecordName` (URN) を返す**。
+    ///   iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
+    ///   一致するため、旧 "email:..." canonical は不要になった。
+    ///   SettlementCalculator / migrateLegacyPayerProfileIDs が旧データの
+    ///   "email:..." → URN を自動正規化する。
+    /// - share 引数は backward compat のために残置。
     func canonicalSelfID(forShare share: CKShare?) -> String? {
-        guard let share = share else { return userRecordName }
-        // オーナーから見た share.owner.userIdentity.userRecordID.recordName は実 ID。
-        // 自分がオーナーの場合は `__defaultOwner__` になるので、それで分岐。
-        let ownerRN = share.owner.userIdentity.userRecordID?.recordName ?? ""
-        if Self.isSelfPlaceholderRecordName(ownerRN) {
-            return userRecordName
-        }
-        // 自分は参加者。自分のエントリは recordName == __defaultOwner__ になっている。
-        if let me = share.participants.first(where: {
-            Self.isSelfPlaceholderRecordName($0.userIdentity.userRecordID?.recordName ?? "")
-        }), let email = me.userIdentity.lookupInfo?.emailAddress, !email.isEmpty {
-            return "email:" + email.lowercased()
-        }
         return userRecordName
     }
 
