@@ -26,6 +26,7 @@ struct BudgetyMacSheetView: View {
     @State private var showingAIChat = false
     @State private var showingCSVImport = false
     @State private var showingStats = false
+    @State private var showingShare = false
 
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
@@ -96,6 +97,9 @@ struct BudgetyMacSheetView: View {
                         Label("テンプレート", systemImage: "doc.on.doc")
                     }
                     Divider()
+                    Button { showingShare = true } label: {
+                        Label("シートを共有", systemImage: "person.crop.circle.badge.plus")
+                    }
                     Button { showingCSVImport = true } label: {
                         Label("CSV インポート", systemImage: "tray.and.arrow.down")
                     }
@@ -139,6 +143,9 @@ struct BudgetyMacSheetView: View {
         }
         .sheet(isPresented: $showingStats) {
             MacModalSheet { StatsView(record: sheet) }
+        }
+        .sheet(isPresented: $showingShare) {
+            MacShareSheetView(sheet: sheet)
         }
     }
 
