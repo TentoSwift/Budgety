@@ -16,6 +16,7 @@ struct BeneficiaryPickerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var profile = UserProfileStore.shared
+    @StateObject private var pub = PublicProfileSync.shared
     @State private var share: CKShare?
 
     /// 自分の canonical 自己 ID (オーナーなら userRecordName、参加者なら "email:...")

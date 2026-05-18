@@ -14,6 +14,7 @@ import CoreData
 struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var viewContext
+    @StateObject private var pub = PublicProfileSync.shared
 
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?

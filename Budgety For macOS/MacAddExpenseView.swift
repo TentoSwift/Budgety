@@ -15,6 +15,7 @@ import CloudKit
 struct MacAddExpenseView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
+    @StateObject private var pub = PublicProfileSync.shared
 
     let sheet: ExpenseSheet
     let expense: Expense?

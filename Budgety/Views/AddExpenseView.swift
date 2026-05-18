@@ -44,6 +44,7 @@ struct AddExpenseView: View {
 
 
     @StateObject private var profile = UserProfileStore.shared
+    @StateObject private var pub = PublicProfileSync.shared
 
     @State private var title: String = ""
     @State private var amountText: String = ""

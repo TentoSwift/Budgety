@@ -21,6 +21,7 @@ struct MemberPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var profile = UserProfileStore.shared
+    @StateObject private var pub = PublicProfileSync.shared
 
     @State private var share: CKShare?
 
