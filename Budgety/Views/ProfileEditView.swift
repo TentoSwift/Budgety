@@ -30,7 +30,6 @@ struct ProfileEditView: View {
     @State private var draftName: String = ""
     @State private var draftPhoto: Data? = nil
     @State private var didLoad: Bool = false
-    @State private var isSaving: Bool = false
     @State private var saveError: String? = nil
 
     #if canImport(PhotosUI)
@@ -60,15 +59,10 @@ struct ProfileEditView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
-                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button("完了") { Task { await save() } }
-                            .keyboardShortcut(.return)
-                    }
+                    Button("完了") { save() }
+                        .keyboardShortcut(.return)
                 }
             }
             .onAppear { loadIfNeeded() }
@@ -211,23 +205,23 @@ struct ProfileEditView: View {
     }
     #endif
 
-    private func save() async {
+    private func save() {
         let name = draftName.trimmingCharacters(in: .whitespaces)
-        isSaving = true
-        defer { isSaving = false }
         saveError = nil
 
-        // ローカル更新 (色は保存しない、表示時に名前から自動生成)
+        // ローカル更新 (即時、色は保存しない)
         profile.updateProfile(displayName: name, photoData: draftPhoto, avatarBgColorHex: nil)
         profile.applyDeviceLocalProfileEdit(in: viewContext)
 
-        // CloudKit Public DB upload (色は送らない)
+        // CloudKit Public DB upload はバックグラウンドで実行 (UI を block しない)
         if let urn = profile.userRecordName, !urn.isEmpty {
-            await PublicProfileSync.shared.uploadOwnProfile(
-                urn: urn,
-                displayName: name,
-                photoData: draftPhoto
-            )
+            Task.detached {
+                await PublicProfileSync.shared.uploadOwnProfile(
+                    urn: urn,
+                    displayName: name,
+                    photoData: draftPhoto
+                )
+            }
         }
         Haptics.success()
         dismiss()
