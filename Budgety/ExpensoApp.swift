@@ -95,7 +95,7 @@ struct ExpensoApp: App {
                     // (= 起動時の auto upload は Public DB の quota を消費するので削除。
                     //  upload は ProfileEditView での明示保存時のみ実行する)
                     await UserProfileStore.shared.refreshOwnPublicProfile()
-                    await prefetchAllParticipantProfiles(in: ctx)
+                    await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     // CKShare の participant nameComponents を PP にハイドレートして
                     // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
                     UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)

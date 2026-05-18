@@ -780,6 +780,40 @@ final class UserProfileStore: ObservableObject {
         // で完結するので、PP を書き溜める必要は無い。
         _ = ctx  // no-op
     }
+
+    /// 全シートの CKShare.participants と既存 PP レコードから URN を集めて
+    /// PublicProfileSync の cache を埋める。他人のプロフィール写真表示用。
+    /// hydrateParticipantProfilesFromShares が no-op になったので、こちらで
+    /// CKShare 経由の URN も拾うようにする。
+    @MainActor
+    func prefetchAllProfileURNs(in ctx: NSManagedObjectContext) async {
+        var urns: Set<String> = []
+        // 自分の URN
+        if let own = userRecordName, !own.isEmpty { urns.insert(own) }
+        // 既存 PP レコード由来
+        let ppReq = NSFetchRequest<ParticipantProfile>(entityName: "ParticipantProfile")
+        let pps = (try? ctx.fetch(ppReq)) ?? []
+        for pp in pps {
+            guard let rn = pp.recordName, !rn.isEmpty,
+                  !Self.isSelfPlaceholderRecordName(rn) else { continue }
+            if rn.hasPrefix("email:") || rn.hasPrefix("phone:") { continue }
+            urns.insert(rn)
+        }
+        // 全シートの CKShare.participants 由来 (= 主経路)
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        let sheets = (try? ctx.fetch(sheetReq)) ?? []
+        for sheet in sheets {
+            guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { continue }
+            for p in share.participants {
+                guard let rn = p.userIdentity.userRecordID?.recordName,
+                      !rn.isEmpty,
+                      !Self.isSelfPlaceholderRecordName(rn) else { continue }
+                urns.insert(rn)
+            }
+        }
+        guard !urns.isEmpty else { return }
+        await PublicProfileSync.shared.fetchProfiles(forURNs: Array(urns))
+    }
     #endif
 
     private func writeParticipantProfile(

@@ -37,11 +37,12 @@ struct BudgetyMacApp: App {
                     // 同 Apple ID の他デバイスで編集された自分のプロフィールを取り込む
                     await UserProfileStore.shared.refreshOwnPublicProfile()
                     let ctx = persistenceController.container.viewContext
-                    UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)
-                    // CKShare がまだ非同期で取得中の可能性があるので、数秒後に再 hydrate
+                    // 他参加者のプロフィール (Public DB) を prefetch
+                    await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
+                    // CKShare がまだ非同期で取得中の可能性があるので数秒後に再 prefetch
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 3_000_000_000)
-                        UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)
+                        await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
@@ -52,7 +53,7 @@ struct BudgetyMacApp: App {
                             await UserProfileStore.shared.ensureUserRecordNameLoaded()
                         }
                         await UserProfileStore.shared.refreshOwnPublicProfile()
-                        UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)
+                        await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAccepted)) { note in
