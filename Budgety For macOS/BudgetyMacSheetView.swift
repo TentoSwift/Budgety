@@ -181,14 +181,12 @@ struct BudgetyMacSheetView: View {
             ForEach(ids, id: \.self) { id in
                 let info = sheet.memberDisplayInfo(for: id)
                 VStack(spacing: 4) {
-                    Circle()
-                        .fill(Color(hex: info.colorHex) ?? .blue)
-                        .frame(width: 32, height: 32)
-                        .overlay {
-                            Text(String(info.name.first ?? "?").uppercased())
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
-                        }
+                    AvatarView(
+                        photoData: info.photoData,
+                        displayName: info.name,
+                        colorHex: info.colorHex,
+                        size: 36
+                    )
                     Text(info.name)
                         .font(.caption2)
                         .lineLimit(1)
@@ -260,7 +258,18 @@ struct BudgetyMacSheetView: View {
                 Text(e.displayTitle).font(.body)
                 let payer = e.displayPaidBy
                 if !payer.isEmpty {
-                    Text(payer).font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        if let pid = e.payerProfileID, !pid.isEmpty {
+                            let info = sheet.memberDisplayInfo(for: pid)
+                            AvatarView(
+                                photoData: info.photoData,
+                                displayName: info.name,
+                                colorHex: info.colorHex,
+                                size: 16
+                            )
+                        }
+                        Text(payer).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()

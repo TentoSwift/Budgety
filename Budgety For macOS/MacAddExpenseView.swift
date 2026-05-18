@@ -203,14 +203,12 @@ struct MacAddExpenseView: View {
             payerProfileID = id
         } label: {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(Color(hex: info.colorHex) ?? .blue)
-                    .frame(width: 24, height: 24)
-                    .overlay {
-                        Text(String(info.name.first ?? "?").uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
+                AvatarView(
+                    photoData: info.photoData,
+                    displayName: info.name,
+                    colorHex: info.colorHex,
+                    size: 28
+                )
                 Text(isMe ? "\(info.name) (自分)" : info.name)
                     .foregroundStyle(.primary)
                 Spacer()
@@ -242,14 +240,12 @@ struct MacAddExpenseView: View {
             else    { selectedBeneficiaries.insert(id) }
         } label: {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(Color(hex: info.colorHex) ?? .blue)
-                    .frame(width: 24, height: 24)
-                    .overlay {
-                        Text(String(info.name.first ?? "?").uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
+                AvatarView(
+                    photoData: info.photoData,
+                    displayName: info.name,
+                    colorHex: info.colorHex,
+                    size: 28
+                )
                 Text(isMe ? "\(info.name) (自分)" : info.name)
                     .foregroundStyle(.primary)
                 Spacer()
