@@ -79,7 +79,7 @@ struct BudgetyMacSheetView: View {
                         Label("カテゴリ管理", systemImage: "square.grid.2x2")
                     }
                     Button { showingRecurring = true } label: {
-                        Label("定期項目", systemImage: "repeat")
+                        Label("繰り返し項目", systemImage: "repeat")
                     }
                     Button { showingTemplates = true } label: {
                         Label("テンプレート", systemImage: "doc.on.doc")
@@ -129,12 +129,10 @@ struct BudgetyMacSheetView: View {
                 Text(sheet.displayName).font(.title3.weight(.semibold))
                 Spacer()
                 if sheet.isOwnedByCurrentUser == false {
-                    Label("受信中", systemImage: "tray.and.arrow.down")
+                    Image(systemName: "person.2.circle.fill")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(.blue.opacity(0.15)))
-                        .foregroundStyle(.blue)
                 }
             }
             Text("今月")
@@ -187,9 +185,7 @@ struct BudgetyMacSheetView: View {
             if groupedByDate.isEmpty {
                 ContentUnavailableView {
                     Label("支出がありません", systemImage: "list.bullet")
-                } description: {
-                    Text("ツールバーの + ボタンから最初の支出を追加してください。")
-                }
+                } 
                 .padding(.vertical, 40)
             }
             ForEach(groupedByDate, id: \.date) { group in

@@ -21,6 +21,7 @@ struct BudgetyMacContentView: View {
 
     @State private var selectedSheet: ExpenseSheet?
     @State private var showingAddSheet: Bool = false
+    @State private var showSettingsView: Bool = false
 
     var body: some View {
         NavigationSplitView {
@@ -31,13 +32,14 @@ struct BudgetyMacContentView: View {
             } else {
                 ContentUnavailableView {
                     Label("シートを選択", systemImage: "rectangle.stack")
-                } description: {
-                    Text("左のリストからシートを選んでください。")
                 }
             }
         }
         .sheet(isPresented: $showingAddSheet) {
             MacAddSheetView()
+        }
+        .sheet(isPresented: $showSettingsView) {
+            BudgetyMacSettingsView()
         }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
@@ -60,9 +62,11 @@ struct BudgetyMacContentView: View {
                 }
             }
         }
-        .navigationTitle("Budgety")
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         .toolbar {
+            ToolbarItem {
+                
+            }
             ToolbarItem {
                 Button {
                     showingAddSheet = true
@@ -140,7 +144,7 @@ struct MacAddSheetView: View {
         VStack(spacing: 0) {
             Form {
                 Section("シート名") {
-                    TextField("家計、旅行 など", text: $name)
+                    TextField("", text: $name)
                 }
                 Section("カラー") {
                     HStack(spacing: 12) {
@@ -222,30 +226,55 @@ struct MacAddSheetView: View {
 
 struct BudgetyMacSettingsView: View {
     @StateObject private var profile = UserProfileStore.shared
+    @StateObject private var pm = PurchaseManager.shared
     @State private var shareURLText: String = ""
     @State private var acceptInProgress: Bool = false
     @State private var acceptMessage: String?
+    @State private var showingPaywall: Bool = false
 
     var body: some View {
         Form {
-            Section("プロフィール") {
+            Section("Premium") {
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(Color(hex: profile.avatarBgColorHex ?? "#5B8DEF") ?? .blue)
-                        .frame(width: 40, height: 40)
-                        .overlay {
-                            Text(String(profile.resolvedDisplayName.first ?? "?").uppercased())
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                        }
+                    Image(systemName: pm.isPremium ? "crown.fill" : "crown")
+                        .foregroundStyle(pm.isPremium ? .yellow : .secondary)
+                        .font(.title2)
                     VStack(alignment: .leading) {
-                        Text(profile.resolvedDisplayName)
-                        Text("Apple ID の名前を使用")
+                        Text(pm.isPremium ? "Premium 加入中" : "無料プラン")
+                            .font(.body.weight(.medium))
+                        Text(pm.isPremium
+                             ? "すべての機能をご利用いただけます。"
+                             : "Premium にすると共有招待やカテゴリ追加など追加機能が解放されます。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                }
+                if pm.isPremium {
+                    Link("サブスクリプションを管理",
+                         destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+                } else {
+                    Button {
+                        showingPaywall = true
+                    } label: {
+                        Label("Premium にアップグレード", systemImage: "crown.fill")
+                    }
+                    Button {
+                        Task { await pm.restore() }
+                    } label: {
+                        if pm.isProcessing {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text("復元中…")
+                            }
+                        } else {
+                            Label("購入を復元", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(pm.isProcessing)
                 }
             }
+
             Section {
                 TextField("https://www.icloud.com/share/...", text: $shareURLText)
                     .textFieldStyle(.roundedBorder)
@@ -279,6 +308,9 @@ struct BudgetyMacSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showingPaywall) {
+            MacModalSheet { PaywallView() }
+        }
     }
 
     @MainActor
