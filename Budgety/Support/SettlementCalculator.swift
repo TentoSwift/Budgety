@@ -99,43 +99,86 @@ enum SettlementCalculator {
             return nil
             #endif
         }()
-        // 自分の ID 集合 = canonicalSelfIDs (canonical + 旧 userRecordName)。
-        // 名前 / 写真ベースのヒューリスティックや手動統合機能はデバイス間不整合を
-        // 生むため使わない (= ID で厳密に判定)。
+        // ShareCalendarApp 方式: CKShare の participants から取れる URN を真実として
+        // メンバーを構築する。email/phone ベースの旧 ID や PP.recordName の重複は
+        // ここで全部 URN に畳む (= 同じ人が複数行に分裂しない)。
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
-        let selfCanonical = UserProfileStore.shared.canonicalSelfID(forShare: share)
-            ?? UserProfileStore.shared.userRecordName
+        // selfCanonical は必ず URN を使う (PublicProfileSync のキーと一致するため)
+        let selfCanonical = UserProfileStore.shared.userRecordName
+            ?? UserProfileStore.shared.canonicalSelfID(forShare: share)
             ?? ""
         let selfMemberID = UserProfileStore.shared.selfMemberID
-        /// "ID を self に正規化": canonicalSelfIDs に含まれるなら selfCanonical に。
-        /// それ以外はそのまま。
+        let selfEmailID: String? = {
+            if let e = UserProfileStore.shared.selfEmail?.lowercased(), !e.isEmpty {
+                return "email:" + e
+            }
+            return nil
+        }()
+
+        // ── email/旧URN → URN マッピングを CKShare から構築 ──
+        // share.participants[i].userIdentity から (URN, email) のペアを取って
+        // 旧 "email:foo@bar.com" 形式 ID から正しい URN を逆引きできるようにする。
+        var emailToURN: [String: String] = [:]
+        if let share = share {
+            for p in share.participants {
+                guard let urn = p.userIdentity.userRecordID?.recordName,
+                      !urn.isEmpty,
+                      !UserProfileStore.isSelfPlaceholderRecordName(urn) else { continue }
+                if let email = p.userIdentity.lookupInfo?.emailAddress?.lowercased(),
+                   !email.isEmpty {
+                    emailToURN["email:" + email] = urn
+                }
+            }
+        }
+        if let selfEmailID, !selfCanonical.isEmpty {
+            emailToURN[selfEmailID] = selfCanonical
+        }
+
+        /// "ID を URN に正規化":
+        /// - 自分の全 ID は selfCanonical に
+        /// - email:foo は emailToURN マップで URN に置換
+        /// - それ以外はそのまま
         let normalize: (String) -> String = { pid in
-            (!selfCanonical.isEmpty && selfIDs.contains(pid)) ? selfCanonical : pid
+            if !selfCanonical.isEmpty, selfIDs.contains(pid) { return selfCanonical }
+            if !selfCanonical.isEmpty, selfEmailID != nil, pid == selfEmailID { return selfCanonical }
+            if let urn = emailToURN[pid] { return urn }
+            return pid
         }
         /// Expense の payer を解決:
-        /// 1. canonicalSelfIDs にあれば self
-        /// 2. Expense.payerMemberID == 自分の selfMemberID も self (同端末で書いた印)
-        /// 3. それ以外は raw payerProfileID をそのまま
+        /// 1. canonicalSelfIDs / selfEmail にあれば self
+        /// 2. Expense.payerMemberID == 自分の selfMemberID も self
+        /// 3. email→URN マップに該当すれば URN に
+        /// 4. それ以外は raw のまま
         let resolvePayer: (Expense) -> String? = { e in
             guard let pid = e.payerProfileID, !pid.isEmpty else { return nil }
             if !selfCanonical.isEmpty {
                 if selfIDs.contains(pid) { return selfCanonical }
+                if let selfEmailID, pid == selfEmailID { return selfCanonical }
                 if let mid = selfMemberID, e.payerMemberID == mid { return selfCanonical }
             }
+            if let urn = emailToURN[pid] { return urn }
             return pid
         }
 
-        // メンバー集合 = 「現在のシートの参加者」だけ。
-        // - 自分の canonical (sheet が無くても userRecordName fallback)
-        // - 同シート配下の ParticipantProfile から拾った recordName
-        // Expense.payerProfileID が現参加者に無い (= 退出した参加者 / 旧 ID) 支出は
-        // この精算では対象外として skip する。
+        // メンバー集合 = CKShare.participants の URN + 自分 + PP の URN
+        // ShareCalendarApp と同様、URN ベースで dedup。
         var memberOrder: [String] = []
         var memberSet = Set<String>()
         if !selfCanonical.isEmpty,
            memberSet.insert(selfCanonical).inserted {
             memberOrder.append(selfCanonical)
         }
+        // CKShare の他参加者 (URN) を優先で追加 (= source of truth)
+        if let share = share {
+            for p in share.participants {
+                guard let urn = p.userIdentity.userRecordID?.recordName,
+                      !urn.isEmpty,
+                      !UserProfileStore.isSelfPlaceholderRecordName(urn),
+                      memberSet.insert(urn).inserted else { continue }
+                memberOrder.append(urn)
+            }
+        }
+        // PP からも補完 (CKShare 未取得時のフォールバック、normalize 経由で email→URN)
         let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
         for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
             guard let rn = pp.recordName, !rn.isEmpty,
