@@ -12,9 +12,8 @@
 		2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
-		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 		4D8484612FADB766001AB1B7 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 4D8484602FADB766001AB1B7 /* CustomPicker */; };
-		4D0030001A0030000A0030000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = 4D0030000A0030000A0030000 /* MemojiView */; };
+		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,8 +127,8 @@
 				Intents/QuickAddExpenseIntent.swift,
 				Intents/QuickBudgetIntent.swift,
 				Intents/QuickGetExpensesIntent.swift,
-				"Intents/QuickIntentLogic+Recurring.swift",
 				Intents/QuickIntentLogic.swift,
+				"Intents/QuickIntentLogic+Recurring.swift",
 				Models/CategorySeeds.swift,
 				"Models/Expense+Extensions.swift",
 				"Models/ExpenseCategory+Extensions.swift",
@@ -180,6 +179,7 @@
 				Views/MemberPickerView.swift,
 				Views/OnboardingView.swift,
 				Views/PaywallView.swift,
+				Views/ProfileEditView.swift,
 				Views/RecurringListView.swift,
 				Views/RecurringSettingsView.swift,
 				Views/SetSheetPasswordView.swift,
@@ -1038,17 +1038,12 @@
 			package = 2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */;
 			productName = CustomPicker;
 		};
-		A0030000A0030000A0030000 /* MemojiView */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */;
-			productName = MemojiView;
-		};
 		4D8484602FADB766001AB1B7 /* CustomPicker */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */;
 			productName = CustomPicker;
 		};
-		4D0030000A0030000A0030000 /* MemojiView */ = {
+		A0030000A0030000A0030000 /* MemojiView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */;
 			productName = MemojiView;

@@ -10,6 +10,9 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct AvatarView: View {
     let photoData: Data?
@@ -40,15 +43,31 @@ struct AvatarView: View {
     private var tint: Color { Color(hex: colorHex) ?? .blue }
 
     var body: some View {
-        // 写真機能は廃止。常にイニシャルアバター。
-        // photoData パラメータは backward compat のため残しているが無視する。
-        ZStack {
-            Circle().fill(tint.gradient)
-            Text(initial)
-                .font(.system(size: size * 0.45, weight: .semibold))
-                .foregroundStyle(.white)
+        if let data = photoData, let image = makePlatformImage(from: data) {
+            image
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.secondary.opacity(0.2), lineWidth: 0.5))
+        } else {
+            ZStack {
+                Circle().fill(tint.gradient)
+                Text(initial)
+                    .font(.system(size: size * 0.45, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: size, height: size)
         }
-        .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private func makePlatformImage(from data: Data) -> Image? {
+        #if canImport(UIKit)
+        if let ui = UIImage(data: data) { Image(uiImage: ui) }
+        #elseif canImport(AppKit)
+        if let ns = NSImage(data: data) { Image(nsImage: ns) }
+        #endif
     }
 }
 

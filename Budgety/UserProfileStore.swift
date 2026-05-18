@@ -152,9 +152,12 @@ final class UserProfileStore: ObservableObject {
         self.profileUpdatedAt = .now
         // 背景で Public DB に push (失敗してもローカル状態は更新済み)
         if let urn = userRecordName, !urn.isEmpty {
-            Task { [resolvedDisplayName, photoData] in
+            Task { [resolvedDisplayName, photoData, avatarBgColorHex] in
                 await PublicProfileSync.shared.uploadOwnProfile(
-                    urn: urn, displayName: resolvedDisplayName, photoData: photoData
+                    urn: urn,
+                    displayName: resolvedDisplayName,
+                    photoData: photoData,
+                    colorHex: avatarBgColorHex
                 )
             }
         }

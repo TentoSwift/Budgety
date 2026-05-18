@@ -138,20 +138,18 @@ extension ExpenseSheet {
     }
 
     /// profileID を表示用情報に解決する。
-    /// 1. 自分 (UserProfileStore.userRecordName 一致) → UserProfileStore
-    /// 2. **CKShare の参加者を毎回参照** → Apple ID 名 (nameComponents)
-    ///    (iCloud Extended Share Access エンタイトルメントで取れる)
-    /// 3. ParticipantProfile.recordName 一致 (= CKShare 取得前のフォールバック)
-    /// 4. ローカル Member の recordName / UUID 一致 (旧データ救済)
+    /// 1. 自分 → UserProfileStore (カスタム設定が最優先)
+    /// 2. **Public DB の UserProfile (カスタムプロフィール)** ← 他人もここを最優先
+    /// 3. CKShare の participant.nameComponents (Apple ID 名)
+    /// 4. ParticipantProfile.recordName 一致 (CKShare 未取得時のフォールバック)
+    /// 5. ローカル Member の recordName / UUID 一致 (旧データ救済)
     /// いずれにも一致しなければ "メンバー" の汎用表示。
     ///
-    /// 名前は PP に書き溜めず、その都度 CKShare から取得する方針。
-    /// 色は CKShare からは取れないので PP の colorHex を併用する (なければ既定灰)。
+    /// カスタムプロフィール (Public DB) > Apple ID 名 > "メンバー" の優先順位。
+    /// 写真は Public DB のみ提供 (Apple ID アバターは API 非公開)。
     @MainActor
     func memberDisplayInfo(for profileID: String) -> (name: String, colorHex: String, photoData: Data?) {
         // 自分判定: URN だけでなく canonical (email:..) や旧 ID も含めて広く拾う。
-        // これにより旧 "email:tento1209@icloud.com" などで保存された自分の行も
-        // "メンバー" にフォールバックされず "自分" 表示になる。
         #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
         #else
@@ -171,28 +169,38 @@ extension ExpenseSheet {
             return (
                 name: store.resolvedDisplayName,
                 colorHex: store.avatarBgColorHex ?? "#5B8DEF",
-                photoData: nil
+                photoData: store.photoData
             )
         }
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
         let ppMatch = profiles.first(where: { $0.recordName == profileID })
-        let fallbackColor = (ppMatch?.colorHex?.isEmpty == false ? ppMatch!.colorHex! : "#8E8E93")
 
-        // 2) CKShare から都度引き直す (Apple ID 名)
+        // 2) Public DB のカスタムプロフィール (最優先で他人にも適用)
+        if let custom = PublicProfileSync.shared.profileOrPrefetch(for: profileID),
+           !custom.displayName.isEmpty {
+            let color = custom.colorHex
+                ?? (ppMatch?.colorHex?.isEmpty == false ? ppMatch!.colorHex! : "#8E8E93")
+            return (name: custom.displayName, colorHex: color, photoData: custom.photoData)
+        }
+
+        let fallbackColor = (ppMatch?.colorHex?.isEmpty == false ? ppMatch!.colorHex! : "#8E8E93")
+        let photoFromCache = PublicProfileSync.shared.cachedProfile(for: profileID)?.photoData
+
+        // 3) CKShare の Apple ID 名 (カスタム未設定時)
         #if !os(watchOS)
         if let share = share,
            let liveName = nameFromShare(share, profileID: profileID),
            !liveName.isEmpty {
-            return (name: liveName, colorHex: fallbackColor, photoData: nil)
+            return (name: liveName, colorHex: fallbackColor, photoData: photoFromCache)
         }
         #endif
 
-        // 3) PP フォールバック (CKShare 未取得タイミング用)
+        // 4) PP フォールバック
         if let pp = ppMatch {
             return (
                 name: pp.displayName?.isEmpty == false ? pp.displayName! : "メンバー",
                 colorHex: fallbackColor,
-                photoData: nil
+                photoData: photoFromCache
             )
         }
         // ローカル Member へのフォールバック (recordName / UUID)

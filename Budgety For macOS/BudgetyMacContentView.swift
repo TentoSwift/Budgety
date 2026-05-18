@@ -231,9 +231,37 @@ struct BudgetyMacSettingsView: View {
     @State private var acceptInProgress: Bool = false
     @State private var acceptMessage: String?
     @State private var showingPaywall: Bool = false
+    @State private var showingProfileEdit: Bool = false
 
     var body: some View {
         Form {
+            Section("プロフィール") {
+                Button {
+                    showingProfileEdit = true
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarView(
+                            photoData: profile.photoData,
+                            displayName: profile.resolvedDisplayName,
+                            colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                            size: 40
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(profile.resolvedDisplayName)
+                                .foregroundStyle(.primary)
+                            Text("名前・写真・背景色を編集")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
             Section("Premium") {
                 HStack(spacing: 12) {
                     Image(systemName: pm.isPremium ? "crown.fill" : "crown")
@@ -310,6 +338,9 @@ struct BudgetyMacSettingsView: View {
         .formStyle(.grouped)
         .sheet(isPresented: $showingPaywall) {
             MacModalSheet { PaywallView() }
+        }
+        .sheet(isPresented: $showingProfileEdit) {
+            ProfileEditView()
         }
     }
 

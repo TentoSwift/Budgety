@@ -2,16 +2,14 @@
 //  PublicProfileSync.swift
 //  Budgety
 //
-//  全ユーザーのプロフィール (displayName + photo) を CloudKit Public DB に保存する。
-//  従来は per-sheet の ParticipantProfile (CKShare zone) に書いていたが、これだと
-//  クロスデバイス整合性とシート毎の二重管理が問題になっていた。Public DB に置けば
-//  単一の source of truth になり、相手のプロフィールも 1 回 fetch すれば全シートで使える。
+//  全ユーザーのプロフィール (displayName + photo + colorHex) を CloudKit Public DB
+//  に保存する。ShareCalendarApp のプロフィール設計を参考にしている。
 //
-//  キー: `userRecordID.recordName` (URN)。Apple ID あたり 1 レコード。
-//  プライバシー: Public DB は同 container 利用者全員から読み取り可能 (オンボーディングで合意取得済み)。
-//
-//  Phase 1: このサービスは displayName と photo のみを担当する。canonical ID 体系
-//  (Expense.payerProfileID 等) は別フェーズで URN ベースに統一する。
+//  - レコードタイプ: `UserProfile`
+//  - レコード ID: `profile_<userRecordName>` (CKShare 越しに他人の URN から逆引き可能)
+//  - フィールド: displayName: String, profilePhoto: Asset, colorHex: String, updatedAt: Date
+//  - プライバシー: Public DB は同 container 利用者全員から読み取り可能
+//    (オンボーディングで合意取得済み)
 //
 
 import Foundation
@@ -26,9 +24,10 @@ final class PublicProfileSync: ObservableObject {
     private static let log = Logger(subsystem: "com.tento.budgety", category: "PublicProfileSync")
 
     /// CloudKit Public DB の record type 名。Dashboard で同名のレコードを deploy する必要がある。
-    static let recordType = "PublicProfile"
+    static let recordType = "UserProfile"
     private static let fieldDisplayName = "displayName"
-    private static let fieldPhoto = "photo"
+    private static let fieldPhoto = "profilePhoto"
+    private static let fieldColorHex = "colorHex"
     private static let fieldUpdatedAt = "updatedAt"
 
     private let containerID = "iCloud.com.tento.budgety"
@@ -36,31 +35,38 @@ final class PublicProfileSync: ObservableObject {
     private var publicDB: CKDatabase { container.publicCloudDatabase }
 
     /// キャッシュ済みプロフィール。Published で View に変更通知する。
-    /// key = URN, value = (displayName, photoData, updatedAt, fetchedAt)。
     @Published private(set) var cache: [String: CachedProfile] = [:]
 
-    /// fetch / upload 中フラグ (UI でローディング表示する用)。
+    /// fetch / upload 中フラグ
     @Published private(set) var isBusy: Bool = false
 
     /// 直前のエラー (デバッグ表示用)
     @Published private(set) var lastError: String?
 
-    /// キャッシュ TTL。これより古い fetchedAt のものは再 fetch する。
-    /// (= 同セッション中は再 fetch しない、ただし app foreground 化や手動 refresh は強制)
+    /// キャッシュ TTL
     private static let cacheTTL: TimeInterval = 60 * 30   // 30 min
 
-    /// キャッシュ persistence (起動間で保持) のための UserDefaults キー
-    private static let udCacheKey = "publicProfile.cache.v1"
+    /// キャッシュ persistence のための UserDefaults キー (スキーマ変更時は v2 に bump)
+    private static let udCacheKey = "publicProfile.cache.v2"
 
     struct CachedProfile: Codable, Equatable {
         let displayName: String
         let photoData: Data?
+        let colorHex: String?
         let updatedAt: Date
         let fetchedAt: Date
     }
 
     private init() {
         self.cache = Self.loadCacheFromDisk()
+    }
+
+    // MARK: - Record ID
+
+    /// userRecordName から UserProfile レコード ID を生成。
+    /// ShareCalendarApp と同じ命名規則 (`profile_<recordName>`)。
+    private func profileRecordID(forURN urn: String) -> CKRecord.ID {
+        CKRecord.ID(recordName: "profile_\(urn)")
     }
 
     // MARK: - Disk-backed cache
@@ -85,7 +91,6 @@ final class PublicProfileSync: ObservableObject {
     }
 
     /// キャッシュにあれば即返し、無いか TTL 切れなら背景 fetch をキック。
-    /// 表示中に裏で取得するイメージ。
     @discardableResult
     func profileOrPrefetch(for urn: String) -> CachedProfile? {
         guard !urn.isEmpty else { return nil }
@@ -108,7 +113,7 @@ final class PublicProfileSync: ObservableObject {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !cleaned.isEmpty else { return }
-        let ids = cleaned.map { CKRecord.ID(recordName: $0) }
+        let ids = cleaned.map { profileRecordID(forURN: $0) }
         do {
             isBusy = true
             defer { isBusy = false }
@@ -116,6 +121,11 @@ final class PublicProfileSync: ObservableObject {
             var anyChange = false
             let now = Date()
             for (rid, recordRes) in result {
+                // recordName から元 URN を復元
+                let recordName = rid.recordName
+                let urn = recordName.hasPrefix("profile_")
+                    ? String(recordName.dropFirst("profile_".count))
+                    : recordName
                 switch recordRes {
                 case .success(let rec):
                     let dn = (rec[Self.fieldDisplayName] as? String) ?? ""
@@ -123,21 +133,22 @@ final class PublicProfileSync: ObservableObject {
                     if let asset = rec[Self.fieldPhoto] as? CKAsset, let url = asset.fileURL {
                         photoData = try? Data(contentsOf: url)
                     }
+                    let colorHex = rec[Self.fieldColorHex] as? String
                     let updatedAt = (rec[Self.fieldUpdatedAt] as? Date) ?? rec.modificationDate ?? now
                     let cached = CachedProfile(
                         displayName: dn,
                         photoData: photoData,
+                        colorHex: colorHex,
                         updatedAt: updatedAt,
                         fetchedAt: now
                     )
-                    if cache[rid.recordName] != cached {
-                        cache[rid.recordName] = cached
+                    if cache[urn] != cached {
+                        cache[urn] = cached
                         anyChange = true
                     }
                 case .failure(let error):
-                    // unknown item は正常 (= 相手がまだ Public profile を書いていない)
                     if let ck = error as? CKError, ck.code == .unknownItem {
-                        // do nothing
+                        // 相手がまだ Public profile を書いていない (正常)
                     } else {
                         Self.log.debug("fetch \(rid.recordName, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
                     }
@@ -152,17 +163,16 @@ final class PublicProfileSync: ObservableObject {
 
     // MARK: - Upload own
 
-    /// 自分の URN + displayName + photoData を Public DB に upsert する。
-    /// 写真は CKAsset として一時ファイルから upload する。
-    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?) async {
+    /// 自分の URN + プロフィール (displayName / photoData / colorHex) を
+    /// Public DB にupsert する。
+    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?, colorHex: String?) async {
         let trimmedURN = urn.trimmingCharacters(in: .whitespaces)
         guard !trimmedURN.isEmpty else { return }
-        let recordID = CKRecord.ID(recordName: trimmedURN)
+        let recordID = profileRecordID(forURN: trimmedURN)
         do {
             isBusy = true
             defer { isBusy = false }
 
-            // 既存があれば取得して同じ recordID に upsert (modify)、無ければ create。
             let record: CKRecord
             do {
                 record = try await publicDB.record(for: recordID)
@@ -171,8 +181,12 @@ final class PublicProfileSync: ObservableObject {
             }
             record[Self.fieldDisplayName] = displayName as CKRecordValue
             record[Self.fieldUpdatedAt]   = Date() as CKRecordValue
+            if let colorHex, !colorHex.isEmpty {
+                record[Self.fieldColorHex] = colorHex as CKRecordValue
+            } else {
+                record[Self.fieldColorHex] = nil
+            }
 
-            // 写真: photoData があれば CKAsset、無ければクリア
             if let data = photoData, !data.isEmpty {
                 let tmpURL = FileManager.default.temporaryDirectory
                     .appendingPathComponent("public-profile-\(UUID().uuidString).jpg")
@@ -184,15 +198,14 @@ final class PublicProfileSync: ObservableObject {
 
             _ = try await publicDB.save(record)
 
-            // 自分のキャッシュも更新
             let now = Date()
-            let cached = CachedProfile(
+            cache[trimmedURN] = CachedProfile(
                 displayName: displayName,
                 photoData: photoData,
+                colorHex: colorHex,
                 updatedAt: now,
                 fetchedAt: now
             )
-            cache[trimmedURN] = cached
             saveCacheToDisk()
         } catch {
             lastError = error.localizedDescription
@@ -200,9 +213,13 @@ final class PublicProfileSync: ObservableObject {
         }
     }
 
+    /// 旧 API 互換 (colorHex 無し) — 既存コードの呼び出しを壊さないため残す。
+    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?) async {
+        await uploadOwnProfile(urn: urn, displayName: displayName, photoData: photoData, colorHex: nil)
+    }
+
     // MARK: - Convenience
 
-    /// すべてのキャッシュをクリアする (デバッグ / 「全データ削除」用)。
     func clearCache() {
         cache.removeAll()
         UserDefaults.standard.removeObject(forKey: Self.udCacheKey)

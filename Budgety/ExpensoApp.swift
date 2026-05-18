@@ -91,12 +91,15 @@ struct ExpensoApp: App {
                     // 共有シートで `payerProfileID == 自分の旧 userRecordName` になっている
                     // 行を canonical (email ベース等) に自動マイグレートする。
                     UserProfileStore.shared.migrateLegacyPayerProfileIDs(in: ctx)
-                    // Public DB の自分プロフィールを最新化 + 全シートの参加者プロフィールを prefetch
-                    await PublicProfileSync.shared.uploadOwnProfile(
-                        urn: UserProfileStore.shared.userRecordName ?? "",
-                        displayName: UserProfileStore.shared.resolvedDisplayName,
-                        photoData: UserProfileStore.shared.photoData
-                    )
+                    // Public DB の自分プロフィールを最新化 (displayName が空でなければ upload)
+                    if !UserProfileStore.shared.displayName.trimmingCharacters(in: .whitespaces).isEmpty {
+                        await PublicProfileSync.shared.uploadOwnProfile(
+                            urn: UserProfileStore.shared.userRecordName ?? "",
+                            displayName: UserProfileStore.shared.resolvedDisplayName,
+                            photoData: UserProfileStore.shared.photoData,
+                            colorHex: UserProfileStore.shared.avatarBgColorHex
+                        )
+                    }
                     await prefetchAllParticipantProfiles(in: ctx)
                     // CKShare の participant nameComponents を PP にハイドレートして
                     // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
