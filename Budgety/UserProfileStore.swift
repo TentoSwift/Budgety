@@ -394,15 +394,18 @@ final class UserProfileStore: ObservableObject {
     }
 
     /// 旧 canonical (email:xxx) で作られた PP と URN で作られた PP が両方存在する場合、
-    /// 旧 PP を削除して URN PP に統一する。両方がデータを持っていれば URN PP の値を尊重。
-    /// 旧 PP しか存在しない場合は recordName を URN に書き換えてリネーム。
-    /// 戻り値: 変更件数 (削除/リネームのいずれも 1 とカウント)。
+    /// 旧 PP を削除して URN PP に統一する。
+    /// **自分の PP のみ対象**: 他人の PP を当端末から削除/書き換えると CloudKit
+    /// 共有ゾーン経由で相手のレコードも更新してしまうため、`toID` が自分の URN
+    /// と一致しない場合は何もしない。他人の重複 PP は本人の端末でだけクリーンアップする。
     private func mergeDuplicatePP(
         in ctx: NSManagedObjectContext,
         sheet: ExpenseSheet,
         fromID: String,
         toID: String
     ) -> Int {
+        // 自分以外の PP は触らない (CloudKit 共有ゾーン経由で相手レコードを変更しないため)
+        guard let myURN = userRecordName, !myURN.isEmpty, toID == myURN else { return 0 }
         guard let pps = sheet.participantProfiles as? Set<ParticipantProfile> else { return 0 }
         let oldPP = pps.first(where: { $0.recordName == fromID })
         guard let oldPP else { return 0 }
@@ -765,45 +768,17 @@ final class UserProfileStore: ObservableObject {
     /// - 色は触らない (色は per-user / per-sheet で UserProfileStore 経由)。
     /// - 写真は触らない (Apple ID 写真は CKShare 経由でも取れないため)。
     func hydrateParticipantProfilesFromShares(in ctx: NSManagedObjectContext) {
-        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        guard let sheets = try? ctx.fetch(sheetReq) else { return }
-        let nameFormatter = PersonNameComponentsFormatter()
-        nameFormatter.style = .default
-        var didChange = false
-        for sheet in sheets {
-            guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { continue }
-            guard let sheetStore = sheet.objectID.persistentStore else { continue }
-            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-
-            for p in share.participants {
-                let identity = p.userIdentity
-                let rn = identity.userRecordID?.recordName ?? ""
-                // self placeholder は飛ばす (実 URN が取れないため PP キーにできない)
-                if Self.isSelfPlaceholderRecordName(rn) { continue }
-                guard !rn.isEmpty else { continue }
-                guard let comps = identity.nameComponents else { continue }
-                let displayName = nameFormatter.string(from: comps)
-                guard !displayName.isEmpty else { continue }
-
-                if let existing = pps.first(where: { $0.recordName == rn }) {
-                    if existing.displayName != displayName {
-                        existing.displayName = displayName
-                        existing.updatedAt = .now
-                        didChange = true
-                    }
-                } else {
-                    let pp = ParticipantProfile(context: ctx)
-                    ctx.assign(pp, to: sheetStore)
-                    pp.recordName = rn
-                    pp.sheet = sheet
-                    pp.displayName = displayName
-                    pp.colorHex = "#8E8E93"
-                    pp.updatedAt = .now
-                    didChange = true
-                }
-            }
-        }
-        if didChange, ctx.hasChanges { try? ctx.save() }
+        // ※ 過去版は CKShare の各 participant の nameComponents を、その participant の
+        //    URN にあたる ParticipantProfile レコードに書き込んでいた (= 他人の PP を
+        //    こちら側から更新)。CKShare zone は共有ストアで、ここから書くと
+        //    相手側のレコードを上書きしてしまうため廃止。
+        //
+        // 名前/写真の表示は:
+        //   - 自分: UserProfileStore (ローカル) + PublicProfileSync (Public DB upload)
+        //   - 他人: PublicProfileSync (Public DB fetch) + CKShare.participants の
+        //          nameComponents (live、ExpenseSheet.nameFromShare 経由)
+        // で完結するので、PP を書き溜める必要は無い。
+        _ = ctx  // no-op
     }
     #endif
 
