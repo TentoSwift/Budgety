@@ -10,6 +10,7 @@
 
 import SwiftUI
 import CoreData
+import CloudKit
 
 struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
@@ -21,7 +22,6 @@ struct BudgetyMacSheetView: View {
     @State private var showingSettlement = false
     @State private var showingCategories = false
     @State private var showingRecurring = false
-    @State private var showingTemplates = false
     @State private var showingEditSheet = false
     @State private var showingAIChat = false
     @State private var showingCSVImport = false
@@ -43,15 +43,29 @@ struct BudgetyMacSheetView: View {
     }
 
     private var monthlyTotal: Decimal {
+        monthlyTotals.expense
+    }
+
+    /// 今月の支出 / 収入 合計。
+    private var monthlyTotals: (expense: Decimal, income: Decimal) {
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: .now)
-        return allExpenses
-            .filter { e in
-                guard let d = e.date, e.kind == .expense else { return false }
-                let c = cal.dateComponents([.year, .month], from: d)
-                return c.year == comps.year && c.month == comps.month
-            }
-            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        var expense: Decimal = 0
+        var income: Decimal = 0
+        for e in allExpenses {
+            guard let d = e.date else { continue }
+            let c = cal.dateComponents([.year, .month], from: d)
+            guard c.year == comps.year && c.month == comps.month else { continue }
+            if e.kind == .expense { expense += e.amountDecimal }
+            else if e.kind == .income { income += e.amountDecimal }
+        }
+        return (expense, income)
+    }
+
+    /// 月予算残額。予算未設定なら nil。
+    private var monthlyRemainingBudget: Decimal? {
+        guard let budget = sheet.monthlyBudgetDecimal, budget > 0 else { return nil }
+        return budget - monthlyTotal
     }
 
     var body: some View {
@@ -62,7 +76,6 @@ struct BudgetyMacSheetView: View {
                 expensesList
             }
             .padding(20)
-            .frame(maxWidth: 880)
             .frame(maxWidth: .infinity)
         }
         .navigationTitle(sheet.displayName)
@@ -92,9 +105,6 @@ struct BudgetyMacSheetView: View {
                     }
                     Button { showingRecurring = true } label: {
                         Label("繰り返し項目", systemImage: "repeat")
-                    }
-                    Button { showingTemplates = true } label: {
-                        Label("テンプレート", systemImage: "doc.on.doc")
                     }
                     Divider()
                     Button { showingShare = true } label: {
@@ -127,13 +137,8 @@ struct BudgetyMacSheetView: View {
         .sheet(isPresented: $showingRecurring) {
             MacModalSheet { RecurringListView(record: sheet) }
         }
-        .sheet(isPresented: $showingTemplates) {
-            MacModalSheet { TemplateListView(record: sheet) }
-        }
         .sheet(isPresented: $showingEditSheet) {
-            // EditSheetView 自身が cancel/save の toolbar を持つので wrapper 不要
-            NavigationStack { EditSheetView(record: sheet) }
-                .frame(minWidth: 600, minHeight: 600)
+            MacEditSheetView(record: sheet)
         }
         .sheet(isPresented: $showingAIChat) {
             MacModalSheet { SheetAIChatView(record: sheet) }
@@ -150,7 +155,9 @@ struct BudgetyMacSheetView: View {
     }
 
     private var summaryHero: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let t = monthlyTotals
+        let code = sheet.resolvedDefaultCurrencyCode
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: sheet.symbol ?? "person.2.fill")
                     .foregroundStyle(.white)
@@ -158,19 +165,39 @@ struct BudgetyMacSheetView: View {
                     .background(Circle().fill(sheet.tint.gradient))
                 Text(sheet.displayName).font(.title3.weight(.semibold))
                 Spacer()
-                if sheet.isOwnedByCurrentUser == false {
-                    Image(systemName: "person.2.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                }
             }
             Text("今月")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Text(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))
+            Text(CurrencyCatalog.format(t.expense, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
+
+            // 合計の下に「+収入 | -支出」のサマリ行 (左寄せ)
+            HStack(spacing: 12) {
+                Text("+ \(CurrencyCatalog.format(t.income, code: code))")
+                Text("|").foregroundStyle(.tertiary)
+                Text("- \(CurrencyCatalog.format(t.expense, code: code))")
+            }
+            .font(.subheadline.monospacedDigit().weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // 残予算 (予算設定時のみ)
+            if let remaining = monthlyRemainingBudget {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(remaining < 0 ? Color.red : Color.primary)
+                        .frame(width: 8, height: 8)
+                    Text("残予算")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(CurrencyCatalog.format(remaining, code: code))
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(remaining < 0 ? .red : .primary)
+                }
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
@@ -254,22 +281,25 @@ struct BudgetyMacSheetView: View {
 
     private func expenseRow(_ e: Expense) -> some View {
         HStack(spacing: 12) {
-            CategoryIconView(expense: e, size: 32)
+            categoryIconWithPayer(e)
             VStack(alignment: .leading, spacing: 2) {
-                Text(e.displayTitle).font(.body)
+                // 主タイトル位置にカテゴリ名を表示
+                Text(e.categoryDisplayName).font(.body)
+                // サブタイトル: 入力タイトル · 支払者
+                // (支払者アバターはアイコン右下に重ねるのでここでは出さない)
+                let title = e.displayTitle
                 let payer = e.displayPaidBy
-                if !payer.isEmpty {
+                if !title.isEmpty || !payer.isEmpty {
                     HStack(spacing: 4) {
-                        if let pid = e.payerProfileID, !pid.isEmpty {
-                            let info = sheet.memberDisplayInfo(for: pid)
-                            AvatarView(
-                                photoData: info.photoData,
-                                displayName: info.name,
-                                colorHex: info.colorHex,
-                                size: 16
-                            )
+                        if !title.isEmpty {
+                            Text(title).font(.caption).foregroundStyle(.secondary)
                         }
-                        Text(payer).font(.caption).foregroundStyle(.secondary)
+                        if !title.isEmpty && !payer.isEmpty {
+                            Text("·").font(.caption).foregroundStyle(.secondary)
+                        }
+                        if !payer.isEmpty {
+                            Text(payer).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -281,6 +311,42 @@ struct BudgetyMacSheetView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+
+    /// カテゴリアイコン + 支払者アバター (右下) を重ねる。
+    /// 個人専用シート (= 参加済みの他メンバーが居ない) では UI ノイズを避けるため
+    /// アバターを出さない。
+    @ViewBuilder
+    private func categoryIconWithPayer(_ e: Expense) -> some View {
+        let payerName = e.displayPaidBy
+        let pid = e.payerProfileID ?? ""
+        let showAvatar = !payerName.isEmpty && !pid.isEmpty && hasAcceptedOtherParticipants
+        ZStack(alignment: .bottomTrailing) {
+            CategoryIconView(expense: e, size: 32)
+            if showAvatar {
+                let info = sheet.memberDisplayInfo(for: pid)
+                AvatarView(
+                    photoData: info.photoData,
+                    displayName: info.name,
+                    colorHex: info.colorHex,
+                    size: 16
+                )
+                .overlay(
+                    Circle().stroke(Color.platformSystemBackground, lineWidth: 2)
+                )
+                .offset(x: 4, y: 4)
+            }
+        }
+    }
+
+    /// このシートに参加済 (acceptanceStatus == .accepted) の他のメンバーが居るか。
+    private var hasAcceptedOtherParticipants: Bool {
+        guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { return false }
+        return share.participants.contains { p in
+            guard p.acceptanceStatus == .accepted, p.role != .owner else { return false }
+            let rn = p.userIdentity.userRecordID?.recordName ?? ""
+            return !rn.isEmpty && !UserProfileStore.isSelfPlaceholderRecordName(rn)
+        }
     }
 
     private func dayHeader(_ d: Date) -> String {

@@ -64,10 +64,18 @@ struct CategoryListView: View {
             }
         }
         .sheet(item: $editingCategory) { cat in
+            #if os(macOS)
+            MacEditCategoryView(mode: .edit(category: cat))
+            #else
             EditCategoryView(mode: .edit(category: cat))
+            #endif
         }
         .sheet(isPresented: $showingNew) {
+            #if os(macOS)
+            MacEditCategoryView(mode: .create(record: record, defaultKind: .expense))
+            #else
             EditCategoryView(mode: .create(record: record))
+            #endif
         }
         .sheet(isPresented: $showingPaywall) {
             PaywallView()

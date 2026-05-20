@@ -41,24 +41,27 @@ struct BeneficiaryPickerView: View {
         for id in selfIDSet { seen.insert(id) }
         if let myID = selfProfileID { seen.insert(myID) }
 
-        // 1) CKShare 参加者 (URN を使う)
+        // CKShare ロード済 → participants を source of truth として使う
+        // (共有解除済み・未参加 (.pending) のメンバーは picker に出さない)
         if let share {
             for p in share.participants {
+                guard p.acceptanceStatus == .accepted else { continue }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
                 guard !rn.isEmpty,
                       !UserProfileStore.isSelfPlaceholderRecordName(rn),
                       seen.insert(rn).inserted else { continue }
                 result.append(rn)
             }
-        }
-        // 2) PP からも補完 (CKShare がまだ取れていない場合のフォールバック)
-        let profiles = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
-        for pp in profiles.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-            guard let rn = pp.recordName,
-                  !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__",
-                  seen.insert(rn).inserted else { continue }
-            result.append(rn)
+        } else {
+            // CKShare 未ロード時のみ PP フォールバック
+            let profiles = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in profiles.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+                guard let rn = pp.recordName,
+                      !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
         }
         return result
     }

@@ -64,7 +64,7 @@ struct IntroDemoView: View {
         .init(symbol: "yensign.circle.fill", title: "家計を 1 タップで記録"),
         .init(symbol: "person.2.fill",       title: "家族とシートを共有"),
         .init(symbol: "chart.pie.fill",      title: "カテゴリ別に自動集計"),
-        .init(symbol: "calendar",            title: "カレンダーで一覧")
+        .init(symbol: "arrow.left.arrow.right.circle", title: "メンバー間の精算プラン")
     ]
 
     var body: some View {

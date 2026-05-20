@@ -4,6 +4,9 @@
 //
 
 import SwiftUI
+#if !os(watchOS)
+import CoreImage
+#endif
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -73,6 +76,68 @@ extension Color {
         #else
         return Color.gray.opacity(0.1)
         #endif
+    }
+
+    /// 画像データからドミナント色 (= CIAreaAverage で計算した平均色) を返す。
+    /// プロフィール写真からタイル背景の色味を抽出するために使う。
+    /// 結果はサイズ・回数あたりのコストがあるので呼び出し側でキャッシュすること。
+    static func averageColor(fromImageData data: Data) -> Color? {
+        #if os(watchOS)
+        return nil
+        #else
+        let ciImage: CIImage?
+        #if canImport(UIKit)
+        ciImage = UIImage(data: data).flatMap { CIImage(image: $0) }
+        #elseif canImport(AppKit)
+        // NSImage → CGImage → CIImage の経路で安定的に取り出す
+        if let ns = NSImage(data: data),
+           let cg = ns.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            ciImage = CIImage(cgImage: cg)
+        } else {
+            ciImage = nil
+        }
+        #else
+        ciImage = nil
+        #endif
+        guard let ci = ciImage else { return nil }
+        let extent = ci.extent
+        guard let filter = CIFilter(name: "CIAreaAverage") else { return nil }
+        filter.setValue(ci, forKey: kCIInputImageKey)
+        filter.setValue(CIVector(cgRect: extent), forKey: kCIInputExtentKey)
+        guard let output = filter.outputImage else { return nil }
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        context.render(
+            output,
+            toBitmap: &bitmap,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        return Color(
+            red: Double(bitmap[0]) / 255.0,
+            green: Double(bitmap[1]) / 255.0,
+            blue: Double(bitmap[2]) / 255.0
+        )
+        #endif
+    }
+}
+
+/// プロフィール写真の平均色を Data ベースでキャッシュする小さなキャッシュ。
+/// 同じ写真は何度も描画されるが、CIAreaAverage は毎回計算すると重い。
+enum AverageColorCache {
+    /// `Data.hashValue` を key にする。NSData の hashValue は内容ハッシュなので
+    /// 同じバイト列なら同じキーになる。
+    private static var cache: [Int: Color] = [:]
+
+    static func color(for data: Data?) -> Color? {
+        guard let data, !data.isEmpty else { return nil }
+        let key = data.hashValue
+        if let cached = cache[key] { return cached }
+        guard let c = Color.averageColor(fromImageData: data) else { return nil }
+        cache[key] = c
+        return c
     }
 }
 

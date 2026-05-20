@@ -40,8 +40,20 @@ struct SettlementResult {
     let missingRateCurrencies: Set<String>
     /// 計算に使用した支出件数 (収入はカウントされない)
     let includedExpenseCount: Int
+    /// カテゴリ別の集計 (totalAmount 降順)。期間フィルタ適用後のもの。
+    let categoryBreakdowns: [CategoryBreakdown]
     /// 計算過程のデバッグ情報 (DEBUG ビルドでのみ populate)
     let debugInfo: SettlementDebugInfo?
+}
+
+/// カテゴリ別の合計支出 (シート既定通貨に換算済み)。
+struct CategoryBreakdown: Identifiable, Hashable {
+    let categoryName: String   // displayName または "未分類"
+    let symbol: String
+    let colorHex: String?      // 表示色 hex。nil ならグレーフォールバック
+    let totalAmount: Decimal
+    let expenseCount: Int
+    var id: String { categoryName }
 }
 
 /// 精算ロジックのデバッグ情報。各 expense の集計過程を可視化する。
@@ -170,31 +182,39 @@ enum SettlementCalculator {
             return pid
         }
 
-        // メンバー集合 = CKShare.participants の URN + 自分 + PP の URN
+        // メンバー集合 = 自分 + CKShare.participants の URN
         // ShareCalendarApp と同様、URN ベースで dedup。
+        //
+        // 重要: CKShare がロード済みなら participants を **唯一の source of truth** とする。
+        // PP には共有解除済のメンバーが残るケースがあり、それを混ぜると balances にも
+        // 解除済みメンバーが出続けてしまうので、CKShare が取れている時は PP を補完
+        // しない。CKShare が取れていない時 (= 未ロード or solo シート) のみ PP を使う。
         var memberOrder: [String] = []
         var memberSet = Set<String>()
         if !selfCanonical.isEmpty,
            memberSet.insert(selfCanonical).inserted {
             memberOrder.append(selfCanonical)
         }
-        // CKShare の他参加者 (URN) を優先で追加 (= source of truth)
         if let share = share {
+            // CKShare ロード済 → participants を信用
+            // 招待中で未参加 (.pending) のメンバーは精算対象に含めない。
             for p in share.participants {
+                guard p.acceptanceStatus == .accepted else { continue }
                 guard let urn = p.userIdentity.userRecordID?.recordName,
                       !urn.isEmpty,
                       !UserProfileStore.isSelfPlaceholderRecordName(urn),
                       memberSet.insert(urn).inserted else { continue }
                 memberOrder.append(urn)
             }
-        }
-        // PP からも補完 (CKShare 未取得時のフォールバック、normalize 経由で email→URN)
-        let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-        for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-            guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
-            let nid = normalize(rn)
-            if memberSet.insert(nid).inserted { memberOrder.append(nid) }
+        } else {
+            // CKShare 未ロード時のみ PP フォールバック
+            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+                guard let rn = pp.recordName, !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+                let nid = normalize(rn)
+                if memberSet.insert(nid).inserted { memberOrder.append(nid) }
+            }
         }
 
         var balances: [String: Decimal] = [:]
@@ -203,6 +223,15 @@ enum SettlementCalculator {
         var missing: Set<String> = []
         var includedCount = 0
         var debugRows: [SettlementDebugInfo.ExpenseRow] = []
+
+        // カテゴリ別集計用 (key = displayName)。fx 換算後の金額を加算する。
+        struct CategoryAggregator {
+            var symbol: String
+            var colorHex: String?
+            var total: Decimal
+            var count: Int
+        }
+        var categoryAgg: [String: CategoryAggregator] = [:]
 
         for e in expenses {
             let from = e.resolvedCurrencyCode
@@ -290,6 +319,24 @@ enum SettlementCalculator {
             }
             included = true
             includedCount += 1
+
+            // 5) カテゴリ別集計 (期間フィルタ適用後の支出のみ加算)
+            let catName = e.resolvedCategory?.displayName
+                ?? (e.categoryRaw?.isEmpty == false ? e.categoryRaw! : "未分類")
+            let catSymbol = e.resolvedCategory?.displaySymbol ?? "list.bullet"
+            let catColor = e.resolvedCategory?.colorHex
+            if var agg = categoryAgg[catName] {
+                agg.total += converted
+                agg.count += 1
+                categoryAgg[catName] = agg
+            } else {
+                categoryAgg[catName] = CategoryAggregator(
+                    symbol: catSymbol,
+                    colorHex: catColor,
+                    total: converted,
+                    count: 1
+                )
+            }
             debugRows.append(.init(
                 id: e.objectID.uriRepresentation().absoluteString,
                 date: e.date ?? .now, title: e.displayTitle,
@@ -298,6 +345,36 @@ enum SettlementCalculator {
                 convertedAmount: converted,
                 rawBeneficiaries: rawBeneficiaries, normalizedBeneficiaries: normalizedBeneficiaries,
                 perShare: perShareOpt, included: included, skipReason: nil))
+        }
+
+        // 5) ユーザーが記録した実送金 (SettlementRecord) を反映。
+        //    「A → B に X 払った」= A の債務が減る = A の balance を +X、B を -X。
+        //    期間フィルタは Expense と同じ条件 (record.date が dateRange に含まれる)。
+        let allSettlements = (sheet.settlements as? Set<SettlementRecord>) ?? []
+        let settlementsInRange = allSettlements.filter { s in
+            if let range = dateRange {
+                guard let d = s.date else { return false }
+                return range.contains(d)
+            }
+            return true
+        }
+        for s in settlementsInRange {
+            let rawFrom = s.fromProfileID ?? ""
+            let rawTo = s.toProfileID ?? ""
+            guard !rawFrom.isEmpty, !rawTo.isEmpty else { continue }
+            let from = normalize(rawFrom)
+            let to = normalize(rawTo)
+            guard memberSet.contains(from), memberSet.contains(to), from != to else { continue }
+            // 送金時の通貨を target に換算 (= Expense と同様)
+            let amt = s.amountDecimal
+            guard amt > 0 else { continue }
+            guard let converted = fx.convert(amt, from: s.resolvedCurrencyCode, to: target) else {
+                missing.insert(s.resolvedCurrencyCode)
+                continue
+            }
+            let rounded = roundToCurrency(converted, code: target)
+            balances[from, default: 0] += rounded
+            balances[to,   default: 0] -= rounded
         }
 
         let memberBalances: [MemberBalance] = memberOrder.map { id in
@@ -324,12 +401,25 @@ enum SettlementCalculator {
         ) : nil
         #endif
 
+        let categoryBreakdowns: [CategoryBreakdown] = categoryAgg
+            .map { (name, agg) in
+                CategoryBreakdown(
+                    categoryName: name,
+                    symbol: agg.symbol,
+                    colorHex: agg.colorHex,
+                    totalAmount: roundToCurrency(agg.total, code: target),
+                    expenseCount: agg.count
+                )
+            }
+            .sorted { $0.totalAmount > $1.totalAmount }
+
         return SettlementResult(
             currencyCode: target,
             balances: memberBalances,
             transfers: transfers,
             missingRateCurrencies: missing,
             includedExpenseCount: includedCount,
+            categoryBreakdowns: categoryBreakdowns,
             debugInfo: debug
         )
     }

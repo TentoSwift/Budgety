@@ -11,6 +11,7 @@ import CoreData
 
 struct BudgetyMacContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
+    @StateObject private var profile = UserProfileStore.shared
 
     @FetchRequest(
         sortDescriptors: [
@@ -22,6 +23,7 @@ struct BudgetyMacContentView: View {
     @State private var selectedSheet: ExpenseSheet?
     @State private var showingAddSheet: Bool = false
     @State private var showSettingsView: Bool = false
+    @State private var showingProfileEdit: Bool = false
 
     var body: some View {
         NavigationSplitView {
@@ -40,6 +42,9 @@ struct BudgetyMacContentView: View {
         }
         .sheet(isPresented: $showSettingsView) {
             BudgetyMacSettingsView()
+        }
+        .sheet(isPresented: $showingProfileEdit) {
+            ProfileEditView()
         }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
@@ -63,9 +68,12 @@ struct BudgetyMacContentView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            profileFooter
+        }
         .toolbar {
             ToolbarItem {
-                
+
             }
             ToolbarItem {
                 Button {
@@ -76,6 +84,33 @@ struct BudgetyMacContentView: View {
                 .help("シートを追加")
             }
         }
+    }
+
+    /// Apple Music の sidebar footer 風プロフィール行。タップで ProfileEditView を開く。
+    private var profileFooter: some View {
+        Button {
+            showingProfileEdit = true
+        } label: {
+            HStack(spacing: 10) {
+                AvatarView(
+                    photoData: profile.photoData,
+                    displayName: profile.resolvedDisplayName,
+                    colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                    size: 28
+                )
+                Text(profile.resolvedDisplayName)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("プロフィールを編集")
+        .background(.bar)
     }
 
     private func sheetRow(_ sheet: ExpenseSheet) -> some View {
@@ -130,78 +165,17 @@ struct MacAddSheetView: View {
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
 
-    private let palette: [String] = [
-        "#5B8DEF", "#34C759", "#FF9500", "#FF3B30",
-        "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00"
-    ]
-    private let symbols: [String] = [
-        "person.2.fill", "house.fill", "airplane",
-        "cart.fill", "fork.knife", "gift.fill",
-        "briefcase.fill", "book.fill"
-    ]
-
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section("シート名") {
-                    TextField("", text: $name)
-                }
-                Section("カラー") {
-                    HStack(spacing: 12) {
-                        ForEach(palette, id: \.self) { hex in
-                            Circle()
-                                .fill(Color(hex: hex) ?? .blue)
-                                .frame(width: 28, height: 28)
-                                .overlay {
-                                    if hex == colorHex {
-                                        Image(systemName: "checkmark")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(.white)
-                                    }
-                                }
-                                .onTapGesture { colorHex = hex }
-                        }
-                    }
-                }
-                Section("アイコン") {
-                    let cols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 8)
-                    LazyVGrid(columns: cols, spacing: 8) {
-                        ForEach(symbols, id: \.self) { s in
-                            Button {
-                                symbol = s
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(symbol == s
-                                              ? AnyShapeStyle(Color.accentColor.opacity(0.25))
-                                              : AnyShapeStyle(.quaternary))
-                                        .frame(width: 36, height: 36)
-                                    Image(systemName: s).font(.callout)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                Section("既定通貨") {
-                    Picker("通貨", selection: $currencyCode) {
-                        ForEach(CurrencyCatalog.all) { opt in
-                            Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            HStack {
-                Button("キャンセル") { dismiss() }
-                Spacer()
-                Button("完了") { save() }
-                    .keyboardShortcut(.return)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding()
-        }
-        .frame(width: 480, height: 560)
+        MacSheetFormDialog(
+            title: "新規シート",
+            name: $name,
+            colorHex: $colorHex,
+            symbol: $symbol,
+            currencyCode: $currencyCode,
+            primaryActionLabel: "OK",
+            onCancel: { dismiss() },
+            onSave: { save() }
+        )
     }
 
     private func save() {
@@ -219,6 +193,348 @@ struct MacAddSheetView: View {
             UserProfileStore.shared.ensureProfile(in: sheet, ctx: viewContext)
         }
         dismiss()
+    }
+}
+
+// MARK: - Edit Sheet (Mac)
+
+/// Mac 用シート編集ダイアログ。リマインダー風のコンパクトなレイアウト。
+struct MacEditSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
+    @ObservedObject var record: ExpenseSheet
+
+    @State private var name: String = ""
+    @State private var colorHex: String = "#5B8DEF"
+    @State private var symbol: String = "person.2.fill"
+    @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    @State private var didLoad: Bool = false
+    @State private var showingDeleteConfirm: Bool = false
+
+    var body: some View {
+        MacSheetFormDialog(
+            title: "シートを編集",
+            name: $name,
+            colorHex: $colorHex,
+            symbol: $symbol,
+            currencyCode: $currencyCode,
+            primaryActionLabel: "保存",
+            destructiveAction: { showingDeleteConfirm = true },
+            onCancel: { dismiss() },
+            onSave: { save() }
+        )
+        .onAppear { loadOnce() }
+        .confirmationDialog(
+            "「\(name)」を削除しますか？",
+            isPresented: $showingDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("削除", role: .destructive) {
+                viewContext.delete(record)
+                PersistenceController.shared.save()
+                dismiss()
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("配下の支出・カテゴリ・送金記録もすべて削除されます。")
+        }
+    }
+
+    private func loadOnce() {
+        guard !didLoad else { return }
+        didLoad = true
+        name = record.displayName
+        colorHex = record.colorHex ?? "#5B8DEF"
+        symbol = record.symbol ?? "person.2.fill"
+        currencyCode = record.resolvedDefaultCurrencyCode
+    }
+
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        record.name = trimmed
+        record.colorHex = colorHex
+        record.symbol = symbol
+        record.defaultCurrencyCode = currencyCode
+        PersistenceController.shared.save()
+        dismiss()
+    }
+}
+
+// MARK: - Shared dialog
+
+/// リマインダー風の縦コンパクトなシート設定ダイアログ。Add / Edit 両方で使う。
+private struct MacSheetFormDialog: View {
+    let title: String
+    @Binding var name: String
+    @Binding var colorHex: String
+    @Binding var symbol: String
+    @Binding var currencyCode: String
+    let primaryActionLabel: String
+    var destructiveAction: (() -> Void)? = nil
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    @State private var showingSymbolPicker: Bool = false
+    @State private var showingPaywall: Bool = false
+    @StateObject private var pm = PurchaseManager.shared
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// AX サイズなら column を縦に積む。
+    private var useStackedLayout: Bool {
+        dynamicTypeSize >= .accessibility1
+    }
+
+    /// テキストサイズに応じてラベル列の幅を計算 (= ラベルが折り返さないように)
+    private var labelColumnWidth: CGFloat {
+        switch dynamicTypeSize {
+        case .accessibility5, .accessibility4: return 140
+        case .accessibility3, .accessibility2: return 120
+        case .accessibility1, .xxxLarge:       return 100
+        default:                               return 80
+        }
+    }
+
+    /// リマインダー準拠の 12 色パレット。
+    private let palette: [String] = [
+        "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#5AC8FA", "#5B8DEF",
+        "#5856D6", "#FF2D55", "#AF52DE", "#A2845E", "#8E8E93", "#FFB1C8"
+    ]
+
+    /// 現在選択中のカラー (フォールバックはアクセントカラー)。
+    private var selectedColor: Color {
+        Color(hex: colorHex) ?? .accentColor
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                // ヘッダ (タブ風タイトル)
+                HStack {
+                    Spacer()
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(selectedColor))
+                        .foregroundStyle(.white)
+                    Spacer()
+                }
+                .padding(.top, 18)
+                .padding(.bottom, 14)
+
+                // フォーム
+                VStack(spacing: 16) {
+                    // 名前
+                    formRow(label: "名前:") {
+                        TextField("", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    // カラー + アイコン (AX サイズなら縦並び)
+                    colorAndIconRow
+
+                    Divider().padding(.top, 4)
+
+                    // 既定通貨
+                    formRow(label: "既定通貨:") {
+                        Picker("", selection: $currencyCode) {
+                            ForEach(CurrencyCatalog.all) { opt in
+                                Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 320, alignment: .leading)
+                        Spacer(minLength: 0)
+                    }
+
+                    Divider().padding(.top, 4)
+
+                    // ボタン
+                    HStack {
+                        if let destructiveAction {
+                            Button("削除", role: .destructive) {
+                                destructiveAction()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        Spacer()
+                        Button("キャンセル") { onCancel() }
+                        Button(primaryActionLabel) { onSave() }
+                            .keyboardShortcut(.return)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 18)
+            }
+        }
+        .scrollIndicators(.never)
+        .frame(width: 560)
+        .frame(minHeight: 280, maxHeight: 720)
+    }
+
+    /// label が AX サイズで折り返す前提のラベル付き行。狭い時は縦並び。
+    @ViewBuilder
+    private func formRow<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if useStackedLayout {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(label).fixedSize(horizontal: false, vertical: true)
+                content()
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                    .frame(width: labelColumnWidth, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                content()
+            }
+        }
+    }
+
+    /// カラー + アイコン 行。AX サイズでは縦に積む。
+    @ViewBuilder
+    private var colorAndIconRow: some View {
+        if useStackedLayout {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("カラー:")
+                    colorGrid
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("アイコン:")
+                    symbolPickerButton
+                }
+            }
+        } else {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        Text("カラー:")
+                            .frame(width: labelColumnWidth, alignment: .trailing)
+                        colorGrid
+                    }
+                }
+                Divider().frame(height: 60)
+                HStack(spacing: 10) {
+                    Text("アイコン:")
+                    symbolPickerButton
+                }
+            }
+        }
+    }
+
+    private var colorGrid: some View {
+        let cols = Array(repeating: GridItem(.fixed(28), spacing: 10), count: 6)
+        return LazyVGrid(columns: cols, alignment: .leading, spacing: 8) {
+            ForEach(palette, id: \.self) { hex in
+                let isOn = (hex == colorHex)
+                Circle()
+                    .fill(Color(hex: hex) ?? .blue)
+                    .frame(width: 22, height: 22)
+                    .overlay {
+                        if isOn {
+                            Circle()
+                                .stroke(Color(hex: hex) ?? .blue, lineWidth: 2)
+                                .frame(width: 28, height: 28)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { colorHex = hex }
+            }
+        }
+    }
+
+    private var symbolPickerButton: some View {
+        Button {
+            showingSymbolPicker.toggle()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(selectedColor)
+                    .frame(width: 44, height: 44)
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingSymbolPicker, arrowEdge: .top) {
+            symbolGrid
+        }
+    }
+
+    private var symbolGrid: some View {
+        let cols = Array(repeating: GridItem(.fixed(40), spacing: 8), count: 6)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(SheetSymbols.sections) { section in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(section.title)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 2)
+                        LazyVGrid(columns: cols, spacing: 8) {
+                            ForEach(section.symbols, id: \.self) { sym in
+                                symbolButton(sym)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .scrollIndicators(.never)
+        .frame(width: 320, height: 360)
+        .sheet(isPresented: $showingPaywall) { PaywallView() }
+    }
+
+    @ViewBuilder
+    private func symbolButton(_ sym: String) -> some View {
+        let isSelected = (symbol == sym)
+        let isLocked = SheetSymbols.isPremiumSymbol(sym) && !pm.isPremium
+        Button {
+            if isLocked {
+                showingPaywall = true
+            } else {
+                symbol = sym
+                showingSymbolPicker = false
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isSelected
+                          ? AnyShapeStyle(selectedColor)
+                          : AnyShapeStyle(.quaternary))
+                    .frame(width: 36, height: 36)
+                if isSelected {
+                    Circle()
+                        .stroke(selectedColor, lineWidth: 2)
+                        .frame(width: 40, height: 40)
+                }
+                Image(systemName: sym)
+                    .font(.callout)
+                    .foregroundStyle(isSelected ? .white : .primary)
+                    .opacity(isLocked ? 0.45 : 1)
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(3)
+                        .background(Circle().fill(Color.accentColor))
+                        .offset(x: 13, y: 13)
+                }
+            }
+            .frame(width: 40, height: 40)
+        }
+        .buttonStyle(.plain)
     }
 }
 

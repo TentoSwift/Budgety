@@ -4,6 +4,11 @@
 //
 
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct CategorySeed {
     let name: String
@@ -44,25 +49,69 @@ enum CategoryDefaults {
     // MARK: - Symbol Catalog
 
     /// 無料ユーザーが選べる SF Symbol カタログ。シート初期 seed と日常用途を網羅。
-    static let freeSymbols: [String] = [
+    /// `_rawFreeSymbols` から実行時に OS に存在するシンボルだけ抽出する。
+    static let freeSymbols: [String] = _rawFreeSymbols.filter(isSymbolAvailable)
+
+    /// OS に依存しない生リスト。実行時にフィルタするので新しい OS のみ存在するシンボルを
+    /// 含めても安全。
+    private static let _rawFreeSymbols: [String] = [
+        // 食事
         "fork.knife", "cup.and.saucer.fill", "wineglass.fill", "birthday.cake.fill", "carrot.fill",
+        "mug.fill", "takeoutbag.and.cup.and.straw.fill", "popcorn.fill",
+        // 交通
         "car.fill", "bus.fill", "tram.fill", "airplane", "bicycle", "fuelpump.fill",
+        "ferry.fill", "scooter",
+        // 家・暮らし
         "house.fill", "bed.double.fill", "lightbulb.fill", "drop.fill", "flame.fill", "bolt.fill",
+        "sofa.fill", "shower.fill",
+        // 買い物・お金
         "cart.fill", "bag.fill", "tag.fill", "gift.fill", "creditcard.fill",
+        "wallet.bifold.fill", "basket.fill",
+        // 娯楽・メディア
         "gamecontroller.fill", "tv.fill", "music.note", "film.fill", "headphones",
+        "ticket.fill",
+        // 健康・医療
         "cross.case.fill", "pills.fill", "bandage.fill", "heart.fill",
+        "stethoscope",
+        // 教育・仕事
         "book.fill", "graduationcap.fill", "pencil", "studentdesk",
+        "briefcase.fill", "laptopcomputer",
+        // スポーツ
         "dumbbell.fill", "figure.run", "tennis.racket", "soccerball",
-        "pawprint.fill", "leaf.fill", "tshirt.fill", "scissors",
+        "figure.walk", "figure.yoga",
+        // ペット・自然
+        "pawprint.fill", "leaf.fill", "dog.fill", "cat.fill",
+        // ファッション・美容
+        "tshirt.fill", "scissors",
+        // 工具・DIY
         "wrench.and.screwdriver.fill", "hammer.fill", "trash.fill",
+        // 通貨
         "yensign.circle.fill", "dollarsign.circle.fill", "creditcard.and.123",
+        "banknote.fill",
+        // 通信
         "phone.fill", "envelope.fill", "wifi", "globe",
+        "message.fill",
+        // 人
         "person.fill", "person.2.fill", "figure.and.child.holdinghands",
-        "ellipsis.circle.fill", "questionmark.circle.fill", "star.fill", "sparkles"
+        "person.3.fill",
+        // その他
+        "ellipsis.circle.fill", "questionmark.circle.fill", "star.fill", "sparkles",
+        "calendar", "clock.fill", "bell.fill"
     ]
 
+    /// 指定シンボルが現在のプラットフォームに存在するか。
+    static func isSymbolAvailable(_ symbol: String) -> Bool {
+        #if canImport(UIKit)
+        return UIImage(systemName: symbol) != nil
+        #elseif canImport(AppKit)
+        return NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil
+        #else
+        return true
+        #endif
+    }
+
     /// Premium ユーザーだけが選べる追加 SF Symbol。約 1000 種類のキュレーション。
-    /// 無料カタログとの重複は無し。
+    /// 無料カタログとの重複は無し。存在しないシンボルは実行時に除外される。
     static let premiumSymbols: [String] = {
         var s: [String] = []
         s.append(contentsOf: SFCatalog.foodAndDrink)
@@ -84,9 +133,9 @@ enum CategoryDefaults {
         s.append(contentsOf: SFCatalog.weatherAndNature)
         s.append(contentsOf: SFCatalog.figures)
         s.append(contentsOf: SFCatalog.symbolsAndMisc)
-        // 無料カタログとの重複を除外
+        // 無料カタログとの重複を除外 + 存在しないシンボルを除外
         var seen = Set(freeSymbols)
-        return s.filter { seen.insert($0).inserted }
+        return s.filter { isSymbolAvailable($0) && seen.insert($0).inserted }
     }()
 
     /// 全アイコン (= 無料 + Premium)。グリッド表示順は free 優先 + premium 後追加。
@@ -120,28 +169,30 @@ enum CategoryDefaults {
     }
 
     /// EditCategoryView 等でセクション見出し付きグリッドを描画するための一覧。
+    /// 各セクションの symbols は OS に存在するものだけにフィルタ済み。
+    /// 結果空になったセクションは除外。
     static let symbolSections: [SymbolSection] = [
         SymbolSection(id: "free",                  title: "基本",             symbols: freeSymbols),
-        SymbolSection(id: "foodAndDrink",          title: "食べ物・飲み物",   symbols: SFCatalog.foodAndDrink),
-        SymbolSection(id: "transport",             title: "交通・移動",       symbols: SFCatalog.transport),
-        SymbolSection(id: "homeAndAppliance",      title: "家・家電",         symbols: SFCatalog.homeAndAppliance),
-        SymbolSection(id: "shoppingAndMoney",      title: "買い物・お金",     symbols: SFCatalog.shoppingAndMoney),
-        SymbolSection(id: "entertainmentAndMedia", title: "娯楽・メディア",   symbols: SFCatalog.entertainmentAndMedia),
-        SymbolSection(id: "sportsAndFitness",      title: "スポーツ・運動",   symbols: SFCatalog.sportsAndFitness),
-        SymbolSection(id: "healthAndMedical",      title: "健康・医療",       symbols: SFCatalog.healthAndMedical),
-        SymbolSection(id: "educationAndWork",      title: "教育・仕事",       symbols: SFCatalog.educationAndWork),
-        SymbolSection(id: "devicesAndTech",        title: "デバイス・IT",     symbols: SFCatalog.devicesAndTech),
-        SymbolSection(id: "communication",         title: "通信・連絡",       symbols: SFCatalog.communication),
-        SymbolSection(id: "petsAndNature",         title: "ペット・自然",     symbols: SFCatalog.petsAndNature),
-        SymbolSection(id: "fashionAndBeauty",      title: "ファッション・美容", symbols: SFCatalog.fashionAndBeauty),
-        SymbolSection(id: "toolsAndDIY",           title: "工具・DIY",        symbols: SFCatalog.toolsAndDIY),
-        SymbolSection(id: "travelAndOutdoor",      title: "旅行・アウトドア", symbols: SFCatalog.travelAndOutdoor),
-        SymbolSection(id: "familyAndKids",         title: "家族・子供",       symbols: SFCatalog.familyAndKids),
-        SymbolSection(id: "seasonsAndHolidays",    title: "季節・行事",       symbols: SFCatalog.seasonsAndHolidays),
-        SymbolSection(id: "weatherAndNature",      title: "天気・自然",       symbols: SFCatalog.weatherAndNature),
-        SymbolSection(id: "figures",               title: "人物・アクション", symbols: SFCatalog.figures),
-        SymbolSection(id: "symbolsAndMisc",        title: "シンボル・その他", symbols: SFCatalog.symbolsAndMisc)
-    ]
+        SymbolSection(id: "foodAndDrink",          title: "食べ物・飲み物",   symbols: SFCatalog.foodAndDrink.filter(isSymbolAvailable)),
+        SymbolSection(id: "transport",             title: "交通・移動",       symbols: SFCatalog.transport.filter(isSymbolAvailable)),
+        SymbolSection(id: "homeAndAppliance",      title: "家・家電",         symbols: SFCatalog.homeAndAppliance.filter(isSymbolAvailable)),
+        SymbolSection(id: "shoppingAndMoney",      title: "買い物・お金",     symbols: SFCatalog.shoppingAndMoney.filter(isSymbolAvailable)),
+        SymbolSection(id: "entertainmentAndMedia", title: "娯楽・メディア",   symbols: SFCatalog.entertainmentAndMedia.filter(isSymbolAvailable)),
+        SymbolSection(id: "sportsAndFitness",      title: "スポーツ・運動",   symbols: SFCatalog.sportsAndFitness.filter(isSymbolAvailable)),
+        SymbolSection(id: "healthAndMedical",      title: "健康・医療",       symbols: SFCatalog.healthAndMedical.filter(isSymbolAvailable)),
+        SymbolSection(id: "educationAndWork",      title: "教育・仕事",       symbols: SFCatalog.educationAndWork.filter(isSymbolAvailable)),
+        SymbolSection(id: "devicesAndTech",        title: "デバイス・IT",     symbols: SFCatalog.devicesAndTech.filter(isSymbolAvailable)),
+        SymbolSection(id: "communication",         title: "通信・連絡",       symbols: SFCatalog.communication.filter(isSymbolAvailable)),
+        SymbolSection(id: "petsAndNature",         title: "ペット・自然",     symbols: SFCatalog.petsAndNature.filter(isSymbolAvailable)),
+        SymbolSection(id: "fashionAndBeauty",      title: "ファッション・美容", symbols: SFCatalog.fashionAndBeauty.filter(isSymbolAvailable)),
+        SymbolSection(id: "toolsAndDIY",           title: "工具・DIY",        symbols: SFCatalog.toolsAndDIY.filter(isSymbolAvailable)),
+        SymbolSection(id: "travelAndOutdoor",      title: "旅行・アウトドア", symbols: SFCatalog.travelAndOutdoor.filter(isSymbolAvailable)),
+        SymbolSection(id: "familyAndKids",         title: "家族・子供",       symbols: SFCatalog.familyAndKids.filter(isSymbolAvailable)),
+        SymbolSection(id: "seasonsAndHolidays",    title: "季節・行事",       symbols: SFCatalog.seasonsAndHolidays.filter(isSymbolAvailable)),
+        SymbolSection(id: "weatherAndNature",      title: "天気・自然",       symbols: SFCatalog.weatherAndNature.filter(isSymbolAvailable)),
+        SymbolSection(id: "figures",               title: "人物・アクション", symbols: SFCatalog.figures.filter(isSymbolAvailable)),
+        SymbolSection(id: "symbolsAndMisc",        title: "シンボル・その他", symbols: SFCatalog.symbolsAndMisc.filter(isSymbolAvailable))
+    ].filter { !$0.symbols.isEmpty }
 }
 
 enum MemberDefaults {
@@ -363,7 +414,16 @@ private enum SFCatalog {
         "watch.analog", "applewatch.watchface",
         "scissors.circle.fill",
         "hanger", "tshirt.circle.fill", "jacket", "jacket.fill",
-        "hat.widebrim.fill", "hat.widebrim", "hat.cap.fill", "hat.cap"
+        "hat.widebrim.fill", "hat.widebrim", "hat.cap.fill", "hat.cap",
+        // 追加
+        "sunglasses", "lipstick.fill",
+        "shoe.circle.fill", "tshirt.fill",
+        "hand.thumbsup.fill", "hand.point.up.fill",
+        "applewatch", "applewatch.case.inset.filled",
+        "scarf.fill",
+        "shoeprints", "shoeprints.circle.fill",
+        "facemask.fill",
+        "person.bust.fill", "person.crop.square.fill"
     ]
 
     static let toolsAndDIY: [String] = [
@@ -374,7 +434,20 @@ private enum SFCatalog {
         "ruler", "pencil.tip.crop.circle", "scissors",
         "paintpalette", "paintpalette.fill",
         "lightbulb.led.fill", "lightbulb.2.fill", "lightbulb.slash.fill",
-        "powerplug", "bolt.batteryblock.fill"
+        "powerplug", "bolt.batteryblock.fill",
+        // 追加
+        "wrench.and.screwdriver.fill",
+        "hammer.fill",
+        "paintbrush.pointed.fill", "paintbrush.pointed",
+        "level", "ruler.fill",
+        "scissors.circle",
+        "lightbulb.fill",
+        "ladder", "screwdriver",
+        "drop.fill", "drop.degreesign.fill",
+        "fire.extinguisher.fill",
+        "outdent",
+        "flashlight.on.fill", "flashlight.off.fill",
+        "spigot.fill"
     ]
 
     static let travelAndOutdoor: [String] = [
@@ -389,7 +462,20 @@ private enum SFCatalog {
         "sun.horizon.fill", "moon.haze.fill", "stars.fill",
         "ferry", "sailboat",
         "airplane.circle", "airplane.departure", "airplane.arrival",
-        "ticket", "passport"
+        "ticket", "passport",
+        // 追加
+        "lanyardcard.fill", "ticket.fill",
+        "mappin.and.ellipse", "mappin.circle.fill", "mappin",
+        "globe", "globe.americas.fill", "globe.europe.africa.fill",
+        "binoculars.circle.fill",
+        "suitcase.rolling.fill",
+        "fishingrod.fill",
+        "fish", "fish.fill",
+        "snowflake",
+        "tropicalstorm",
+        "sun.dust.fill", "sun.haze.fill",
+        "wineglass.fill", "fork.knife.circle",
+        "house.lodge.fill"
     ]
 
     static let familyAndKids: [String] = [
@@ -399,7 +485,20 @@ private enum SFCatalog {
         "figure.child", "figure.child.circle.fill",
         "person.2.crop.square.stack.fill", "person.3.sequence.fill",
         "gift", "gift.circle.fill", "birthday.cake", "party.popper",
-        "graduationcap", "baseball.diamond.bases"
+        "graduationcap", "baseball.diamond.bases",
+        // 追加
+        "carseat.right.fill",
+        "person.fill", "person.2.fill", "person.3.fill",
+        "person.crop.circle.fill",
+        "graduationcap.fill",
+        "balloon.2.fill", "balloon.2",
+        "birthday.cake.fill",
+        "party.popper.fill",
+        "puzzlepiece.fill", "puzzlepiece",
+        "die.face.5.fill",
+        "figure.wave",
+        "person.2.crop.square.stack",
+        "figure.2"
     ]
 
     static let seasonsAndHolidays: [String] = [
@@ -410,7 +509,20 @@ private enum SFCatalog {
         "leaf.fill", "leaf.circle", "tree", "snowflake.circle.fill",
         "calendar.badge.exclamationmark", "calendar.badge.minus",
         "calendar.circle", "clock.badge",
-        "flame", "flame.circle.fill", "sparkles.rectangle.stack.fill"
+        "flame", "flame.circle.fill", "sparkles.rectangle.stack.fill",
+        // 追加
+        "calendar", "calendar.circle.fill",
+        "calendar.badge.checkmark", "calendar.badge.clock",
+        "sparkles",
+        "snowflake",
+        "wand.and.stars", "wand.and.stars.inverse",
+        "moon.fill", "sun.max.fill",
+        "rainbow",
+        "tree.fill",
+        "leaf.circle.fill",
+        "lightspectrum.horizontal",
+        "fireplace.fill",
+        "drop.fill"
     ]
 
     static let weatherAndNature: [String] = [

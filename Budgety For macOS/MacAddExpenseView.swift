@@ -32,6 +32,11 @@ struct MacAddExpenseView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
 
+    // AI カテゴリ提案 (FoundationModels)
+    @State private var aiCategorySuggestion: ExpenseCategory?
+    @State private var isComputingAICategory: Bool = false
+    @State private var aiSuggestTask: Task<Void, Never>?
+
     private var categories: [ExpenseCategory] {
         let set = (sheet.categories as? Set<ExpenseCategory>) ?? []
         return set
@@ -40,8 +45,7 @@ struct MacAddExpenseView: View {
     }
 
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty
-        && Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
+        Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
     }
 
     // MARK: - Members
@@ -61,27 +65,36 @@ struct MacAddExpenseView: View {
     /// iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
     /// 一意に見えるようになったので、ID キーは URN で統一する。
     /// PP.recordName も hydrate 時に URN で書かれているので一致する。
+    ///
+    /// 重要: CKShare が取れている場合は **CKShare.participants を source of truth** とする。
+    /// 解除済みのメンバーが PP に残っていても picker には出さない (= 「共有解除済の
+    /// 人がまだ選択できる」バグの対策)。CKShare がまだ取れていない場合のみ PP に
+    /// フォールバックする。
     private var otherProfileIDs: [String] {
         var result: [String] = []
         var seen = Set<String>()
         for id in selfIDSet { seen.insert(id) }
         seen.insert(selfProfileID)
         if let share {
+            // CKShare がある → participants だけを使う (PP は補完しない)
+            // 招待中で未参加 (acceptanceStatus == .pending) のメンバーは選択させない。
             for p in share.participants {
+                guard p.acceptanceStatus == .accepted else { continue }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
                 guard !rn.isEmpty,
                       !UserProfileStore.isSelfPlaceholderRecordName(rn),
                       seen.insert(rn).inserted else { continue }
                 result.append(rn)
             }
-        }
-        // PP からも補完 (CKShare がまだ取れていない場合のフォールバック)
-        let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-        for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-            guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__",
-                  seen.insert(rn).inserted else { continue }
-            result.append(rn)
+        } else {
+            // CKShare 未ロード時のみ PP フォールバック
+            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+                guard let rn = pp.recordName, !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
         }
         return result
     }
@@ -111,6 +124,14 @@ struct MacAddExpenseView: View {
                 }
                 Section("金額 (\(sheet.resolvedDefaultCurrencyCode))") {
                     TextField("0", text: $amountText)
+                        .onChange(of: amountText) { _, new in
+                            // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                            let normalized = new
+                                .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
+                            let allowed = normalized
+                                .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                            if allowed != new { amountText = allowed }
+                        }
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)
@@ -123,6 +144,7 @@ struct MacAddExpenseView: View {
                         }
                     }
                 }
+                aiCategorySuggestionSection
                 Section("支払い者") {
                     payerPicker
                 }
@@ -163,11 +185,12 @@ struct MacAddExpenseView: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollIndicators(.never)
 
             HStack {
                 Button("キャンセル") { dismiss() }
                 Spacer()
-                Button("完了") { save() }
+                Button("OK") { save() }
                     .keyboardShortcut(.return)
                     .disabled(!canSave)
             }
@@ -185,6 +208,112 @@ struct MacAddExpenseView: View {
             Text("元に戻せません。")
         }
         .task { await loadShareAndDefaults() }
+        .onChange(of: title) { _, newValue in
+            kickAICategorySuggest(title: newValue)
+        }
+        .onChange(of: kind) { _, _ in
+            aiSuggestTask?.cancel()
+            aiSuggestTask = nil
+            aiCategorySuggestion = nil
+            isComputingAICategory = false
+            kickAICategorySuggest(title: title)
+        }
+    }
+
+    // MARK: - AI Category Suggestion
+
+    @ViewBuilder
+    private var aiCategorySuggestionSection: some View {
+        if expense == nil {
+            if isComputingAICategory {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "apple.intelligence")
+                            .foregroundStyle(LinearGradient(
+                                colors: [.purple, .pink, .orange],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                        Text("AI でカテゴリを推測中…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            } else if let cat = aiCategorySuggestion,
+                      selectedCategory?.objectID != cat.objectID {
+                Section {
+                    Button {
+                        selectedCategory = cat
+                        aiCategorySuggestion = nil
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "apple.intelligence")
+                                .foregroundStyle(Color.purple)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(Image(systemName: "apple.intelligence")) 提案")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    CategoryIconView(category: cat, size: 22)
+                                    Text(cat.displayName)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            Spacer()
+                            Text("適用")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func kickAICategorySuggest(title: String) {
+        aiSuggestTask?.cancel()
+        aiSuggestTask = nil
+        aiCategorySuggestion = nil
+        isComputingAICategory = false
+
+        guard expense == nil else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2 else { return }
+        guard CategoryAISuggestor.isAvailable else { return }
+
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let kindCats = cats.filter { c in
+            let raw = c.kindRaw ?? ""
+            return raw == kind.rawValue || (kind == .expense && raw.isEmpty)
+        }
+        let names = kindCats.map { $0.displayName }
+        guard !names.isEmpty else { return }
+
+        let snapshotKind = kind
+        isComputingAICategory = true
+        aiSuggestTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if Task.isCancelled { return }
+            let suggested = await CategoryAISuggestor.suggest(
+                title: trimmed,
+                kind: snapshotKind,
+                categories: names
+            )
+            if Task.isCancelled { return }
+            isComputingAICategory = false
+            if let suggested,
+               let match = kindCats.first(where: { $0.displayName == suggested }) {
+                aiCategorySuggestion = match
+            }
+        }
     }
 
     // MARK: - Pickers
@@ -280,7 +409,7 @@ struct MacAddExpenseView: View {
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
         } else {
-            selectedCategory = categories.first
+            selectedCategory = nil
             payerProfileID = selfProfileID
             selectedBeneficiaries = []
         }

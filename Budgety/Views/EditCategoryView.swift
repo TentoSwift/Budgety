@@ -160,7 +160,8 @@ struct EditCategoryView: View {
     }
 
     private var colorCard: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 6)
+        // AX サイズでも列が詰まらないよう、最小幅 54pt の adaptive grid
+        let columns = [GridItem(.adaptive(minimum: 54), spacing: 14)]
         return LazyVGrid(columns: columns, spacing: 14) {
             ForEach(CategoryDefaults.palette, id: \.self) { hex in
                 colorCircle(hex: hex)
@@ -188,7 +189,7 @@ struct EditCategoryView: View {
                     .fill(color)
                     .frame(width: 40, height: 40)
             }
-            .frame(height: 50)
+            .frame(width: 50, height: 50)
         }
         .buttonStyle(.plain)
     }
@@ -209,24 +210,45 @@ struct EditCategoryView: View {
                     selectedColor = newValue.toHex() ?? selectedColor
                 }
         }
-        .frame(height: 50)
+        .frame(width: 50, height: 50)
     }
 
     private var iconCard: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 6)
-        return VStack(alignment: .leading, spacing: 18) {
-            ForEach(CategoryDefaults.symbolSections) { section in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(section.title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(section.symbols, id: \.self) { sym in
-                            iconButton(sym)
-                        }
-                    }
+        // AX サイズでも列が詰まらないよう、最小幅 54pt の adaptive grid
+        let columns = [GridItem(.adaptive(minimum: 54), spacing: 14)]
+        return VStack(alignment: .leading, spacing: 14) {
+            // 基本セクションのみインライン表示
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(CategoryDefaults.freeSymbols, id: \.self) { sym in
+                    iconButton(sym)
                 }
             }
+            // その他カテゴリは別画面で選択
+            NavigationLink {
+                CategoryIconPickerView(
+                    selectedSymbol: $selectedSymbol,
+                    tint: previewColor,
+                    origSymbol: origSymbol
+                )
+            } label: {
+                HStack {
+                    Image(systemName: "square.grid.2x2")
+                        .foregroundStyle(.secondary)
+                    Text("その他のアイコン")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.platformTertiarySystemBackground)
+                )
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(Color.platformSecondarySystemGroupedBackground, in: RoundedRectangle(cornerRadius: 18))
@@ -256,11 +278,12 @@ struct EditCategoryView: View {
                         .frame(width: 50, height: 50)
                 }
                 Circle()
-                    .fill(isSelected ? AnyShapeStyle(previewColor.gradient) : AnyShapeStyle(Color.platformTertiarySystemBackground))
+                    .fill(isSelected ? AnyShapeStyle(previewColor.gradient) : AnyShapeStyle(.quaternary))
                     .frame(width: 40, height: 40)
+                // 固定サイズで Dynamic Type に追従させない (AX で circle を突き抜けないように)
                 Image(systemName: sym)
                     .foregroundStyle(isSelected ? .white : Color.primary)
-                    .font(.callout.weight(.medium))
+                    .font(.system(size: 18, weight: .medium))
                     .opacity(isLockedForUser ? 0.45 : 1)
                 if isLockedForUser {
                     // 右下に小さな鍵アイコン
@@ -272,7 +295,7 @@ struct EditCategoryView: View {
                         .offset(x: 14, y: 14)
                 }
             }
-            .frame(height: 50)
+            .frame(width: 50, height: 50)
         }
         .buttonStyle(.plain)
     }
