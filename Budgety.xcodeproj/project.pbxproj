@@ -14,7 +14,7 @@
 		2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		4D8484612FADB766001AB1B7 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 4D8484602FADB766001AB1B7 /* CustomPicker */; };
 		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
-		B0010000B0010000B0010000 /* CustomNavigationBar in Frameworks */ = {isa = PBXBuildFile; productRef = B0030000B0030000B0030000 /* CustomNavigationBar */; };
+		B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */ = {isa = PBXBuildFile; productRef = B0030000B0030000B0030000 /* CustomNavigationTitle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -256,7 +256,7 @@
 			files = (
 				A0010000A0010000A0010000 /* MemojiView in Frameworks */,
 				2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */,
-				B0010000B0010000B0010000 /* CustomNavigationBar in Frameworks */,
+				B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,7 +347,7 @@
 			packageProductDependencies = (
 				A0030000A0030000A0030000 /* MemojiView */,
 				2D84845F2FADB766001AB1B6 /* CustomPicker */,
-				B0030000B0030000B0030000 /* CustomNavigationBar */,
+				B0030000B0030000B0030000 /* CustomNavigationTitle */,
 			);
 			productName = Expenso;
 			productReference = 2DDCE11E2FA8974700A42F60 /* Budgety.app */;
@@ -434,7 +434,7 @@
 			packageReferences = (
 				A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */,
 				2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */,
-				B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationBar" */,
+				B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationTitle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2DDCE11F2FA8974700A42F60 /* Products */;
@@ -1037,9 +1037,9 @@
 				minimumVersion = 0.0.4;
 			};
 		};
-		B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationBar" */ = {
+		B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationTitle" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/vistar941/CustomNavigationBar.git";
+			repositoryURL = "https://github.com/Chronos2500/CustomNavigationTitle.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.0;
@@ -1063,10 +1063,10 @@
 			package = A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */;
 			productName = MemojiView;
 		};
-		B0030000B0030000B0030000 /* CustomNavigationBar */ = {
+		B0030000B0030000B0030000 /* CustomNavigationTitle */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationBar" */;
-			productName = CustomNavigationBar;
+			package = B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationTitle" */;
+			productName = CustomNavigationTitle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -8,7 +8,7 @@ import CoreData
 import CloudKit
 import CustomPicker
 #if os(iOS)
-import CustomNavigationBar
+import CustomNavigationTitle
 #endif
 
 struct SheetDetailView: View {
@@ -146,7 +146,9 @@ struct SheetDetailView: View {
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
                 #if os(iOS)
-                .headerViewAnchor()
+                // SummaryCard が画面から消えたタイミングでナビバーに
+                // タイトルがフェードイン (CustomNavigationTitle)。
+                .titleVisibilityAnchor()
                 #endif
             }
             .listSectionSeparator(.hidden)
@@ -174,9 +176,8 @@ struct SheetDetailView: View {
         }
         .listStyle(.plain)
         #if os(iOS)
-        // Apple Music / App Store 風: スクロールで SummaryCard が隠れたら
-        // ナビバー背景 + タイトルがフェードイン。
-        .scrollAwareNavBar()
+        // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
+        .scrollAwareTitle(record.displayName)
         #endif
         .navigationTitle(record.displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -770,10 +771,14 @@ private struct SummaryCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
             HStack(spacing: 10) {
-                Image(systemName: record.symbol ?? "person.2.fill")
-                    .foregroundStyle(.white)
-                    .padding(8)
-                    .background(Circle().fill(record.tint.gradient))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(record.tint.gradient)
+                    Image(systemName: record.symbol ?? "person.2.fill")
+                        .foregroundStyle(.white)
+                        .font(.callout.weight(.semibold))
+                }
+                .frame(width: 40, height: 40)
                 Text(record.displayName)
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
@@ -1310,7 +1315,15 @@ private struct ExpenseRowView: View {
         let payerName = expense.displayPaidBy
         let showAvatar = !payerName.isEmpty && !(isSoloSheet && payerIsSelf)
         ZStack(alignment: .bottomTrailing) {
-            CategoryIconView(expense: expense, size: 36)
+            // カテゴリアイコンの背景は Circle ではなく RoundedRectangle に統一。
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(expense.categoryTint.gradient)
+                Image(systemName: expense.categorySymbol)
+                    .foregroundStyle(.white)
+                    .font(.title3.weight(.semibold))
+            }
+            .frame(width: 48, height: 48)
             if showAvatar {
                 PayerAvatar(
                     member: expense.resolvedPayer,
@@ -1318,12 +1331,12 @@ private struct ExpenseRowView: View {
                     fallbackName: payerName,
                     fallbackColorHex: "#8E8E93",
                     fallbackPhoto: nil,
-                    size: 18
+                    size: 22
                 )
                 .overlay(
                     Circle().stroke(Color.platformSystemBackground, lineWidth: 2)
                 )
-                .offset(x: 4, y: 4)
+                .offset(x: 6, y: 6)
             }
         }
     }

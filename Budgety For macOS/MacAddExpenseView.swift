@@ -32,6 +32,18 @@ struct MacAddExpenseView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
 
+    // CRDT 差分書き戻し用スナップショット (= 編集ロード時に保持し、保存時に変更があった
+    // フィールドだけ書き戻す)。他端末が別フィールドを編集していた時の同時編集衝突を防ぐ。
+    @State private var origTitle: String = ""
+    @State private var origAmountText: String = ""
+    @State private var origKindRaw: String = ""
+    @State private var origCurrencyCode: String = ""
+    @State private var origCategoryObjectID: NSManagedObjectID?
+    @State private var origPayerProfileID: String = ""
+    @State private var origDate: Date = .distantPast
+    @State private var origNote: String = ""
+    @State private var origBeneficiaryCSV: String = ""
+
     // AI カテゴリ提案 (FoundationModels)
     @State private var aiCategorySuggestion: ExpenseCategory?
     @State private var isComputingAICategory: Bool = false
@@ -408,6 +420,17 @@ struct MacAddExpenseView: View {
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
+
+            // CRDT 差分書き戻し用にスナップショット保存
+            origTitle = title
+            origAmountText = amountText
+            origKindRaw = e.kindRaw ?? ""
+            origCurrencyCode = e.currencyCode ?? ""
+            origCategoryObjectID = e.category?.objectID
+            origPayerProfileID = e.payerProfileID ?? ""
+            origDate = date
+            origNote = note
+            origBeneficiaryCSV = e.beneficiaryProfileIDs ?? ""
         } else {
             selectedCategory = nil
             payerProfileID = selfProfileID
@@ -421,42 +444,97 @@ struct MacAddExpenseView: View {
 
         let profile = UserProfileStore.shared
 
-        let target: Expense
         if let existing = expense {
-            target = existing
+            // 編集モード: CRDT 差分書き戻し (変更があったフィールドだけ touch)
+            // → 他端末が別フィールドを同時編集していてもその変更を消さない。
+            applyChanges(toExpense: existing, trimmedTitle: trimmed, amount: amount, profile: profile)
         } else {
-            target = Expense(context: viewContext)
+            // 新規作成: 全フィールド書き込み
+            let target = Expense(context: viewContext)
             if let store = sheet.objectID.persistentStore {
                 viewContext.assign(target, to: store)
             }
             target.sheet = sheet
             target.createdAt = .now
+            target.title = trimmed
+            target.amount = NSDecimalNumber(decimal: amount)
+            target.kindRaw = kind.rawValue
+            target.currencyCode = sheet.resolvedDefaultCurrencyCode
+            target.date = date
+            target.note = note
+            target.categoryRaw = selectedCategory?.name
+            if let cat = selectedCategory,
+               cat.objectID.persistentStore == sheet.objectID.persistentStore {
+                target.category = cat
+            } else {
+                target.category = nil
+            }
+            target.payerProfileID = payerProfileID
+            if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
+                target.payerMemberID = mid
+            } else {
+                target.payerMemberID = nil
+            }
+            target.beneficiaryIDList = Array(selectedBeneficiaries)
         }
-        target.title = trimmed
-        target.amount = NSDecimalNumber(decimal: amount)
-        target.kindRaw = kind.rawValue
-        target.currencyCode = sheet.resolvedDefaultCurrencyCode
-        target.date = date
-        target.note = note
-        target.categoryRaw = selectedCategory?.name
-        if let cat = selectedCategory,
-           cat.objectID.persistentStore == sheet.objectID.persistentStore {
-            target.category = cat
-        } else {
-            target.category = nil
-        }
-        // 支払い者
-        target.payerProfileID = payerProfileID
-        if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
-            target.payerMemberID = mid
-        } else {
-            target.payerMemberID = nil
-        }
-        // 受益者 (ピッカーで選んだ ID をそのまま CSV に)
-        target.beneficiaryIDList = Array(selectedBeneficiaries)
 
         PersistenceController.shared.save()
         dismiss()
+    }
+
+    /// 編集中の差分を Expense に書き戻す。
+    /// `origXxx` スナップショットと現在値を比較し、**変わったフィールドだけ** 上書きする。
+    /// これにより他端末が同時に別フィールドを編集していても、こちらの save でそれを
+    /// 上書きしてしまわないようにする。
+    @MainActor
+    private func applyChanges(
+        toExpense expense: Expense,
+        trimmedTitle: String,
+        amount: Decimal,
+        profile: UserProfileStore
+    ) {
+        if trimmedTitle != origTitle { expense.title = trimmedTitle }
+        if amountText != origAmountText {
+            expense.amount = NSDecimalNumber(decimal: amount)
+        }
+        if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
+        let newCurrency = sheet.resolvedDefaultCurrencyCode
+        if newCurrency != origCurrencyCode { expense.currencyCode = newCurrency }
+        if !Calendar.current.isDate(date, inSameDayAs: origDate) {
+            expense.date = date
+        }
+        if note != origNote { expense.note = note }
+        if selectedCategory?.objectID != origCategoryObjectID {
+            expense.categoryRaw = selectedCategory?.name
+            if let cat = selectedCategory,
+               cat.objectID.persistentStore == sheet.objectID.persistentStore {
+                expense.category = cat
+            } else {
+                expense.category = nil
+            }
+        }
+        if payerProfileID != origPayerProfileID {
+            expense.payerProfileID = payerProfileID
+            // paidBy は denormalized キャッシュなので空にして、表示は payerProfileID 経由で解決
+            expense.paidBy = nil
+            if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
+                expense.payerMemberID = mid
+            } else {
+                expense.payerMemberID = nil
+            }
+        }
+        // beneficiaryIDList は内部で重複・空除去するので、CSV 比較で diff を取る
+        let newCSV = Array(selectedBeneficiaries)
+            .sorted()
+            .joined(separator: ",")
+        let oldCSV = origBeneficiaryCSV
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .sorted()
+            .joined(separator: ",")
+        if newCSV != oldCSV {
+            expense.beneficiaryIDList = Array(selectedBeneficiaries)
+        }
     }
 
     private func deleteExpense() {

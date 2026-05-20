@@ -159,10 +159,14 @@ struct BudgetyMacSheetView: View {
         let code = sheet.resolvedDefaultCurrencyCode
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: sheet.symbol ?? "person.2.fill")
-                    .foregroundStyle(.white)
-                    .padding(8)
-                    .background(Circle().fill(sheet.tint.gradient))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(sheet.tint.gradient)
+                    Image(systemName: sheet.symbol ?? "person.2.fill")
+                        .foregroundStyle(.white)
+                        .font(.callout.weight(.semibold))
+                }
+                .frame(width: 40, height: 40)
                 Text(sheet.displayName).font(.title3.weight(.semibold))
                 Spacer()
             }

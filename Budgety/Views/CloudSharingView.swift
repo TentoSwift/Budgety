@@ -588,14 +588,14 @@ private struct ParticipantRow: View {
         if isSelf {
             return userProfile.resolvedDisplayName
         }
-        // 参加者: PP > nameComponents > email > phone > メンバー の順。
-        // (旧コードは accepted 限定 + pending の場合 email 直行で PP より email が優先されていた)
-        if let n = participantProfile?.displayName, !n.isEmpty {
-            return n
-        }
+        // 参加者: CKShare の userIdentity.nameComponents (= Apple ID 名) を最優先。
+        // 取れない場合のフォールバックとして PP > email > phone > メンバー。
         if let nc = participant.userIdentity.nameComponents {
             let formatted = PersonNameComponentsFormatter().string(from: nc)
             if !formatted.isEmpty { return formatted }
+        }
+        if let n = participantProfile?.displayName, !n.isEmpty {
+            return n
         }
         if let info = participant.userIdentity.lookupInfo {
             if let email = info.emailAddress { return email }
@@ -608,9 +608,8 @@ private struct ParticipantRow: View {
         if isSelf {
             return emailAddress
         }
-        // PP の displayName を出している時は補助行として email を出す
-        // (PP 名がニックネームの場合に「本物の人」が分かるように)
-        if let n = participantProfile?.displayName, !n.isEmpty {
+        // CKShare の nameComponents が取れて表示している場合は email を補助行に
+        if participant.userIdentity.nameComponents != nil {
             return emailAddress
         }
         return nil
