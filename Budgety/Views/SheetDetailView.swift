@@ -818,12 +818,25 @@ private struct SummaryCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(record.tint.gradient)
-                    Image(systemName: record.symbol ?? "person.2.fill")
-                        .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
+                ZStack(alignment: .bottomTrailing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(record.tint.gradient)
+                        Image(systemName: record.symbol ?? "person.2.fill")
+                            .foregroundStyle(.white)
+                            .font(.callout.weight(.semibold))
+                    }
+                    .frame(width: 40, height: 40)
+                    // 検索中はアイコン右下に虫眼鏡バッジを重ねる。
+                    if searchActive {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(4)
+                            .background(Circle().fill(Color.accentColor))
+                            .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
+                            .offset(x: 5, y: 5)
+                    }
                 }
                 .frame(width: 40, height: 40)
                 Text(record.displayName)
