@@ -73,7 +73,9 @@ final class _PeriodMenuUIControl: UIControl {
     /// 通常時は `>` (chevron.right)、メニュー展開中は `↓` (chevron.down) になるよう
     /// シンボル画像をスワップする。ラベルに合わせて Dynamic Type で拡大する。
     private let chevron: UIImageView = {
+        // Dynamic Type で拡大 (textStyle) しつつ semibold ウェイトにする。
         let cfg = UIImage.SymbolConfiguration(textStyle: .title3, scale: .small)
+            .applying(UIImage.SymbolConfiguration(weight: .semibold))
         let img = UIImage(systemName: "chevron.right", withConfiguration: cfg)
         let v = UIImageView(image: img)
         v.tintColor = .secondaryLabel
