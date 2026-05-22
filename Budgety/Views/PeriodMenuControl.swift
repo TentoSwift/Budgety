@@ -56,19 +56,23 @@ final class _PeriodMenuUIControl: UIControl {
 
     private let periodLabel: UILabel = {
         let l = UILabel()
-        l.font = .systemFont(ofSize: 20, weight: .semibold)
+        // 20pt をベースに Dynamic Type で拡大縮小する (固定サイズにしない)。
+        let base = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        l.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: base)
+        l.adjustsFontForContentSizeCategory = true
         l.textColor = .secondaryLabel
         return l
     }()
 
     /// 通常時は `>` (chevron.right)、メニュー展開中は `↓` (chevron.down) になるよう
-    /// シンボル画像をスワップする。
+    /// シンボル画像をスワップする。ラベルに合わせて Dynamic Type で拡大する。
     private let chevron: UIImageView = {
-        let cfg = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        let cfg = UIImage.SymbolConfiguration(textStyle: .title3, scale: .small)
         let img = UIImage(systemName: "chevron.right", withConfiguration: cfg)
         let v = UIImageView(image: img)
         v.tintColor = .secondaryLabel
         v.preferredSymbolConfiguration = cfg
+        v.adjustsImageSizeForAccessibilityContentSizeCategory = true
         return v
     }()
 
