@@ -39,8 +39,12 @@ struct SheetListView: View {
     @State private var searchPeriod: SheetDetailView.Period = .all
     /// 検索結果からタップした支出 (= 全シート横断検索のヒット) を編集する。
     @State private var editingSearchExpense: Expense?
+    /// 検索結果から解錠しようとしているロック中シート。
+    @State private var unlockingSheet: ExpenseSheet?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
+    /// シートの解錠状態に追従して検索結果を再計算するため observe する。
+    @ObservedObject private var lockManager = SheetLockManager.shared
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
 
     private var trimmedQuery: String {
@@ -137,6 +141,16 @@ struct SheetListView: View {
             .sheet(item: $editingSearchExpense) { expense in
                 AddExpenseView(expense: expense)
             }
+            .sheet(item: $unlockingSheet) { sheet in
+                NavigationStack {
+                    SheetLockView(
+                        record: sheet,
+                        // 解錠すると lockManager の更新で検索結果に含まれる。
+                        onUnlock: { unlockingSheet = nil },
+                        onCancel: { unlockingSheet = nil }
+                    )
+                }
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
@@ -179,6 +193,12 @@ struct SheetListView: View {
         let q = trimmedQuery.lowercased()
         guard !q.isEmpty else { return [] }
         return sheets.filter { $0.displayName.lowercased().contains(q) }
+    }
+
+    /// ロック中 (パスワードあり & 未解錠) のシート。
+    /// 中身は検索対象外なので、解除導線を出すために列挙する。
+    private var lockedSheets: [ExpenseSheet] {
+        sheets.filter { lockManager.hasPassword(for: $0) && !lockManager.isUnlocked($0) }
     }
 
     /// 検索ヒットをシートごとにまとめた1グループ。
@@ -352,6 +372,38 @@ struct SheetListView: View {
                             tint: group.sheet.tint
                         )
                     }
+                }
+            }
+            // ロック中シートは中身を検索対象外にしている。解除導線を出す
+            // (マッチの有無は漏らさず、解除すれば検索に含まれる)。
+            if !lockedSheets.isEmpty {
+                Section {
+                    ForEach(lockedSheets, id: \.objectID) { sheet in
+                        Button {
+                            unlockingSheet = sheet
+                        } label: {
+                            HStack(spacing: 12) {
+                                SheetIconView(record: sheet, size: 38)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(sheet.displayName)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text("ロック中 · 解除して検索に含める")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "lock.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Label("ロック中のシート", systemImage: "lock.fill")
                 }
             }
         }
