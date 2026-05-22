@@ -97,6 +97,8 @@ struct SheetDetailView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var showingLeaveConfirm: Bool = false
     @State private var exportShareItem: ExportShareItem?
+    /// ロック状態をツールバーボタンに反映するため observe する。
+    @StateObject private var lockManager = SheetLockManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var demoOpenStats: Bool = false
     @State private var demoOpenChat: Bool = false
@@ -251,6 +253,25 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
+            // パスワード設定済みのシートは「解錠中」を示すボタンを表示。
+            // 閲覧中は LockedSheetGate により常に解錠済みなので必ず open アイコン。
+            // タップすると一覧へ戻り、再ロックは LockedSheetGate.onDisappear が行う。
+            if lockManager.hasPassword(for: record) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        // ここで lockManager.lock() を呼ぶと、まだ画面に残っている
+                        // LockedSheetGate が即 SheetLockView に切り替わり、Face ID が
+                        // 自動発火して「一覧へ戻った直後に再認証して開き直す」バグになる。
+                        // 再ロックは pop 後の onDisappear に任せ、ここでは dismiss だけ。
+                        Haptics.warning()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "lock.open.fill")
+                    }
+                    .tint(record.tint)
+                    .accessibilityLabel("今すぐロック")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showingShare = true
