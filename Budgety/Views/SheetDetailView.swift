@@ -88,6 +88,8 @@ struct SheetDetailView: View {
     /// 検索バーがアクティブ (フォーカス) かどうか。
     /// フォーカス直後 (未入力) は全件ではなく 0 件表示にする。
     @State private var searchPresented: Bool = false
+    /// 検索専用の期間。普段の表示の `period` とは独立で、検索開始時は常に全期間。
+    @State private var searchPeriod: Period = .all
     @State private var selectedCategory: ExpenseCategory?
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
@@ -139,18 +141,34 @@ struct SheetDetailView: View {
         searchPresented || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// 現在有効な期間。検索中は検索専用 `searchPeriod`、通常時は `period`。
+    private var effectivePeriod: Period {
+        isSearchActive ? searchPeriod : period
+    }
+
+    /// SummaryCard / 期間メニューに渡す期間バインディング。
+    /// 検索中は `searchPeriod`、通常時は `period` を読み書きする。
+    private var effectivePeriodBinding: Binding<Period> {
+        Binding(
+            get: { isSearchActive ? searchPeriod : period },
+            set: { newValue in
+                if isSearchActive { searchPeriod = newValue } else { period = newValue }
+            }
+        )
+    }
+
     /// 一覧に表示する支出/収入。
     /// 通常時は期間フィルタを適用しない (= 期間ピッカーは SummaryCard の合計にのみ影響)。
-    /// 検索中は期間ピッカーで「その期間のみ」に絞り込む。
+    /// 検索中は検索専用の期間 (初期=全期間) で「その期間のみ」に絞り込む。
     /// カテゴリピル・検索・並び順はここで適用する。
     private var filteredExpenses: [Expense] {
         var list = Array(allExpenses)
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         }
-        // 検索中は期間ピッカーで絞り込む。
+        // 検索中は検索専用の期間で絞り込む。
         if isSearchActive {
-            list = list.filter { period.contains($0.date) }
+            list = list.filter { searchPeriod.contains($0.date) }
         }
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !q.isEmpty {
@@ -174,7 +192,8 @@ struct SheetDetailView: View {
             Section {
                 SummaryCard(
                     record: record,
-                    period: $period,
+                    period: effectivePeriodBinding,
+                    searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
@@ -222,6 +241,10 @@ struct SheetDetailView: View {
         // (Liquid Glass デザインの推奨パターン:
         //  https://qiita.com/RS6/items/2f55281499ef7bad96b2)
         .searchable(text: $searchText, isPresented: $searchPresented, placement: .toolbar, prompt: Text("支出、収入を検索"))
+        .onChange(of: searchPresented) { _, presented in
+            // 検索を開始するたびに期間は全期間から始める (普段の表示期間を引き継がない)。
+            if presented { searchPeriod = .all }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -452,12 +475,12 @@ struct SheetDetailView: View {
 
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
-        selectedCategory != nil || (isSearchActive && period.isFiltering)
+        selectedCategory != nil || (isSearchActive && searchPeriod.isFiltering)
     }
 
     private var filterDescription: String {
         var parts: [String] = []
-        if isSearchActive && period.isFiltering { parts.append("期間「\(period.label)」") }
+        if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
         if selectedCategory != nil { parts.append("カテゴリ") }
         return parts.joined(separator: "・") + "で絞り込まれています。"
     }
@@ -476,7 +499,7 @@ struct SheetDetailView: View {
             } actions: {
                 Button("フィルタをオフにする") {
                     selectedCategory = nil
-                    period = .all
+                    searchPeriod = .all
                 }
             }
         } else {
@@ -707,9 +730,12 @@ struct SheetDetailView: View {
 private struct SummaryCard: View {
     @ObservedObject var record: ExpenseSheet
     @Binding var period: SheetDetailView.Period
+    /// 検索バーがアクティブ (フォーカス中 or 入力済み) か。
+    /// アクティブ かつ クエリ未入力なら合計は 0 (= 行リストの「0 件」と一致させる)。
+    let searchActive: Bool
     let selectedCategory: ExpenseCategory?
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
-    /// 集計を検索ヒットに絞る + ヘッダーを「検索: \"...\" • N 件」表示に切替。
+    /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
     let searchQuery: String
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -722,11 +748,13 @@ private struct SummaryCard: View {
     init(
         record: ExpenseSheet,
         period: Binding<SheetDetailView.Period>,
+        searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
         searchQuery: String = ""
     ) {
         self.record = record
         self._period = period
+        self.searchActive = searchActive
         self.selectedCategory = selectedCategory
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
@@ -736,11 +764,16 @@ private struct SummaryCard: View {
         )
     }
 
-    private var isSearching: Bool { !searchQuery.isEmpty }
+    /// 集計を検索ヒットに絞っているか (= 件数表示やメトリクス非表示の判定)。
+    private var isSearching: Bool { searchActive }
 
     private var code: String { record.resolvedDefaultCurrencyCode }
 
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
+        // 検索フォーカス中でクエリ未入力なら、行リストの「0 件」と合わせて合計も 0。
+        if searchActive && searchQuery.isEmpty {
+            return (0, 0, [], 0)
+        }
         // 期間ピッカーは常に合計に反映する (検索中も「その期間のみ」集計)。
         let categoryID = selectedCategory?.objectID
         let target = code
