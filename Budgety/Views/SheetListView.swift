@@ -29,8 +29,8 @@ struct SheetListView: View {
     @State private var path: [NSManagedObjectID] = []
     @State private var didRestorePath = false
     @State private var searchText: String = ""
-    /// 検索バーがアクティブ (フォーカス) かどうか。未入力でもフォーカスで結果を出す。
-    @State private var searchPresented: Bool = false
+    /// 検索バーがフォーカスされているか。未入力でもフォーカスで結果を出す。
+    @FocusState private var searchFocused: Bool
     /// 検索スコープ (シート名 / 支出・収入)。
     @State private var searchScope: SearchScope = .expenses
     /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
@@ -47,10 +47,16 @@ struct SheetListView: View {
         searchText.trimmingCharacters(in: .whitespaces)
     }
 
+    /// 検索バーがアクティブか (フォーカス中 or クエリ入力済み)。
+    /// 入力後にキーボードを閉じても検索結果は維持する。
+    private var isSearchActive: Bool {
+        searchFocused || !trimmedQuery.isEmpty
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if searchPresented {
+                if isSearchActive {
                     // フォーカス中は (未入力でも) 全シート横断の検索結果を表示する。
                     searchResultsList
                 } else if sheets.isEmpty {
@@ -91,15 +97,16 @@ struct SheetListView: View {
             }
             // SheetDetailView と同じく、検索バーは bottomBar の DefaultToolbarItem に置き、
             // `+` を ToolbarItem で並列に並べる。検索すると全シートから支出を横断検索。
-            .searchable(text: $searchText, isPresented: $searchPresented, placement: .toolbar, prompt: Text("シート・支出を検索"))
+            .searchable(text: $searchText, placement: .toolbar, prompt: Text("シート・支出を検索"))
+            .searchFocused($searchFocused)
             .searchScopes($searchScope) {
                 ForEach(SearchScope.allCases) { scope in
                     Text(scope.rawValue).tag(scope)
                 }
             }
-            .onChange(of: searchPresented) { _, presented in
-                // 検索を開始するたびに期間は全期間から始める。
-                if presented { searchPeriod = .all }
+            .onChange(of: searchFocused) { _, focused in
+                // 新規検索 (フォーカス取得かつ未入力) のたびに期間を全期間から始める。
+                if focused && trimmedQuery.isEmpty { searchPeriod = .all }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

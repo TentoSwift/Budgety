@@ -85,9 +85,9 @@ struct SheetDetailView: View {
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
     @State private var searchText: String = ""
-    /// 検索バーがアクティブ (フォーカス) かどうか。
+    /// 検索バーがフォーカスされているか。
     /// フォーカス直後 (未入力) は全件ではなく 0 件表示にする。
-    @State private var searchPresented: Bool = false
+    @FocusState private var searchFocused: Bool
     /// 検索専用の期間。普段の表示の `period` とは独立で、検索開始時は常に全期間。
     @State private var searchPeriod: Period = .all
     @State private var selectedCategory: ExpenseCategory?
@@ -137,8 +137,9 @@ struct SheetDetailView: View {
     // MARK: - Filtering
 
     /// 検索バーがアクティブか (フォーカス中 or クエリ入力済み)。
+    /// クエリ入力後にキーボードを閉じても (フォーカスが外れても) 検索状態は維持する。
     private var isSearchActive: Bool {
-        searchPresented || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        searchFocused || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// 現在有効な期間。検索中は検索専用 `searchPeriod`、通常時は `period`。
@@ -220,7 +221,7 @@ struct SheetDetailView: View {
 
                 if allExpenses.isEmpty {
                     emptyStateInitial
-                } else if searchPresented && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                } else if searchFocused && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     // 検索フォーカス直後 (未入力) は全件ではなく 0 件 (入力待ち) を表示。
                     emptyStateSearchPrompt
                 } else if filteredExpenses.isEmpty {
@@ -240,10 +241,14 @@ struct SheetDetailView: View {
         // 並列に並べる。ToolbarSpacer で間を空ける。
         // (Liquid Glass デザインの推奨パターン:
         //  https://qiita.com/RS6/items/2f55281499ef7bad96b2)
-        .searchable(text: $searchText, isPresented: $searchPresented, placement: .toolbar, prompt: Text("支出、収入を検索"))
-        .onChange(of: searchPresented) { _, presented in
-            // 検索を開始するたびに期間は全期間から始める (普段の表示期間を引き継がない)。
-            if presented { searchPeriod = .all }
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出、収入を検索"))
+        .searchFocused($searchFocused)
+        .onChange(of: searchFocused) { _, focused in
+            // 新規検索 (フォーカス取得かつ未入力) のたびに期間を全期間から始める。
+            // クエリ入力中の再フォーカスでは期間を保持する。
+            if focused && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                searchPeriod = .all
+            }
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
