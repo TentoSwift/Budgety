@@ -56,7 +56,7 @@ final class _PeriodMenuUIControl: UIControl {
 
     private let periodLabel: UILabel = {
         let l = UILabel()
-        l.font = .systemFont(ofSize: 15, weight: .semibold)
+        l.font = .systemFont(ofSize: 20, weight: .semibold)
         l.textColor = .secondaryLabel
         return l
     }()
@@ -64,7 +64,7 @@ final class _PeriodMenuUIControl: UIControl {
     /// 通常時は `>` (chevron.right)、メニュー展開中は `↓` (chevron.down) になるよう
     /// シンボル画像をスワップする。
     private let chevron: UIImageView = {
-        let cfg = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
         let img = UIImage(systemName: "chevron.right", withConfiguration: cfg)
         let v = UIImageView(image: img)
         v.tintColor = .secondaryLabel

@@ -823,7 +823,8 @@ private struct SummaryCard: View {
                         .fill(record.tint.gradient)
                     Image(systemName: record.symbol ?? "person.2.fill")
                         .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
+                        // 固定サイズ (Dynamic Type で拡大しない) にして 40×40 の枠に収める。
+                        .font(.system(size: 20, weight: .semibold))
                 }
                 .frame(width: 40, height: 40)
                 // 検索中はアイコン右下端に虫眼鏡バッジ。overlay(.bottomTrailing) で
@@ -960,10 +961,10 @@ private struct SummaryCard: View {
         } label: {
             HStack(spacing: 6) {
                 Text(periodHeaderLabel)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
+                    .font(.footnote.weight(.bold))
                     .foregroundStyle(.secondary)
             }
         }
