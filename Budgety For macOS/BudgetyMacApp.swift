@@ -32,6 +32,8 @@ struct BudgetyMacApp: App {
                     }
                 }
                 .task {
+                    // 為替レートを最新化 (キャッシュが当日中なら何もしない)
+                    await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     await UserProfileStore.shared.refreshAppleIDName()
                     // 同 Apple ID の他デバイスで編集された自分のプロフィールを取り込む

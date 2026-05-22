@@ -233,7 +233,7 @@ struct MacShareSheetView: View {
                 .keyboardShortcut(.return)
             }
             if let msg = inviteSucceedMessage {
-                Text(msg).font(.caption).foregroundStyle(.green)
+                Text(msg).font(.caption).foregroundStyle(.secondary)
             }
             Text("相手は iCloud にサインインしている必要があります。招待は CKShare 経由で送られます。")
                 .font(.caption2).foregroundStyle(.secondary)

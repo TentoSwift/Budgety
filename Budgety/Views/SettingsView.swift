@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var showEraseConfirm: Bool = false
     @State private var iCloudAccountStatus: CKAccountStatus = .couldNotDetermine
     @State private var showingProfileEdit: Bool = false
+    /// 既定通貨の override。空文字 = 自動 (システムの地域)。
+    @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
 
     var body: some View {
         NavigationStack {
@@ -136,6 +138,24 @@ struct SettingsView: View {
                         }
                         .disabled(pm.isProcessing)
                     }
+                }
+
+                Section {
+                    Picker(selection: $preferredCurrency) {
+                        // 自動 = システムの地域設定に従う
+                        Text("自動 (\(CurrencyCatalog.option(for: CurrencyCatalog.localeDefaultCode).displayName))")
+                            .tag("")
+                        ForEach(CurrencyCatalog.all) { opt in
+                            Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
+                        }
+                    } label: {
+                        Label("既定の通貨", systemImage: "yensign.circle")
+                    }
+                    .pickerStyle(.navigationLink)
+                } header: {
+                    Text("通貨")
+                } footer: {
+                    Text("新しいシートの既定通貨や、検索結果の合計の換算に使われます。「自動」ではシステムの地域設定（現在: \(CurrencyCatalog.localeDefaultCode)）に従います。")
                 }
 
                 Section("為替レート") {

@@ -16,6 +16,8 @@ struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var pub = PublicProfileSync.shared
+    /// FX レート更新で月合計 / 日合計を再計算するために observe する。
+    @ObservedObject private var fx = FXRatesService.shared
 
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
@@ -27,6 +29,9 @@ struct BudgetyMacSheetView: View {
     @State private var showingCSVImport = false
     @State private var showingStats = false
     @State private var showingShare = false
+    /// サマリーヒーローが画面外までスクロールしたか。
+    /// true のときだけツールバーのタイトルにシート名を出す (= iOS の fade 風)。
+    @State private var isScrolledPastHero = false
 
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
@@ -46,18 +51,29 @@ struct BudgetyMacSheetView: View {
         monthlyTotals.expense
     }
 
-    /// 今月の支出 / 収入 合計。
+    /// 今月の支出 / 収入 合計 (シート既定通貨に FX 換算済み)。
     private var monthlyTotals: (expense: Decimal, income: Decimal) {
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: .now)
+        let target = sheet.resolvedDefaultCurrencyCode
+        let fx = FXRatesService.shared
         var expense: Decimal = 0
         var income: Decimal = 0
         for e in allExpenses {
             guard let d = e.date else { continue }
             let c = cal.dateComponents([.year, .month], from: d)
             guard c.year == comps.year && c.month == comps.month else { continue }
-            if e.kind == .expense { expense += e.amountDecimal }
-            else if e.kind == .income { income += e.amountDecimal }
+            // 通貨が違えば FX 換算。失敗 (レート未取得) は加算しない。
+            let from = e.resolvedCurrencyCode
+            let converted: Decimal?
+            if from == target {
+                converted = e.amountDecimal
+            } else {
+                converted = fx.convert(e.amountDecimal, from: from, to: target)
+            }
+            guard let amount = converted else { continue }
+            if e.kind == .expense { expense += amount }
+            else if e.kind == .income { income += amount }
         }
         return (expense, income)
     }
@@ -78,7 +94,20 @@ struct BudgetyMacSheetView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
-        .navigationTitle(sheet.displayName)
+        // スクロール量を直接監視 (macOS 15+/26 で確実に動く)。
+        // ヒーローの高さぶん (約 140pt) スクロールしたら「通り過ぎた」とみなす。
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            geo.contentOffset.y
+        } action: { _, offsetY in
+            let scrolledPast = offsetY > 120
+            if scrolledPast != isScrolledPastHero {
+                withAnimation(.easeIn(duration: 0.15)) {
+                    isScrolledPastHero = scrolledPast
+                }
+            }
+        }
+        // スクロール前は空文字、ヒーローを通り過ぎたらシート名を三項演算子で代入。
+        .navigationTitle(isScrolledPastHero ? sheet.displayName : "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -310,7 +339,7 @@ struct BudgetyMacSheetView: View {
             Spacer()
             Text(e.formattedSignedAmount)
                 .font(.callout.monospacedDigit())
-                .foregroundStyle(e.kind == .income ? .green : .primary)
+                .foregroundStyle(.primary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -361,8 +390,18 @@ struct BudgetyMacSheetView: View {
     }
 
     private func daySigned(_ items: [Expense], code: String) -> String {
-        let total = items.reduce(Decimal(0)) { acc, e in
-            acc + (e.kind == .income ? e.amountDecimal : -e.amountDecimal)
+        let fx = FXRatesService.shared
+        var total: Decimal = 0
+        for e in items {
+            let from = e.resolvedCurrencyCode
+            let converted: Decimal?
+            if from == code {
+                converted = e.amountDecimal
+            } else {
+                converted = fx.convert(e.amountDecimal, from: from, to: code)
+            }
+            guard let amount = converted else { continue }
+            total += (e.kind == .income ? amount : -amount)
         }
         let sign = total >= 0 ? "+" : ""
         return sign + CurrencyCatalog.format(total, code: code)

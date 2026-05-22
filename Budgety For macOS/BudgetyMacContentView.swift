@@ -356,10 +356,13 @@ private struct MacSheetFormDialog: View {
                     // ボタン
                     HStack {
                         if let destructiveAction {
-                            Button("削除", role: .destructive) {
+                            Button {
                                 destructiveAction()
+                            } label: {
+                                Text("削除")
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
                         }
                         Spacer()
                         Button("キャンセル") { onCancel() }
@@ -639,7 +642,7 @@ struct BudgetyMacSettingsView: View {
                 if let acceptMessage {
                     Text(acceptMessage)
                         .font(.caption)
-                        .foregroundStyle(acceptMessage.contains("失敗") ? .red : .green)
+                        .foregroundStyle(acceptMessage.contains("失敗") ? .red : .secondary)
                 }
             } header: {
                 Text("共有シートに参加")

@@ -22,6 +22,7 @@ struct MacAddExpenseView: View {
 
     @State private var title: String = ""
     @State private var amountText: String = ""
+    @State private var currencyCode: String = CurrencyCatalog.defaultCode
     @State private var date: Date = .now
     @State private var kind: TransactionKind = .expense
     @State private var note: String = ""
@@ -132,18 +133,34 @@ struct MacAddExpenseView: View {
                     .pickerStyle(.segmented)
                 }
                 Section("タイトル") {
-                    TextField("コンビニ、ランチ など", text: $title)
+                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
+                        .labelsHidden()
                 }
-                Section("金額 (\(sheet.resolvedDefaultCurrencyCode))") {
-                    TextField("0", text: $amountText)
-                        .onChange(of: amountText) { _, new in
-                            // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
-                            let normalized = new
-                                .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
-                            let allowed = normalized
-                                .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
-                            if allowed != new { amountText = allowed }
+                Section("金額") {
+                    HStack {
+                        // 注意: Form 内の HStack に置いた TextField は、第1引数のタイトルが
+                        // LabeledContent のラベル扱いになって左に表示されてしまう。
+                        // .labelsHidden() でラベル列を消し、prompt: で placeholder を出す。
+                        TextField("金額", text: $amountText, prompt: Text("0"))
+                            .labelsHidden()
+                            .onChange(of: amountText) { _, new in
+                                // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                                let normalized = new
+                                    .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
+                                let allowed = normalized
+                                    .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                                if allowed != new { amountText = allowed }
+                            }
+                        Spacer()
+                        Picker("通貨", selection: $currencyCode) {
+                            ForEach(CurrencyCatalog.all) { opt in
+                                Text("\(opt.symbol)  \(opt.code)").tag(opt.code)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 160)
+                    }
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)
@@ -182,17 +199,20 @@ struct MacAddExpenseView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("メモ (任意)") {
-                    TextField("詳細", text: $note, axis: .vertical)
+                    TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
+                        .labelsHidden()
                         .lineLimit(2...4)
                 }
                 if expense != nil {
                     Section {
-                        Button(role: .destructive) {
+                        Button {
                             showingDeleteConfirm = true
                         } label: {
                             Label("この支出を削除", systemImage: "trash")
                                 .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
                     }
                 }
             }
@@ -209,6 +229,7 @@ struct MacAddExpenseView: View {
             .padding()
         }
         .frame(width: 560, height: 720)
+        .tint(sheet.tint)
         .confirmationDialog(
             "この支出を削除しますか？",
             isPresented: $showingDeleteConfirm,
@@ -279,8 +300,8 @@ struct MacAddExpenseView: View {
                                 .font(.caption.weight(.semibold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
-                                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-                                .foregroundStyle(Color.accentColor)
+                                .background(Capsule().fill(sheet.tint.opacity(0.18)))
+                                .foregroundStyle(sheet.tint)
                         }
                     }
                     .buttonStyle(.plain)
@@ -356,7 +377,7 @@ struct MacAddExpenseView: View {
                 Spacer()
                 if isOn {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(sheet.tint)
                 } else {
                     Image(systemName: "circle")
                         .foregroundStyle(.secondary)
@@ -392,7 +413,7 @@ struct MacAddExpenseView: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isOn ? sheet.tint : Color.secondary)
             }
         }
         .buttonStyle(.plain)
@@ -414,6 +435,7 @@ struct MacAddExpenseView: View {
         if let e = expense {
             title = e.displayTitle
             amountText = NSDecimalNumber(decimal: e.amountDecimal).stringValue
+            currencyCode = e.resolvedCurrencyCode
             date = e.date ?? .now
             kind = e.kind
             note = e.note ?? ""
@@ -425,7 +447,7 @@ struct MacAddExpenseView: View {
             origTitle = title
             origAmountText = amountText
             origKindRaw = e.kindRaw ?? ""
-            origCurrencyCode = e.currencyCode ?? ""
+            origCurrencyCode = currencyCode
             origCategoryObjectID = e.category?.objectID
             origPayerProfileID = e.payerProfileID ?? ""
             origDate = date
@@ -435,6 +457,7 @@ struct MacAddExpenseView: View {
             selectedCategory = nil
             payerProfileID = selfProfileID
             selectedBeneficiaries = []
+            currencyCode = sheet.resolvedDefaultCurrencyCode
         }
     }
 
@@ -459,7 +482,9 @@ struct MacAddExpenseView: View {
             target.title = trimmed
             target.amount = NSDecimalNumber(decimal: amount)
             target.kindRaw = kind.rawValue
-            target.currencyCode = sheet.resolvedDefaultCurrencyCode
+            target.currencyCode = currencyCode.isEmpty
+                ? sheet.resolvedDefaultCurrencyCode
+                : currencyCode
             target.date = date
             target.note = note
             target.categoryRaw = selectedCategory?.name
@@ -498,8 +523,7 @@ struct MacAddExpenseView: View {
             expense.amount = NSDecimalNumber(decimal: amount)
         }
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
-        let newCurrency = sheet.resolvedDefaultCurrencyCode
-        if newCurrency != origCurrencyCode { expense.currencyCode = newCurrency }
+        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
         if !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }

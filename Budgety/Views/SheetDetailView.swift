@@ -63,6 +63,7 @@ struct SheetDetailView: View {
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
     @State private var showingEditGroup = false
+    /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
     @State private var searchText: String = ""
     @State private var selectedCategory: ExpenseCategory?
@@ -405,74 +406,44 @@ struct SheetDetailView: View {
         )
     }
 
+    @ViewBuilder
     private var emptyStateFiltered: some View {
-        ContentUnavailableView.search(text: searchText)
+        // カテゴリで絞り込み中に検索ヒットが 0 件なら、フィルタ解除を促す
+        // (Apple Music 風)。絞り込みが無いただの 0 件なら通常の検索空表示。
+        if selectedCategory != nil {
+            let q = searchText.trimmingCharacters(in: .whitespaces)
+            ContentUnavailableView {
+                Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
+                      systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("カテゴリで絞り込まれています。")
+            } actions: {
+                Button("フィルタをオフにする") {
+                    selectedCategory = nil
+                }
+            }
+        } else {
+            ContentUnavailableView.search(text: searchText)
+        }
     }
 
     private var sectionedList: some View {
             ForEach(groupedByDay(), id: \.key) { section in
                 Section {
                         ForEach(Array(section.value.enumerated()), id: \.element.objectID) { idx, expense in
-                            Button {
-                                editingExpense = expense
-                            } label: {
-                                ExpenseRowView(expense: expense)
-                            }
-                            .buttonStyle(.plain)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    pendingDeleteExpense = expense
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                }
-                                Button {
-                                    duplicate(expense)
-                                } label: {
-                                    Label("複製", systemImage: "doc.on.doc")
-                                }
-                                .tint(.blue)
-                            }
-                            .contextMenu {
-                                Button { editingExpense = expense } label: {
-                                    Label("編集", systemImage: "pencil")
-                                }
-                                if expense.generatedFromRuleID != nil {
-                                    Button {
-                                        editingRule = expense.relatedRule
-                                    } label: {
-                                        Label("定期項目を編集", systemImage: "repeat")
-                                    }
-                                }
-                                Button { duplicate(expense) } label: {
-                                    Label("複製", systemImage: "doc.on.doc")
-                                }
-                                Button(role: .destructive) {
-                                    pendingDeleteExpense = expense
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                }
-                            }
-                            // 行ごとに confirmationDialog を持たせ、その行から
-                            // 出るように見せる。`presenting` で対象 expense をキャプチャ。
-                            .confirmationDialog(
-                                "この支出を削除しますか？",
-                                isPresented: Binding(
-                                    get: { pendingDeleteExpense == expense },
-                                    set: { if !$0 { pendingDeleteExpense = nil } }
-                                ),
-                                titleVisibility: .visible,
-                                presenting: expense
-                            ) { e in
-                                Button("削除", role: .destructive) {
-                                    deleteExpense(e)
-                                    pendingDeleteExpense = nil
-                                }
-                                Button("キャンセル", role: .cancel) {
-                                    pendingDeleteExpense = nil
-                                }
-                            } message: { e in
-                                Text("「\(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)」を削除します。元に戻せません。")
-                            }
+                            // 削除確認は各支出行に .confirmationDialog を付ける。
+                            // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
+                            // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
+                            ExpenseRowContainer(
+                                expense: expense,
+                                pendingDelete: $pendingDeleteExpense,
+                                onEdit: { editingExpense = expense },
+                                onEditRule: expense.generatedFromRuleID != nil
+                                    ? { editingRule = expense.relatedRule }
+                                    : nil,
+                                onDuplicate: { duplicate(expense) },
+                                onDelete: { deleteExpense(expense) }
+                            )
                         }
                 } header: {
                     DateHeaderView(label: section.dayLabel,
@@ -1263,6 +1234,93 @@ private struct DateHeaderView: View {
     }
 }
 
+// MARK: - Expense Row Container
+
+/// 1 行ぶんの支出行 + スワイプ/コンテキストメニュー + 削除確認ダイアログ。
+/// 削除確認の `isPresented` を **行ごとのローカル @State** で持つことで、
+/// 親の共有 state を複数行が監視して干渉する問題 (= 表示直後に閉じる) を防ぐ。
+private struct ExpenseRowContainer: View {
+    @ObservedObject var expense: Expense
+    /// 削除確認の対象 (親と共有)。各行はこの値が自分かどうかで提示判定する。
+    @Binding var pendingDelete: Expense?
+    let onEdit: () -> Void
+    let onEditRule: (() -> Void)?
+    let onDuplicate: () -> Void
+    let onDelete: () -> Void
+
+    /// この行が削除確認の対象か。
+    private var isThisRowPending: Bool {
+        pendingDelete?.objectID == expense.objectID
+    }
+
+    var body: some View {
+        Button(action: onEdit) {
+            ExpenseRowView(expense: expense)
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // role: .destructive にすると確認前に行削除アニメが走るので付けない。
+            // 見た目の赤は .tint(.red) で維持。
+            Button {
+                pendingDelete = expense
+            } label: {
+                Label("削除", systemImage: "trash")
+            }
+            .tint(.red)
+            Button {
+                onDuplicate()
+            } label: {
+                Label("複製", systemImage: "doc.on.doc")
+            }
+            .tint(.blue)
+        }
+        .contextMenu {
+            Button(action: onEdit) {
+                Label("編集", systemImage: "pencil")
+            }
+            if let onEditRule {
+                Button(action: onEditRule) {
+                    Label("定期項目を編集", systemImage: "repeat")
+                }
+            }
+            Button(action: onDuplicate) {
+                Label("複製", systemImage: "doc.on.doc")
+            }
+            Button(role: .destructive) {
+                pendingDelete = expense
+            } label: {
+                Label("削除", systemImage: "trash")
+            }
+        }
+        // 支出ごとに .confirmationDialog を付ける。
+        // setter は「自分が対象の時だけ nil にする」ガード付きにして、
+        // 他行の confirmationDialog が共有 state を打ち消して即閉じるのを防ぐ。
+        .confirmationDialog(
+            "この支出を削除しますか？",
+            isPresented: Binding(
+                get: { isThisRowPending },
+                set: { newVal in
+                    if !newVal && isThisRowPending {
+                        pendingDelete = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: expense
+        ) { exp in
+            Button("削除", role: .destructive) {
+                onDelete()
+                pendingDelete = nil
+            }
+            Button("キャンセル", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: { exp in
+            Text("「\(exp.displayTitle.isEmpty ? exp.categoryDisplayName : exp.displayTitle)」を削除します。元に戻せません。")
+        }
+    }
+}
+
 // MARK: - Expense Row
 
 private struct ExpenseRowView: View {
@@ -1309,36 +1367,9 @@ private struct ExpenseRowView: View {
     }
 
     /// 支払/受取の人がいればカテゴリアイコンの右下にアバターを重ねる。
-    /// 個人専用シート + 自分払い の場合は出さない (= UI ノイズを避ける)。
-    @ViewBuilder
+    /// 共通コンポーネント CategoryPayerIconView に委譲。
     private var categoryIconWithPayer: some View {
-        let payerName = expense.displayPaidBy
-        let showAvatar = !payerName.isEmpty && !(isSoloSheet && payerIsSelf)
-        ZStack(alignment: .bottomTrailing) {
-            // カテゴリアイコンの背景は Circle ではなく RoundedRectangle に統一。
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(expense.categoryTint.gradient)
-                Image(systemName: expense.categorySymbol)
-                    .foregroundStyle(.white)
-                    .font(.title3.weight(.semibold))
-            }
-            .frame(width: 48, height: 48)
-            if showAvatar {
-                PayerAvatar(
-                    member: expense.resolvedPayer,
-                    participantProfile: expense.resolvedParticipantProfile,
-                    fallbackName: payerName,
-                    fallbackColorHex: "#8E8E93",
-                    fallbackPhoto: nil,
-                    size: 22
-                )
-                .overlay(
-                    Circle().stroke(Color.platformSystemBackground, lineWidth: 2)
-                )
-                .offset(x: 6, y: 6)
-            }
-        }
+        CategoryPayerIconView(expense: expense, size: 38, avatarSize: 18)
     }
 
     @ViewBuilder

@@ -40,6 +40,16 @@ struct MacEditCategoryView: View {
         return false
     }
 
+    /// このカテゴリが属するシートのテーマカラー (Tint)。
+    private var sheetTint: Color {
+        switch mode {
+        case .create(let record, _):
+            return record.tint
+        case .edit(let category):
+            return category.sheet?.tint ?? .accentColor
+        }
+    }
+
     private var title: String {
         isEditing ? "カテゴリを編集" : "新しいカテゴリ"
     }
@@ -109,10 +119,13 @@ struct MacEditCategoryView: View {
                     // ボタン
                     HStack {
                         if isEditing {
-                            Button("削除", role: .destructive) {
+                            Button {
                                 showingDeleteConfirm = true
+                            } label: {
+                                Text("削除")
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
                         }
                         Spacer()
                         Button("キャンセル") { dismiss() }
@@ -129,6 +142,7 @@ struct MacEditCategoryView: View {
         .scrollIndicators(.never)
         .frame(width: 560)
         .frame(minHeight: 260, maxHeight: 720)
+        .tint(sheetTint)
         .onAppear { loadIfNeeded() }
         .sheet(isPresented: $showingPaywall) { PaywallView() }
         .confirmationDialog(

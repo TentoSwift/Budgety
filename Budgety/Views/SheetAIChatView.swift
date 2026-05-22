@@ -26,6 +26,8 @@ struct SheetAIChatView: View {
         .background(Color.platformSystemBackground.ignoresSafeArea())
         .navigationTitle("AI チャット")
         .navigationBarTitleDisplayMode(.inline)
+        // 画面表示のたびに、削除/編集でデータが変わっていれば AI の参照データを更新。
+        .onAppear { chat.refreshContext() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
