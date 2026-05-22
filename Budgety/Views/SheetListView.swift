@@ -97,6 +97,10 @@ struct SheetListView: View {
                     Text(scope.rawValue).tag(scope)
                 }
             }
+            .onChange(of: searchPresented) { _, presented in
+                // 検索を開始するたびに期間は全期間から始める。
+                if presented { searchPeriod = .all }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     // SettingsView 自身が NavigationStack を持つため、ここを
