@@ -35,6 +35,8 @@ struct SheetListView: View {
     @State private var searchScope: SearchScope = .expenses
     /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
     @State private var searchTotalCurrency: String = CurrencyCatalog.defaultCode
+    /// 検索の期間フィルタ。既定は全期間 (= 絞り込みなし)。
+    @State private var searchPeriod: SheetDetailView.Period = .all
     /// 検索結果からタップした支出 (= 全シート横断検索のヒット) を編集する。
     @State private var editingSearchExpense: Expense?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
@@ -192,7 +194,7 @@ struct SheetListView: View {
             if lock.hasPassword(for: sheet) && !lock.isUnlocked(sheet) { continue }
             guard let exps = sheet.expenses as? Set<Expense> else { continue }
             let matched = exps
-                .filter { matchesExpense($0, query: q) }
+                .filter { searchPeriod.contains($0.date) && matchesExpense($0, query: q) }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             guard !matched.isEmpty else { continue }
             let target = sheet.resolvedDefaultCurrencyCode
@@ -281,6 +283,7 @@ struct SheetListView: View {
                     expense: total.expense,
                     income: total.income,
                     currency: $searchTotalCurrency,
+                    period: $searchPeriod,
                     count: total.count,
                     query: trimmedQuery,
                     mixed: total.mixed
@@ -294,14 +297,24 @@ struct SheetListView: View {
                 Section {
                     HStack {
                         Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
+                        VStack(spacing: 8) {
+                            Image(systemName: searchPeriod.isFiltering ? "line.3.horizontal.decrease.circle" : "magnifyingglass")
                                 .font(.title2)
                                 .foregroundStyle(.secondary)
                             Text(trimmedQuery.isEmpty ? "検索ワードを入力してください" : "“\(trimmedQuery)” の検索結果なし")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
+                            if searchPeriod.isFiltering {
+                                Text("期間「\(searchPeriod.label)」で絞り込まれています。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button("フィルタをオフにする") {
+                                    searchPeriod = .all
+                                }
+                                .font(.subheadline.weight(.semibold))
+                            }
                         }
                         Spacer()
                     }
@@ -400,6 +413,8 @@ private struct SearchTotalCard: View {
     let income: Decimal
     /// 表示通貨。カード右上のメニューで変更できる。
     @Binding var currency: String
+    /// 期間フィルタ。カードのメニューで変更できる。
+    @Binding var period: SheetDetailView.Period
     let count: Int
     let query: String
     let mixed: Bool
@@ -423,7 +438,7 @@ private struct SearchTotalCard: View {
                 currencyMenu
             }
 
-            // 検索クエリ + 件数の pill (空クエリ = 全件表示)
+            // 検索クエリ件数 pill + 期間メニュー
             HStack(spacing: 8) {
                 Text(query.isEmpty ? "すべて · \(count)件" : "「\(query)」 · \(count)件")
                     .font(.subheadline.weight(.medium))
@@ -431,6 +446,7 @@ private struct SearchTotalCard: View {
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                     .foregroundStyle(Color.accentColor)
+                periodMenu
                 Spacer()
             }
 
@@ -483,6 +499,32 @@ private struct SearchTotalCard: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+            .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    /// 期間を切り替えるメニュー。絞り込み中 (全期間以外) は色付きで強調。
+    private var periodMenu: some View {
+        Menu {
+            Picker("期間", selection: $period) {
+                ForEach(SheetDetailView.Period.allCases) { p in
+                    Text(p.label).tag(p)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: period.isFiltering
+                      ? "line.3.horizontal.decrease.circle.fill"
+                      : "calendar")
+                    .font(.caption2)
+                Text(period.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.accentColor.opacity(period.isFiltering ? 0.28 : 0.15)))
             .foregroundStyle(Color.accentColor)
         }
     }

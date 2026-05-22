@@ -26,6 +26,25 @@ struct SheetDetailView: View {
             case .all:       "全期間"
             }
         }
+        /// 期間フィルタが有効か (全期間以外なら絞り込み中)。
+        var isFiltering: Bool { self != .all }
+
+        /// 指定日がこの期間に含まれるか。`.all` は常に true。
+        func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> Bool {
+            guard self != .all else { return true }
+            guard let d = date else { return false }
+            switch self {
+            case .thisMonth:
+                return calendar.isDate(d, equalTo: now, toGranularity: .month)
+            case .lastMonth:
+                guard let lm = calendar.date(byAdding: .month, value: -1, to: now) else { return false }
+                return calendar.isDate(d, equalTo: lm, toGranularity: .month)
+            case .thisYear:
+                return calendar.isDate(d, equalTo: now, toGranularity: .year)
+            case .all:
+                return true
+            }
+        }
     }
 
     /// 並び替えの「軸」。方向 (asc/desc) は `sortAscending` で別管理。
@@ -115,13 +134,23 @@ struct SheetDetailView: View {
 
     // MARK: - Filtering
 
-    /// 一覧に表示する支出/収入。期間フィルタは適用しない (= 期間ピッカーは
-    /// SummaryCard の合計金額にのみ影響し、行の表示は全期間で固定)。
+    /// 検索バーがアクティブか (フォーカス中 or クエリ入力済み)。
+    private var isSearchActive: Bool {
+        searchPresented || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// 一覧に表示する支出/収入。
+    /// 通常時は期間フィルタを適用しない (= 期間ピッカーは SummaryCard の合計にのみ影響)。
+    /// 検索中は期間ピッカーで「その期間のみ」に絞り込む。
     /// カテゴリピル・検索・並び順はここで適用する。
     private var filteredExpenses: [Expense] {
         var list = Array(allExpenses)
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
+        }
+        // 検索中は期間ピッカーで絞り込む。
+        if isSearchActive {
+            list = list.filter { period.contains($0.date) }
         }
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !q.isEmpty {
@@ -421,20 +450,33 @@ struct SheetDetailView: View {
         )
     }
 
+    /// 期間 (検索中) またはカテゴリで絞り込み中か。
+    private var isFilterActive: Bool {
+        selectedCategory != nil || (isSearchActive && period.isFiltering)
+    }
+
+    private var filterDescription: String {
+        var parts: [String] = []
+        if isSearchActive && period.isFiltering { parts.append("期間「\(period.label)」") }
+        if selectedCategory != nil { parts.append("カテゴリ") }
+        return parts.joined(separator: "・") + "で絞り込まれています。"
+    }
+
     @ViewBuilder
     private var emptyStateFiltered: some View {
-        // カテゴリで絞り込み中に検索ヒットが 0 件なら、フィルタ解除を促す
-        // (Apple Music 風)。絞り込みが無いただの 0 件なら通常の検索空表示。
-        if selectedCategory != nil {
+        // 期間/カテゴリで絞り込み中に 0 件なら、フィルタ解除を促す (Apple Music 風)。
+        // 絞り込みが無いただの 0 件なら通常の検索空表示。
+        if isFilterActive {
             let q = searchText.trimmingCharacters(in: .whitespaces)
             ContentUnavailableView {
                 Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
                       systemImage: "line.3.horizontal.decrease.circle")
             } description: {
-                Text("カテゴリで絞り込まれています。")
+                Text(filterDescription)
             } actions: {
                 Button("フィルタをオフにする") {
                     selectedCategory = nil
+                    period = .all
                 }
             }
         } else {
@@ -699,26 +741,7 @@ private struct SummaryCard: View {
     private var code: String { record.resolvedDefaultCurrencyCode }
 
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
-        let cal = Calendar.current
-        let now = Date()
-        let periodFilter: (Expense) -> Bool
-        // 検索中は期間フィルタを外す (= シート全体から検索) — 検索結果が
-        // 当月外にあると 0 件と思われる UX を避ける。
-        if isSearching {
-            periodFilter = { _ in true }
-        } else {
-            switch period {
-            case .thisMonth:
-                periodFilter = { cal.isDate($0.date ?? .distantPast, equalTo: now, toGranularity: .month) }
-            case .lastMonth:
-                guard let lm = cal.date(byAdding: .month, value: -1, to: now) else { return (.zero, .zero, [], 0) }
-                periodFilter = { cal.isDate($0.date ?? .distantPast, equalTo: lm, toGranularity: .month) }
-            case .thisYear:
-                periodFilter = { cal.isDate($0.date ?? .distantPast, equalTo: now, toGranularity: .year) }
-            case .all:
-                periodFilter = { _ in true }
-            }
-        }
+        // 期間ピッカーは常に合計に反映する (検索中も「その期間のみ」集計)。
         let categoryID = selectedCategory?.objectID
         let target = code
         let q = searchQuery.lowercased()
@@ -726,7 +749,7 @@ private struct SummaryCard: View {
         var incomeSum: Decimal = 0
         var missing: Set<String> = []
         var hitCount = 0
-        for e in expenses where periodFilter(e) {
+        for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
@@ -771,17 +794,18 @@ private struct SummaryCard: View {
                 Spacer()
             }
 
-            // 期間ピッカー + カテゴリ pill
+            // 期間ピッカー + カテゴリ pill (検索中も期間を変更できるよう常に表示)
             HStack(spacing: 8) {
-                if isSearching {
-                    searchPill
-                } else {
-                    periodMenuLabel
-                }
+                periodMenuLabel
                 if let cat = selectedCategory {
                     categoryPill(cat)
                 }
                 Spacer()
+                if isSearching {
+                    Text("\(t.hitCount)件")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // 大型の支出合計 (Mac と同じ rounded font)
