@@ -66,6 +66,9 @@ struct SheetDetailView: View {
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
     @State private var searchText: String = ""
+    /// 検索バーがアクティブ (フォーカス) かどうか。
+    /// フォーカス直後 (未入力) は全件ではなく 0 件表示にする。
+    @State private var searchPresented: Bool = false
     @State private var selectedCategory: ExpenseCategory?
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
@@ -169,6 +172,9 @@ struct SheetDetailView: View {
 
                 if allExpenses.isEmpty {
                     emptyStateInitial
+                } else if searchPresented && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    // 検索フォーカス直後 (未入力) は全件ではなく 0 件 (入力待ち) を表示。
+                    emptyStateSearchPrompt
                 } else if filteredExpenses.isEmpty {
                     emptyStateFiltered
                 } else {
@@ -186,7 +192,7 @@ struct SheetDetailView: View {
         // 並列に並べる。ToolbarSpacer で間を空ける。
         // (Liquid Glass デザインの推奨パターン:
         //  https://qiita.com/RS6/items/2f55281499ef7bad96b2)
-        .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出、収入を検索"))
+        .searchable(text: $searchText, isPresented: $searchPresented, placement: .toolbar, prompt: Text("支出、収入を検索"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -403,6 +409,15 @@ struct SheetDetailView: View {
             "支出がありません",
             systemImage: "yensign.circle",
             description: Text("右下の + から最初の取引を追加してください。")
+        )
+    }
+
+    /// 検索フォーカス直後 (未入力) の入力待ち表示。全件は出さない。
+    private var emptyStateSearchPrompt: some View {
+        ContentUnavailableView(
+            "検索ワードを入力",
+            systemImage: "magnifyingglass",
+            description: Text("支出・収入のタイトルや支払い者で検索できます。")
         )
     }
 
