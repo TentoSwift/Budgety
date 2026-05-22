@@ -28,7 +28,11 @@ final class SheetAIChat: ObservableObject {
     @Published var inputText: String = ""
 
     private let sheet: ExpenseSheet
-    private let session: LanguageModelSession?
+    /// セッションは支出データのスナップショット (instructions) を内部に固定で持つため、
+    /// 削除/編集でデータが変わったら作り直す必要がある。`refreshContext()` 参照。
+    private var session: LanguageModelSession?
+    /// 直近に session を組み立てたときのデータ指紋。変化が無ければ作り直しを省く。
+    private var contextFingerprint: String = ""
     /// 履歴 JSON の保存先 (Application Support 配下、シートごとに別ファイル)
     private let historyURL: URL
 
@@ -37,9 +41,8 @@ final class SheetAIChat: ObservableObject {
         self.historyURL = Self.historyFileURL(for: sheet)
 
         if SystemLanguageModel.default.availability == .available {
-            let context = Self.buildContext(for: sheet)
-            let instructions = Self.systemInstructions(context: context)
-            self.session = LanguageModelSession(instructions: instructions)
+            self.session = Self.makeSession(for: sheet)
+            self.contextFingerprint = Self.dataFingerprint(for: sheet)
 
             // 永続化された履歴があれば復元、なければウェルカム
             if let saved = Self.loadMessages(from: historyURL), !saved.isEmpty {
@@ -61,6 +64,38 @@ final class SheetAIChat: ObservableObject {
                 )
             ]
         }
+    }
+
+    /// 現在のシートデータで `LanguageModelSession` を組み立てる。
+    private static func makeSession(for sheet: ExpenseSheet) -> LanguageModelSession {
+        let context = buildContext(for: sheet)
+        let instructions = systemInstructions(context: context)
+        return LanguageModelSession(instructions: instructions)
+    }
+
+    /// チャット画面が表示されたタイミングで呼ぶ。支出の追加/編集/削除で
+    /// データが変わっていたら session (= instructions のデータスナップショット) を
+    /// 作り直して最新状態を反映する。応答ストリーミング中は触らない。
+    func refreshContext() {
+        guard Self.isAvailable, !isThinking else { return }
+        let fingerprint = Self.dataFingerprint(for: sheet)
+        guard fingerprint != contextFingerprint else { return }
+        session = Self.makeSession(for: sheet)
+        contextFingerprint = fingerprint
+    }
+
+    /// 支出データの軽量な指紋。件数 + 各支出の id/更新時刻/金額から作る。
+    /// これが変われば「データが変わった」とみなして session を作り直す。
+    private static func dataFingerprint(for sheet: ExpenseSheet) -> String {
+        let expenses = (sheet.expenses as? Set<Expense>) ?? []
+        // 並びに依存しないよう、各支出の identity を sort して連結。
+        let parts = expenses.map { e -> String in
+            let id = e.objectID.uriRepresentation().absoluteString
+            let amount = NSDecimalNumber(decimal: e.amountDecimal).stringValue
+            let date = (e.date ?? .distantPast).timeIntervalSince1970
+            return "\(id)|\(amount)|\(date)|\(e.resolvedCurrencyCode)|\(e.categoryDisplayName)"
+        }.sorted()
+        return "\(expenses.count)#" + parts.joined(separator: ";")
     }
 
     static var isAvailable: Bool {

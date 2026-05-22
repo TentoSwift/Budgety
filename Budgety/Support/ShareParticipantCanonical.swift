@@ -10,31 +10,18 @@ import Foundation
 import CloudKit
 
 extension CKShare.Participant {
-    /// 共有相手を全端末で一意に識別するための文字列。
+    /// 共有相手を全端末で一意に識別するための文字列 (= URN)。
     /// `Expense.payerProfileID` や `Member.recordName` に保存し、シート参加者間で
     /// 「払った相手」が解決できるようにする。
-    /// - role == .owner: userIdentity.userRecordID.recordName をそのまま使う。
-    ///   CKShare ではオーナー自身の view では `__defaultOwner__` placeholder になるため、
-    ///   その場合は呼び出し側 (UserProfileStore.canonicalSelfID) で
-    ///   CKContainer.userRecordID().recordName を使う想定で nil を返す。
-    /// - role != .owner: lookupInfo.emailAddress (= 招待時の Apple ID) を使う。
-    ///   CKShare 内で参加者の userRecordID は viewer ごとに別空間になるが、
-    ///   email は全 viewer から同一値で見える唯一の安定キー。
+    /// iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
+    /// 一致するようになったので、**常に URN (userIdentity.userRecordID.recordName)**
+    /// を使う。`__defaultOwner__` placeholder の場合は nil を返し、呼び出し側で
+    /// `CKContainer.userRecordID().recordName` (= 自分の URN) を使う想定。
+    /// 旧 "email:..." / "phone:..." スキームは廃止 (旧データは migration で URN に
+    /// 正規化される)。
     var budgetyCanonicalID: String? {
         let rn = userIdentity.userRecordID?.recordName ?? ""
-        if role == .owner {
-            if UserProfileStore.isSelfPlaceholderRecordName(rn) { return nil }
-            return rn.isEmpty ? nil : rn
-        }
-        if let email = userIdentity.lookupInfo?.emailAddress, !email.isEmpty {
-            return "email:" + email.lowercased()
-        }
-        if let phone = userIdentity.lookupInfo?.phoneNumber, !phone.isEmpty {
-            return "phone:" + phone
-        }
-        if !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) {
-            return rn
-        }
-        return nil
+        if rn.isEmpty || UserProfileStore.isSelfPlaceholderRecordName(rn) { return nil }
+        return rn
     }
 }

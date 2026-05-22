@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V16">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V17">
     <entity name="ExpenseCategory" representedClassName="ExpenseCategory" syncable="YES" codeGenerationType="class">
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#888888"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -27,6 +27,7 @@
         <relationship name="expenses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Expense" inverseName="sheet" inverseEntity="Expense"/>
         <relationship name="participantProfiles" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ParticipantProfile" inverseName="sheet" inverseEntity="ParticipantProfile"/>
         <relationship name="recurringRules" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="RecurringRule" inverseName="sheet" inverseEntity="RecurringRule"/>
+        <relationship name="settlements" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SettlementRecord" inverseName="sheet" inverseEntity="SettlementRecord"/>
         <relationship name="templates" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExpenseTemplate" inverseName="sheet" inverseEntity="ExpenseTemplate"/>
     </entity>
     <entity name="ExpenseTemplate" representedClassName="ExpenseTemplate" syncable="YES" codeGenerationType="class">
@@ -100,6 +101,18 @@
         <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
     </entity>
+    <entity name="SettlementRecord" representedClassName="SettlementRecord" syncable="YES" codeGenerationType="class">
+        <attribute name="amount" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="createdByProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fromProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="toProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="settlements" inverseEntity="ExpenseSheet"/>
+    </entity>
     <configuration name="Private" usedWithCloudKit="YES">
         <memberEntity name="ExpenseCategory"/>
         <memberEntity name="ExpenseSheet"/>
@@ -108,6 +121,7 @@
         <memberEntity name="Member"/>
         <memberEntity name="ParticipantProfile"/>
         <memberEntity name="RecurringRule"/>
+        <memberEntity name="SettlementRecord"/>
     </configuration>
     <configuration name="Shared" usedWithCloudKit="YES">
         <memberEntity name="ExpenseCategory"/>
@@ -116,5 +130,6 @@
         <memberEntity name="ExpenseTemplate"/>
         <memberEntity name="ParticipantProfile"/>
         <memberEntity name="RecurringRule"/>
+        <memberEntity name="SettlementRecord"/>
     </configuration>
 </model>

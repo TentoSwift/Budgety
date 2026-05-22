@@ -169,32 +169,37 @@ final class PurchaseManager: ObservableObject {
 
         // 解除すべき状態を 2 種類検知:
         //   A. 真の transition (wasPremium && !nowPremium) — toast を出す
-        //   B. 状態不整合 (!nowPremium かつ active な共有が残っている)
-        //      — 過去に transition を取りこぼしている → 黙って revoke だけ
+        //   B. 状態不整合 (!nowPremium かつ active な共有 or ロック済みシートが残っている)
+        //      — 過去に transition を取りこぼしている、または前回 revoke が失敗
+        //      → 黙って revoke を再試行
+        //
         // どちらも `confirmExpiry()` (= AppStore.sync 後の再確認) を挟むので
         // transient な StoreKit 失敗で誤検知して revoke してしまうのを防ぐ。
-        // active 共有が無いのに refresh のたびに confirmExpiry を走らせるのは
-        // 無駄なので、まず `hasActiveOwnedShares()` で fast-path skip する。
+        //
+        // 重要: 前回 revoke が transient failure (ネットワーク等) で失敗した場合に
+        // 必ず再試行されるよう、`!nowPremium` の間は毎回 hasActiveOwnedShares を
+        // チェックする (= ローカルの fast-path skip だけに頼らない)。
         if !nowPremium {
             let isTransition = wasPremium
             Task { @MainActor in
-                // 真の transition (Premium → 非 Premium) は必ず確認・解除。
-                // それ以外は「掃除すべき残骸」(= 共有 or ロック済みシート) があるかで判定。
-                let hasResidue: Bool = {
-                    if isTransition { return true }
-                    return Self.hasAnyOwnedLockedSheets()
-                }()
-                let hasActiveShares = isTransition || hasResidue
-                    ? await ShareCoordinator.shared.hasActiveOwnedShares()
-                    : false
-                guard isTransition || hasActiveShares || hasResidue else {
+                // 必ず active な共有の有無をリモートでも確認 (= revoke 再試行のトリガ)
+                let hasActiveShares = await ShareCoordinator.shared.hasActiveOwnedShares()
+                let hasLockedSheets = Self.hasAnyOwnedLockedSheets()
+                guard isTransition || hasActiveShares || hasLockedSheets else {
                     Self.purchaseLog.debug("non-premium but nothing to clean; skip")
                     return
                 }
                 let confirmedExpired = await Self.confirmExpiry()
                 Self.purchaseLog.debug("non-premium with residue; confirmExpiry → \(confirmedExpired)")
                 guard confirmedExpired else { return }
-                await Self.performExpiryRevoke()
+                let revokedOK = await Self.performExpiryRevoke()
+                if !revokedOK {
+                    // revoke 失敗 → 次回 refresh で再試行されるよう、ここでは
+                    // 通知は出さない (UI に「終了しました」と出しても共有が
+                    // 残っているのは矛盾するため)。
+                    Self.purchaseLog.error("performExpiryRevoke failed; will retry on next refresh")
+                    return
+                }
                 if isTransition {
                     NotificationCenter.default.post(name: .expensoPremiumExpired, object: nil)
                 }
@@ -235,14 +240,19 @@ final class PurchaseManager: ObservableObject {
     /// - 共有 (CKShare) の解除に加え、自分がオーナーのシートのパスワードロックも解除する。
     ///   ロックは Premium 機能なので、Premium が切れたユーザーがロック解除手段を失わないよう
     ///   自動で外す (= ロック画面で詰まないようにする)。
+    /// - Returns: 共有解除が成功したか。`false` の場合、`refreshEntitlements` 側で次回再試行される。
     @MainActor
-    static func performExpiryRevoke() async {
+    @discardableResult
+    static func performExpiryRevoke() async -> Bool {
         let ok = await ShareCoordinator.shared.revokeAllOwnedShares()
         purchaseLog.debug("revokeAllOwnedShares returned \(ok)")
+        // ローカルロックは Core Data のローカル書き込みのみで失敗しないので、
+        // 共有解除が失敗していても掃除する (= ユーザーがロック解除画面で詰まない)。
         let clearedLocks = clearOwnedSheetLocks()
         if clearedLocks > 0 {
             purchaseLog.debug("cleared sheet locks: count=\(clearedLocks)")
         }
+        return ok
     }
 
     #if DEBUG

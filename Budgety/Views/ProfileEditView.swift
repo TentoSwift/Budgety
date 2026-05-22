@@ -98,6 +98,9 @@ struct ProfileEditView: View {
                                     Label("削除", systemImage: "trash")
                                         .font(.callout)
                                 }
+                                #if os(macOS)
+                                .tint(.red)
+                                #endif
                             }
                         }
                     }
@@ -147,7 +150,10 @@ struct ProfileEditView: View {
 
     private var nameSection: some View {
         Section("ニックネーム") {
-            TextField("自分の名前", text: $draftName)
+            // macOS Form は第1引数を LabeledContent のラベルにしてしまうため
+            // .labelsHidden() で潰し、placeholder は prompt: で出す。
+            TextField("ニックネーム", text: $draftName, prompt: Text("自分の名前"))
+                .labelsHidden()
                 .autocorrectionDisabled()
         }
     }

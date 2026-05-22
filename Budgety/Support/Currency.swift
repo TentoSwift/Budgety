@@ -15,6 +15,11 @@ struct CurrencyOption: Identifiable, Hashable {
 
 enum CurrencyCatalog {
     /// アプリで選択可能な通貨。先頭は JPY。
+    ///
+    /// 注意: 為替レート提供元 frankfurter.dev (ECB 由来) が対応していない通貨を
+    /// ここに含めると換算ができず合計から落ちる。TWD / VND は ECB が公表していないので
+    /// 含めない。既存データに TWD / VND が残っていても option(for:) のフォールバックで
+    /// 表示は維持される。
     static let all: [CurrencyOption] = [
         .init(code: "JPY", displayName: "日本円",     symbol: "¥"),
         .init(code: "USD", displayName: "米ドル",     symbol: "$"),
@@ -23,14 +28,12 @@ enum CurrencyCatalog {
         .init(code: "CHF", displayName: "スイスフラン", symbol: "CHF"),
         .init(code: "CNY", displayName: "人民元",     symbol: "¥"),
         .init(code: "KRW", displayName: "韓国ウォン",  symbol: "₩"),
-        .init(code: "TWD", displayName: "台湾ドル",   symbol: "NT$"),
         .init(code: "HKD", displayName: "香港ドル",   symbol: "HK$"),
         .init(code: "SGD", displayName: "シンガポールドル", symbol: "S$"),
         .init(code: "AUD", displayName: "豪ドル",     symbol: "A$"),
         .init(code: "CAD", displayName: "加ドル",     symbol: "C$"),
         .init(code: "NZD", displayName: "NZドル",     symbol: "NZ$"),
         .init(code: "THB", displayName: "タイバーツ",  symbol: "฿"),
-        .init(code: "VND", displayName: "ベトナムドン", symbol: "₫"),
         .init(code: "IDR", displayName: "インドネシアルピア", symbol: "Rp"),
         .init(code: "INR", displayName: "インドルピー", symbol: "₹"),
         .init(code: "PHP", displayName: "フィリピンペソ", symbol: "₱"),
@@ -38,10 +41,26 @@ enum CurrencyCatalog {
         .init(code: "BRL", displayName: "ブラジルレアル", symbol: "R$")
     ]
 
-    /// ユーザーの地域から自動判定したデフォルト通貨コード。
-    /// `Locale.current.currency?.identifier` が catalog 内にあれば採用、
-    /// なければ JPY にフォールバック。
+    /// 設定で明示選択された既定通貨を保存する UserDefaults キー。
+    /// 空文字 / 未設定なら "自動 (システムの地域)" を意味する。
+    static let preferredCurrencyKey = "preferredDefaultCurrency"
+
+    /// アプリの既定通貨コード。
+    /// 1. 設定でユーザーが明示選択した通貨があればそれを使う
+    /// 2. なければシステムの地域設定 (`Locale.current.currency`) から判定
+    /// 3. それも未対応なら JPY
     static var defaultCode: String {
+        let supported = Set(all.map(\.code))
+        if let override = UserDefaults.standard.string(forKey: preferredCurrencyKey),
+           !override.isEmpty, supported.contains(override) {
+            return override
+        }
+        return localeDefaultCode
+    }
+
+    /// 設定の override を無視した、システムの地域設定由来の既定通貨。
+    /// 設定画面の「自動」表示に使う。
+    static var localeDefaultCode: String {
         let supported = Set(all.map(\.code))
         if let id = Locale.current.currency?.identifier, supported.contains(id) {
             return id

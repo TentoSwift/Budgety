@@ -68,7 +68,11 @@ struct EditSheetView: View {
                 }
 
                 Section("カラー") {
-                    HStack(spacing: 12) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 40), spacing: 12)],
+                        alignment: .leading,
+                        spacing: 12
+                    ) {
                         ForEach(palette, id: \.self) { hex in
                             Circle()
                                 .fill(Color(hex: hex) ?? .blue)
@@ -76,7 +80,7 @@ struct EditSheetView: View {
                                 .overlay {
                                     if hex == selectedColor {
                                         Image(systemName: "checkmark")
-                                            .font(.caption.weight(.bold))
+                                            .font(.system(size: 12, weight: .bold))
                                             .foregroundStyle(.white)
                                     }
                                 }
@@ -135,6 +139,7 @@ struct EditSheetView: View {
                     Text(deleteFooterMessage)
                 }
             }
+            .scrollIndicators(.hidden)
             .navigationTitle("シートを編集")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
@@ -173,22 +178,38 @@ struct EditSheetView: View {
     }
 
     private var sheetIconGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 6)
+        // AX サイズで列が詰まらないよう、最小幅 50pt の adaptive grid
+        let columns = [GridItem(.adaptive(minimum: 50), spacing: 12)]
         let tint = Color(hex: selectedColor) ?? .blue
-        return VStack(alignment: .leading, spacing: 16) {
-            ForEach(SheetSymbols.sections) { section in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(section.title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 2)
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(section.symbols, id: \.self) { sym in
-                            sheetIconButton(sym, tint: tint)
-                        }
-                    }
+        return VStack(alignment: .leading, spacing: 12) {
+            // 基本セクションのみインライン表示 (Free)
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(SheetSymbols.freeOptions, id: \.self) { sym in
+                    sheetIconButton(sym, tint: tint)
                 }
             }
+            // その他カテゴリは別画面で選択
+            NavigationLink {
+                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint)
+            } label: {
+                HStack {
+                    Image(systemName: "square.grid.2x2")
+                        .foregroundStyle(.secondary)
+                    Text("その他のアイコン")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.platformTertiarySystemBackground)
+                )
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
         .sheet(isPresented: $showingPaywall) { PaywallView() }
@@ -216,11 +237,12 @@ struct EditSheetView: View {
                         .frame(width: 46, height: 46)
                 }
                 Circle()
-                    .fill(isSelected ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color.platformTertiarySystemBackground))
+                    .fill(isSelected ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(.quaternary))
                     .frame(width: 38, height: 38)
+                // 固定サイズで Dynamic Type に追従させない (AX で circle を突き抜けないように)
                 Image(systemName: sym)
                     .foregroundStyle(isSelected ? .white : Color.primary)
-                    .font(.callout.weight(.medium))
+                    .font(.system(size: 17, weight: .medium))
                     .opacity(isLocked ? 0.45 : 1)
                 if isLocked {
                     Image(systemName: "lock.fill")
@@ -231,7 +253,7 @@ struct EditSheetView: View {
                         .offset(x: 13, y: 13)
                 }
             }
-            .frame(height: 46)
+            .frame(width: 46, height: 46)
         }
         .buttonStyle(.plain)
     }

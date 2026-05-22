@@ -48,6 +48,7 @@ struct AddExpenseView: View {
 
     @State private var title: String = ""
     @State private var amountText: String = ""
+    @State private var showingDeleteConfirm: Bool = false
     /// 新規追加時に title → amount の順でキーボードフォーカスを送る。
     enum FocusField: Hashable { case amount }
     @FocusState private var focusedField: FocusField?
@@ -73,8 +74,6 @@ struct AddExpenseView: View {
     @State private var pendingEditRuleAction: RecurringRule?
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
-    @State private var showingTemplatePicker: Bool = false
-    @State private var showingSaveTemplateConfirm: Bool = false
 
     /// 過去の同タイトル支出からの候補。タイトル入力で自動更新。
     @State private var titleSuggestion: TitleSuggestion?
@@ -169,7 +168,7 @@ struct AddExpenseView: View {
     }
 
     private var canSave: Bool {
-        amountDecimal != nil && !title.trimmingCharacters(in: .whitespaces).isEmpty
+        amountDecimal != nil
     }
 
     /// 編集モードで Member 解決ができなかった場合に表示する名前 (保存済みの paidBy)。
@@ -706,6 +705,16 @@ struct AddExpenseView: View {
         hasOtherParticipants || existingSharingInfo
     }
 
+    /// 編集中の支出を削除する。確認ダイアログ経由でのみ呼ばれる。
+    @MainActor
+    private func deleteExpense() {
+        guard case .edit(let expense) = mode else { return }
+        viewContext.delete(expense)
+        PersistenceController.shared.save()
+        Haptics.success()
+        dismiss()
+    }
+
     @ViewBuilder
     private var payerPreview: some View {
         // アイコンと名前は HStack で横並び固定 (ListRow / LabeledContent 内では
@@ -868,9 +877,12 @@ struct AddExpenseView: View {
                             .focused($focusedField, equals: .amount)
                             .font(.title3.monospacedDigit())
                             .onChange(of: amountText) { _, new in
+                                // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                                let normalized = new
+                                    .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
                                 let allowed = decimalKeypadNeeded
-                                    ? new.filter { $0.isNumber || $0 == "." }
-                                    : new.filter { $0.isNumber }
+                                    ? normalized.filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                                    : normalized.filter { $0.isASCII && $0.isNumber }
                                 if allowed != new { amountText = allowed }
                             }
                     }
@@ -914,18 +926,16 @@ struct AddExpenseView: View {
 
                 photoSection
 
-                if case .create = mode, canSave {
+                if case .edit = mode {
                     Section {
-                        Button {
-                            showingSaveTemplateConfirm = true
+                        Button(role: .destructive) {
+                            showingDeleteConfirm = true
                         } label: {
-                            Label("現在の内容をテンプレに保存", systemImage: "square.and.arrow.down")
+                            Label("この支出を削除", systemImage: "trash")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
                     }
                 }
-
             }
             .tint(sheetTint)
             .listStyle(.plain)
@@ -978,17 +988,6 @@ struct AddExpenseView: View {
                             Label("レシートから読み込み", systemImage: "text.viewfinder")
                         }
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showingTemplatePicker = true
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                        .tint(.primary)
-                        .accessibilityShowsLargeContentViewer {
-                            Label("テンプレから入力", systemImage: "doc.on.doc")
-                        }
-                    }
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -1012,21 +1011,14 @@ struct AddExpenseView: View {
                 Text("この支出は定期項目から生成されています。変更をどこまで反映するか選んでください。")
             }
             .confirmationDialog(
-                "「\(title.trimmingCharacters(in: .whitespaces))」をテンプレに保存しますか?",
-                isPresented: $showingSaveTemplateConfirm,
+                "この支出を削除しますか？",
+                isPresented: $showingDeleteConfirm,
                 titleVisibility: .visible
             ) {
-                Button("保存") { saveCurrentAsTemplate() }
+                Button("削除", role: .destructive) { deleteExpense() }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("テンプレは「定期項目」メニューから管理できます。日付以外の入力内容が保存されます。")
-            }
-            .sheet(isPresented: $showingTemplatePicker) {
-                if let sheet = contextSheet {
-                    TemplatePickerView(record: sheet) { tpl in
-                        applyTemplate(tpl)
-                    }
-                }
+                Text("元に戻せません。")
             }
             .onAppear {
                 loadIfNeeded()
@@ -1529,72 +1521,6 @@ struct AddExpenseView: View {
             rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
             expense.generatedFromRuleID = rule.id
         }
-    }
-
-    // MARK: - Templates
-
-    /// テンプレを選んだ時にフォーム値を上書きする (= ユーザーは保存ボタンを押すまで反映されない)。
-    @MainActor
-    private func applyTemplate(_ tpl: ExpenseTemplate) {
-        title = tpl.displayTitle == "(無題)" ? "" : tpl.displayTitle
-        if tpl.amountDecimal > 0 {
-            amountText = NSDecimalNumber(decimal: tpl.amountDecimal).stringValue
-        }
-        kind = tpl.kind
-        currencyCode = tpl.resolvedCurrencyCode
-        note = tpl.note ?? ""
-        if let cat = tpl.resolvedCategory { selectedCategory = cat }
-        if let mid = tpl.payerMemberID {
-            let req = NSFetchRequest<Member>(entityName: "Member")
-            req.predicate = NSPredicate(format: "id == %@", mid as CVarArg)
-            req.fetchLimit = 1
-            if let m = (try? viewContext.fetch(req))?.first {
-                selectedPayer = m
-            }
-        }
-        let csv = (tpl.beneficiaryProfileIDs ?? "")
-        if !csv.isEmpty {
-            selectedBeneficiaries = Set(tpl.beneficiaryIDList)
-        }
-    }
-
-    /// 現在の入力内容をテンプレとして保存する。
-    /// (日付・受益者の自動均等割りは含めず、それ以外を保存)
-    @MainActor
-    private func saveCurrentAsTemplate() {
-        guard case .create(let sheet) = mode else { return }
-        let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
-        guard !trimmedTitle.isEmpty else { return }
-
-        let tpl = ExpenseTemplate(context: viewContext)
-        if let store = sheet.objectID.persistentStore {
-            viewContext.assign(tpl, to: store)
-        }
-        tpl.id = UUID()
-        tpl.createdAt = .now
-        tpl.sheet = sheet
-        tpl.title = trimmedTitle
-        if let amt = amountDecimal {
-            tpl.amount = NSDecimalNumber(decimal: amt)
-        }
-        tpl.kindRaw = kind.rawValue
-        tpl.currencyCode = currencyCode
-        tpl.categoryRaw = selectedCategory?.name
-        tpl.paidBy = nil
-        tpl.payerProfileID = selectedPayerProfileID
-        tpl.payerMemberID = selectedPayer?.id
-        tpl.note = note
-        tpl.beneficiaryProfileIDs = selectedBeneficiaryCSV
-        // sortOrder は最大 + 1
-        let req = NSFetchRequest<ExpenseTemplate>(entityName: "ExpenseTemplate")
-        req.predicate = NSPredicate(format: "sheet == %@", sheet)
-        req.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseTemplate.sortOrder, ascending: false)]
-        req.fetchLimit = 1
-        let nextOrder = ((try? viewContext.fetch(req))?.first?.sortOrder ?? -1) + 1
-        tpl.sortOrder = nextOrder
-
-        PersistenceController.shared.save()
-        Haptics.success()
     }
 
     /// 現在のフォーム値から RecurringRule を作成する (シートと同じストアに割り当て)。

@@ -22,6 +22,7 @@ struct MacAddExpenseView: View {
 
     @State private var title: String = ""
     @State private var amountText: String = ""
+    @State private var currencyCode: String = CurrencyCatalog.defaultCode
     @State private var date: Date = .now
     @State private var kind: TransactionKind = .expense
     @State private var note: String = ""
@@ -32,6 +33,23 @@ struct MacAddExpenseView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
 
+    // CRDT 差分書き戻し用スナップショット (= 編集ロード時に保持し、保存時に変更があった
+    // フィールドだけ書き戻す)。他端末が別フィールドを編集していた時の同時編集衝突を防ぐ。
+    @State private var origTitle: String = ""
+    @State private var origAmountText: String = ""
+    @State private var origKindRaw: String = ""
+    @State private var origCurrencyCode: String = ""
+    @State private var origCategoryObjectID: NSManagedObjectID?
+    @State private var origPayerProfileID: String = ""
+    @State private var origDate: Date = .distantPast
+    @State private var origNote: String = ""
+    @State private var origBeneficiaryCSV: String = ""
+
+    // AI カテゴリ提案 (FoundationModels)
+    @State private var aiCategorySuggestion: ExpenseCategory?
+    @State private var isComputingAICategory: Bool = false
+    @State private var aiSuggestTask: Task<Void, Never>?
+
     private var categories: [ExpenseCategory] {
         let set = (sheet.categories as? Set<ExpenseCategory>) ?? []
         return set
@@ -40,8 +58,7 @@ struct MacAddExpenseView: View {
     }
 
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty
-        && Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
+        Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
     }
 
     // MARK: - Members
@@ -61,27 +78,36 @@ struct MacAddExpenseView: View {
     /// iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
     /// 一意に見えるようになったので、ID キーは URN で統一する。
     /// PP.recordName も hydrate 時に URN で書かれているので一致する。
+    ///
+    /// 重要: CKShare が取れている場合は **CKShare.participants を source of truth** とする。
+    /// 解除済みのメンバーが PP に残っていても picker には出さない (= 「共有解除済の
+    /// 人がまだ選択できる」バグの対策)。CKShare がまだ取れていない場合のみ PP に
+    /// フォールバックする。
     private var otherProfileIDs: [String] {
         var result: [String] = []
         var seen = Set<String>()
         for id in selfIDSet { seen.insert(id) }
         seen.insert(selfProfileID)
         if let share {
+            // CKShare がある → participants だけを使う (PP は補完しない)
+            // 招待中で未参加 (acceptanceStatus == .pending) のメンバーは選択させない。
             for p in share.participants {
+                guard p.acceptanceStatus == .accepted else { continue }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
                 guard !rn.isEmpty,
                       !UserProfileStore.isSelfPlaceholderRecordName(rn),
                       seen.insert(rn).inserted else { continue }
                 result.append(rn)
             }
-        }
-        // PP からも補完 (CKShare がまだ取れていない場合のフォールバック)
-        let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-        for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-            guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__",
-                  seen.insert(rn).inserted else { continue }
-            result.append(rn)
+        } else {
+            // CKShare 未ロード時のみ PP フォールバック
+            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+                guard let rn = pp.recordName, !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
         }
         return result
     }
@@ -107,10 +133,34 @@ struct MacAddExpenseView: View {
                     .pickerStyle(.segmented)
                 }
                 Section("タイトル") {
-                    TextField("コンビニ、ランチ など", text: $title)
+                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
+                        .labelsHidden()
                 }
-                Section("金額 (\(sheet.resolvedDefaultCurrencyCode))") {
-                    TextField("0", text: $amountText)
+                Section("金額") {
+                    HStack {
+                        // 注意: Form 内の HStack に置いた TextField は、第1引数のタイトルが
+                        // LabeledContent のラベル扱いになって左に表示されてしまう。
+                        // .labelsHidden() でラベル列を消し、prompt: で placeholder を出す。
+                        TextField("金額", text: $amountText, prompt: Text("0"))
+                            .labelsHidden()
+                            .onChange(of: amountText) { _, new in
+                                // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                                let normalized = new
+                                    .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
+                                let allowed = normalized
+                                    .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                                if allowed != new { amountText = allowed }
+                            }
+                        Spacer()
+                        Picker("通貨", selection: $currencyCode) {
+                            ForEach(CurrencyCatalog.all) { opt in
+                                Text("\(opt.symbol)  \(opt.code)").tag(opt.code)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 160)
+                    }
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)
@@ -123,6 +173,7 @@ struct MacAddExpenseView: View {
                         }
                     }
                 }
+                aiCategorySuggestionSection
                 Section("支払い者") {
                     payerPicker
                 }
@@ -148,32 +199,37 @@ struct MacAddExpenseView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("メモ (任意)") {
-                    TextField("詳細", text: $note, axis: .vertical)
+                    TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
+                        .labelsHidden()
                         .lineLimit(2...4)
                 }
                 if expense != nil {
                     Section {
-                        Button(role: .destructive) {
+                        Button {
                             showingDeleteConfirm = true
                         } label: {
                             Label("この支出を削除", systemImage: "trash")
                                 .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
                     }
                 }
             }
             .formStyle(.grouped)
+            .scrollIndicators(.never)
 
             HStack {
                 Button("キャンセル") { dismiss() }
                 Spacer()
-                Button("完了") { save() }
+                Button("OK") { save() }
                     .keyboardShortcut(.return)
                     .disabled(!canSave)
             }
             .padding()
         }
         .frame(width: 560, height: 720)
+        .tint(sheet.tint)
         .confirmationDialog(
             "この支出を削除しますか？",
             isPresented: $showingDeleteConfirm,
@@ -185,6 +241,112 @@ struct MacAddExpenseView: View {
             Text("元に戻せません。")
         }
         .task { await loadShareAndDefaults() }
+        .onChange(of: title) { _, newValue in
+            kickAICategorySuggest(title: newValue)
+        }
+        .onChange(of: kind) { _, _ in
+            aiSuggestTask?.cancel()
+            aiSuggestTask = nil
+            aiCategorySuggestion = nil
+            isComputingAICategory = false
+            kickAICategorySuggest(title: title)
+        }
+    }
+
+    // MARK: - AI Category Suggestion
+
+    @ViewBuilder
+    private var aiCategorySuggestionSection: some View {
+        if expense == nil {
+            if isComputingAICategory {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "apple.intelligence")
+                            .foregroundStyle(LinearGradient(
+                                colors: [.purple, .pink, .orange],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                        Text("AI でカテゴリを推測中…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            } else if let cat = aiCategorySuggestion,
+                      selectedCategory?.objectID != cat.objectID {
+                Section {
+                    Button {
+                        selectedCategory = cat
+                        aiCategorySuggestion = nil
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "apple.intelligence")
+                                .foregroundStyle(Color.purple)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(Image(systemName: "apple.intelligence")) 提案")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    CategoryIconView(category: cat, size: 22)
+                                    Text(cat.displayName)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            Spacer()
+                            Text("適用")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(sheet.tint.opacity(0.18)))
+                                .foregroundStyle(sheet.tint)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func kickAICategorySuggest(title: String) {
+        aiSuggestTask?.cancel()
+        aiSuggestTask = nil
+        aiCategorySuggestion = nil
+        isComputingAICategory = false
+
+        guard expense == nil else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2 else { return }
+        guard CategoryAISuggestor.isAvailable else { return }
+
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let kindCats = cats.filter { c in
+            let raw = c.kindRaw ?? ""
+            return raw == kind.rawValue || (kind == .expense && raw.isEmpty)
+        }
+        let names = kindCats.map { $0.displayName }
+        guard !names.isEmpty else { return }
+
+        let snapshotKind = kind
+        isComputingAICategory = true
+        aiSuggestTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if Task.isCancelled { return }
+            let suggested = await CategoryAISuggestor.suggest(
+                title: trimmed,
+                kind: snapshotKind,
+                categories: names
+            )
+            if Task.isCancelled { return }
+            isComputingAICategory = false
+            if let suggested,
+               let match = kindCats.first(where: { $0.displayName == suggested }) {
+                aiCategorySuggestion = match
+            }
+        }
     }
 
     // MARK: - Pickers
@@ -215,7 +377,7 @@ struct MacAddExpenseView: View {
                 Spacer()
                 if isOn {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(sheet.tint)
                 } else {
                     Image(systemName: "circle")
                         .foregroundStyle(.secondary)
@@ -251,7 +413,7 @@ struct MacAddExpenseView: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isOn ? sheet.tint : Color.secondary)
             }
         }
         .buttonStyle(.plain)
@@ -273,16 +435,29 @@ struct MacAddExpenseView: View {
         if let e = expense {
             title = e.displayTitle
             amountText = NSDecimalNumber(decimal: e.amountDecimal).stringValue
+            currencyCode = e.resolvedCurrencyCode
             date = e.date ?? .now
             kind = e.kind
             note = e.note ?? ""
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
+
+            // CRDT 差分書き戻し用にスナップショット保存
+            origTitle = title
+            origAmountText = amountText
+            origKindRaw = e.kindRaw ?? ""
+            origCurrencyCode = currencyCode
+            origCategoryObjectID = e.category?.objectID
+            origPayerProfileID = e.payerProfileID ?? ""
+            origDate = date
+            origNote = note
+            origBeneficiaryCSV = e.beneficiaryProfileIDs ?? ""
         } else {
-            selectedCategory = categories.first
+            selectedCategory = nil
             payerProfileID = selfProfileID
             selectedBeneficiaries = []
+            currencyCode = sheet.resolvedDefaultCurrencyCode
         }
     }
 
@@ -292,42 +467,98 @@ struct MacAddExpenseView: View {
 
         let profile = UserProfileStore.shared
 
-        let target: Expense
         if let existing = expense {
-            target = existing
+            // 編集モード: CRDT 差分書き戻し (変更があったフィールドだけ touch)
+            // → 他端末が別フィールドを同時編集していてもその変更を消さない。
+            applyChanges(toExpense: existing, trimmedTitle: trimmed, amount: amount, profile: profile)
         } else {
-            target = Expense(context: viewContext)
+            // 新規作成: 全フィールド書き込み
+            let target = Expense(context: viewContext)
             if let store = sheet.objectID.persistentStore {
                 viewContext.assign(target, to: store)
             }
             target.sheet = sheet
             target.createdAt = .now
+            target.title = trimmed
+            target.amount = NSDecimalNumber(decimal: amount)
+            target.kindRaw = kind.rawValue
+            target.currencyCode = currencyCode.isEmpty
+                ? sheet.resolvedDefaultCurrencyCode
+                : currencyCode
+            target.date = date
+            target.note = note
+            target.categoryRaw = selectedCategory?.name
+            if let cat = selectedCategory,
+               cat.objectID.persistentStore == sheet.objectID.persistentStore {
+                target.category = cat
+            } else {
+                target.category = nil
+            }
+            target.payerProfileID = payerProfileID
+            if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
+                target.payerMemberID = mid
+            } else {
+                target.payerMemberID = nil
+            }
+            target.beneficiaryIDList = Array(selectedBeneficiaries)
         }
-        target.title = trimmed
-        target.amount = NSDecimalNumber(decimal: amount)
-        target.kindRaw = kind.rawValue
-        target.currencyCode = sheet.resolvedDefaultCurrencyCode
-        target.date = date
-        target.note = note
-        target.categoryRaw = selectedCategory?.name
-        if let cat = selectedCategory,
-           cat.objectID.persistentStore == sheet.objectID.persistentStore {
-            target.category = cat
-        } else {
-            target.category = nil
-        }
-        // 支払い者
-        target.payerProfileID = payerProfileID
-        if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
-            target.payerMemberID = mid
-        } else {
-            target.payerMemberID = nil
-        }
-        // 受益者 (ピッカーで選んだ ID をそのまま CSV に)
-        target.beneficiaryIDList = Array(selectedBeneficiaries)
 
         PersistenceController.shared.save()
         dismiss()
+    }
+
+    /// 編集中の差分を Expense に書き戻す。
+    /// `origXxx` スナップショットと現在値を比較し、**変わったフィールドだけ** 上書きする。
+    /// これにより他端末が同時に別フィールドを編集していても、こちらの save でそれを
+    /// 上書きしてしまわないようにする。
+    @MainActor
+    private func applyChanges(
+        toExpense expense: Expense,
+        trimmedTitle: String,
+        amount: Decimal,
+        profile: UserProfileStore
+    ) {
+        if trimmedTitle != origTitle { expense.title = trimmedTitle }
+        if amountText != origAmountText {
+            expense.amount = NSDecimalNumber(decimal: amount)
+        }
+        if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
+        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        if !Calendar.current.isDate(date, inSameDayAs: origDate) {
+            expense.date = date
+        }
+        if note != origNote { expense.note = note }
+        if selectedCategory?.objectID != origCategoryObjectID {
+            expense.categoryRaw = selectedCategory?.name
+            if let cat = selectedCategory,
+               cat.objectID.persistentStore == sheet.objectID.persistentStore {
+                expense.category = cat
+            } else {
+                expense.category = nil
+            }
+        }
+        if payerProfileID != origPayerProfileID {
+            expense.payerProfileID = payerProfileID
+            // paidBy は denormalized キャッシュなので空にして、表示は payerProfileID 経由で解決
+            expense.paidBy = nil
+            if selfIDSet.contains(payerProfileID), let mid = profile.selfMemberID {
+                expense.payerMemberID = mid
+            } else {
+                expense.payerMemberID = nil
+            }
+        }
+        // beneficiaryIDList は内部で重複・空除去するので、CSV 比較で diff を取る
+        let newCSV = Array(selectedBeneficiaries)
+            .sorted()
+            .joined(separator: ",")
+        let oldCSV = origBeneficiaryCSV
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .sorted()
+            .joined(separator: ",")
+        if newCSV != oldCSV {
+            expense.beneficiaryIDList = Array(selectedBeneficiaries)
+        }
     }
 
     private func deleteExpense() {

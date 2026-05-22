@@ -257,24 +257,13 @@ final class UserProfileStore: ObservableObject {
     /// オーナー側と参加者側で別々の userRecordID 空間に居る場合があるため、
     /// recordName を直接使うと不整合になる。次のルールで揃える:
     /// - シートのオーナーが自分 → CKContainer.userRecordID().recordName
-    ///   (= 参加者から見える owner.userIdentity.userRecordID と一致する)
-    /// - シートの参加者が自分 → "email:" + 自分の email (= lookupInfo.emailAddress)
-    ///   (= オーナーから見える participant.userIdentity.lookupInfo と一致する)
-    /// - share が無い (非共有シート) → userRecordName (従来通り)
+    /// - **常に `userRecordName` (URN) を返す**。
+    ///   iCloud Extended Share Access エンタイトルメントで URN が全 viewer に
+    ///   一致するため、旧 "email:..." canonical は不要になった。
+    ///   SettlementCalculator / migrateLegacyPayerProfileIDs が旧データの
+    ///   "email:..." → URN を自動正規化する。
+    /// - share 引数は backward compat のために残置。
     func canonicalSelfID(forShare share: CKShare?) -> String? {
-        guard let share = share else { return userRecordName }
-        // オーナーから見た share.owner.userIdentity.userRecordID.recordName は実 ID。
-        // 自分がオーナーの場合は `__defaultOwner__` になるので、それで分岐。
-        let ownerRN = share.owner.userIdentity.userRecordID?.recordName ?? ""
-        if Self.isSelfPlaceholderRecordName(ownerRN) {
-            return userRecordName
-        }
-        // 自分は参加者。自分のエントリは recordName == __defaultOwner__ になっている。
-        if let me = share.participants.first(where: {
-            Self.isSelfPlaceholderRecordName($0.userIdentity.userRecordID?.recordName ?? "")
-        }), let email = me.userIdentity.lookupInfo?.emailAddress, !email.isEmpty {
-            return "email:" + email.lowercased()
-        }
         return userRecordName
     }
 
@@ -369,16 +358,22 @@ final class UserProfileStore: ObservableObject {
             if let share = ShareCoordinator.shared.existingShare(for: s) {
                 var emailToURN: [String: String] = [:]
                 for p in share.participants {
-                    let urn = p.userIdentity.userRecordID?.recordName ?? ""
-                    guard !urn.isEmpty,
-                          !Self.isSelfPlaceholderRecordName(urn) else { continue }
+                    let urnRaw = p.userIdentity.userRecordID?.recordName ?? ""
+                    let resolvedURN: String
+                    if Self.isSelfPlaceholderRecordName(urnRaw) {
+                        // self placeholder → 自分の URN に置き換え
+                        guard let myURN = userRecordName, !myURN.isEmpty else { continue }
+                        resolvedURN = myURN
+                    } else {
+                        guard !urnRaw.isEmpty else { continue }
+                        resolvedURN = urnRaw
+                    }
                     if let email = p.userIdentity.lookupInfo?.emailAddress?.lowercased(),
                        !email.isEmpty {
-                        emailToURN["email:" + email] = urn
+                        emailToURN["email:" + email] = resolvedURN
                     }
                 }
-                // 自分の email も追加 (CKShare では __defaultOwner__ で email が取れないため
-                // 別途 UserProfileStore.selfEmail からキャッシュ値を使う)
+                // selfEmail キャッシュからもフォールバック (userDiscoverability 経由)
                 if let myEmail = selfEmail?.lowercased(), !myEmail.isEmpty,
                    let myURN = userRecordName, !myURN.isEmpty {
                     emailToURN["email:" + myEmail] = myURN
@@ -399,15 +394,18 @@ final class UserProfileStore: ObservableObject {
     }
 
     /// 旧 canonical (email:xxx) で作られた PP と URN で作られた PP が両方存在する場合、
-    /// 旧 PP を削除して URN PP に統一する。両方がデータを持っていれば URN PP の値を尊重。
-    /// 旧 PP しか存在しない場合は recordName を URN に書き換えてリネーム。
-    /// 戻り値: 変更件数 (削除/リネームのいずれも 1 とカウント)。
+    /// 旧 PP を削除して URN PP に統一する。
+    /// **自分の PP のみ対象**: 他人の PP を当端末から削除/書き換えると CloudKit
+    /// 共有ゾーン経由で相手のレコードも更新してしまうため、`toID` が自分の URN
+    /// と一致しない場合は何もしない。他人の重複 PP は本人の端末でだけクリーンアップする。
     private func mergeDuplicatePP(
         in ctx: NSManagedObjectContext,
         sheet: ExpenseSheet,
         fromID: String,
         toID: String
     ) -> Int {
+        // 自分以外の PP は触らない (CloudKit 共有ゾーン経由で相手レコードを変更しないため)
+        guard let myURN = userRecordName, !myURN.isEmpty, toID == myURN else { return 0 }
         guard let pps = sheet.participantProfiles as? Set<ParticipantProfile> else { return 0 }
         let oldPP = pps.first(where: { $0.recordName == fromID })
         guard let oldPP else { return 0 }
@@ -770,45 +768,51 @@ final class UserProfileStore: ObservableObject {
     /// - 色は触らない (色は per-user / per-sheet で UserProfileStore 経由)。
     /// - 写真は触らない (Apple ID 写真は CKShare 経由でも取れないため)。
     func hydrateParticipantProfilesFromShares(in ctx: NSManagedObjectContext) {
+        // ※ 過去版は CKShare の各 participant の nameComponents を、その participant の
+        //    URN にあたる ParticipantProfile レコードに書き込んでいた (= 他人の PP を
+        //    こちら側から更新)。CKShare zone は共有ストアで、ここから書くと
+        //    相手側のレコードを上書きしてしまうため廃止。
+        //
+        // 名前/写真の表示は:
+        //   - 自分: UserProfileStore (ローカル) + PublicProfileSync (Public DB upload)
+        //   - 他人: PublicProfileSync (Public DB fetch) + CKShare.participants の
+        //          nameComponents (live、ExpenseSheet.nameFromShare 経由)
+        // で完結するので、PP を書き溜める必要は無い。
+        _ = ctx  // no-op
+    }
+
+    /// 全シートの CKShare.participants と既存 PP レコードから URN を集めて
+    /// PublicProfileSync の cache を埋める。他人のプロフィール写真表示用。
+    /// hydrateParticipantProfilesFromShares が no-op になったので、こちらで
+    /// CKShare 経由の URN も拾うようにする。
+    @MainActor
+    func prefetchAllProfileURNs(in ctx: NSManagedObjectContext) async {
+        var urns: Set<String> = []
+        // 自分の URN
+        if let own = userRecordName, !own.isEmpty { urns.insert(own) }
+        // 既存 PP レコード由来
+        let ppReq = NSFetchRequest<ParticipantProfile>(entityName: "ParticipantProfile")
+        let pps = (try? ctx.fetch(ppReq)) ?? []
+        for pp in pps {
+            guard let rn = pp.recordName, !rn.isEmpty,
+                  !Self.isSelfPlaceholderRecordName(rn) else { continue }
+            if rn.hasPrefix("email:") || rn.hasPrefix("phone:") { continue }
+            urns.insert(rn)
+        }
+        // 全シートの CKShare.participants 由来 (= 主経路)
         let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        guard let sheets = try? ctx.fetch(sheetReq) else { return }
-        let nameFormatter = PersonNameComponentsFormatter()
-        nameFormatter.style = .default
-        var didChange = false
+        let sheets = (try? ctx.fetch(sheetReq)) ?? []
         for sheet in sheets {
             guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { continue }
-            guard let sheetStore = sheet.objectID.persistentStore else { continue }
-            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-
             for p in share.participants {
-                let identity = p.userIdentity
-                let rn = identity.userRecordID?.recordName ?? ""
-                // self placeholder は飛ばす (実 URN が取れないため PP キーにできない)
-                if Self.isSelfPlaceholderRecordName(rn) { continue }
-                guard !rn.isEmpty else { continue }
-                guard let comps = identity.nameComponents else { continue }
-                let displayName = nameFormatter.string(from: comps)
-                guard !displayName.isEmpty else { continue }
-
-                if let existing = pps.first(where: { $0.recordName == rn }) {
-                    if existing.displayName != displayName {
-                        existing.displayName = displayName
-                        existing.updatedAt = .now
-                        didChange = true
-                    }
-                } else {
-                    let pp = ParticipantProfile(context: ctx)
-                    ctx.assign(pp, to: sheetStore)
-                    pp.recordName = rn
-                    pp.sheet = sheet
-                    pp.displayName = displayName
-                    pp.colorHex = "#8E8E93"
-                    pp.updatedAt = .now
-                    didChange = true
-                }
+                guard let rn = p.userIdentity.userRecordID?.recordName,
+                      !rn.isEmpty,
+                      !Self.isSelfPlaceholderRecordName(rn) else { continue }
+                urns.insert(rn)
             }
         }
-        if didChange, ctx.hasChanges { try? ctx.save() }
+        guard !urns.isEmpty else { return }
+        await PublicProfileSync.shared.fetchProfiles(forURNs: Array(urns))
     }
     #endif
 

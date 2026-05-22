@@ -92,17 +92,10 @@ struct ExpensoApp: App {
                     // 行を canonical (email ベース等) に自動マイグレートする。
                     UserProfileStore.shared.migrateLegacyPayerProfileIDs(in: ctx)
                     // 別端末で編集された自分のプロフィールを Public DB から取り込む
+                    // (= 起動時の auto upload は Public DB の quota を消費するので削除。
+                    //  upload は ProfileEditView での明示保存時のみ実行する)
                     await UserProfileStore.shared.refreshOwnPublicProfile()
-                    // ローカルが空でなければ Public DB にも push (= sync 双方向の補完)
-                    if !UserProfileStore.shared.displayName.trimmingCharacters(in: .whitespaces).isEmpty {
-                        await PublicProfileSync.shared.uploadOwnProfile(
-                            urn: UserProfileStore.shared.userRecordName ?? "",
-                            displayName: UserProfileStore.shared.resolvedDisplayName,
-                            photoData: UserProfileStore.shared.photoData,
-                            colorHex: UserProfileStore.shared.avatarBgColorHex
-                        )
-                    }
-                    await prefetchAllParticipantProfiles(in: ctx)
+                    await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     // CKShare の participant nameComponents を PP にハイドレートして
                     // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
                     UserProfileStore.shared.hydrateParticipantProfilesFromShares(in: ctx)

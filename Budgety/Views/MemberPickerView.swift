@@ -73,9 +73,11 @@ struct MemberPickerView: View {
     /// CKShare では「見ている本人」のエントリは userRecordID.recordName が
     /// `__defaultOwner__` placeholder に匿名化される。これをそのまま `!=` 比較すると
     /// 別人どうし両方が placeholder の場合誤マッチするので、placeholder 判定で除外する。
+    /// 招待中で未参加 (.pending) の人は picker に出さない (= 払い者に選べないように)。
     private var otherParticipants: [CKShare.Participant] {
         guard let share = share else { return [] }
         return share.participants.filter { p in
+            guard p.acceptanceStatus == .accepted else { return false }
             let rn = p.userIdentity.userRecordID?.recordName ?? ""
             return !UserProfileStore.isSelfPlaceholderRecordName(rn)
         }

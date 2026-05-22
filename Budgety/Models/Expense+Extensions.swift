@@ -12,15 +12,17 @@ extension Expense {
     var displayTitle: String { title ?? "" }
 
     /// 支払者の表示名。`payerProfileID` (canonical) から動的に解決する。
-    /// 解決順:
+    /// 解決順 (memberDisplayInfo と一致させる):
     /// 1. 自分 → UserProfileStore.resolvedDisplayName
-    /// 2. **CKShare 参加者 → iCloud nameComponents (都度取得)** ← 優先
-    /// 3. ParticipantProfile.displayName (= フォールバック、CKShare 未取得時)
-    /// 4. ローカル Member.displayName (= 過去に picker で選んだキャッシュ)
-    /// 5. 保存時の `paidBy` 文字列 (= 旧データ用 fallback)
+    /// 2. **PublicProfileSync の cache (= Public DB カスタム名)** ← 最優先
+    /// 3. CKShare 参加者 → iCloud nameComponents (都度取得)
+    /// 4. ParticipantProfile.displayName (= フォールバック)
+    /// 5. ローカル Member.displayName
+    /// 6. 保存時の `paidBy` 文字列 (= 旧データ用 fallback)
     @MainActor
     var displayPaidBy: String {
         if let n = resolvedSelfDisplayName(), !n.isEmpty { return n }
+        if let n = resolvedPublicProfileName(), !n.isEmpty { return n }
         if let n = resolvedSharedParticipantName(), !n.isEmpty { return n }
         if let n = resolvedParticipantProfile?.displayName, !n.isEmpty { return n }
         if let n = resolvedPayer?.displayName, !n.isEmpty { return n }
@@ -41,7 +43,24 @@ extension Expense {
     var payerPhotoData: Data? {
         if let pp = resolvedParticipantProfile?.photoData { return pp }
         if isPayerSelf { return UserProfileStore.shared.photoData }
+        // Public DB cache から他参加者の photo を取得
+        if let pid = payerProfileID, !pid.isEmpty,
+           let cached = PublicProfileSync.shared.cachedProfile(for: pid),
+           let photo = cached.photoData {
+            return photo
+        }
         return resolvedPayer?.photoData
+    }
+
+    /// Public DB に登録された他参加者のカスタム表示名 (= ProfileEditView で設定したもの)。
+    @MainActor
+    private func resolvedPublicProfileName() -> String? {
+        guard let pid = payerProfileID, !pid.isEmpty else { return nil }
+        // 自分は resolvedSelfDisplayName で処理済みなのでスキップ
+        if isPayerSelf { return nil }
+        guard let cached = PublicProfileSync.shared.profileOrPrefetch(for: pid),
+              !cached.displayName.isEmpty else { return nil }
+        return cached.displayName
     }
 
     /// `payerProfileID` が「自分」を指しているか。
