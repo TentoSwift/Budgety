@@ -32,6 +32,12 @@ struct PeriodMenuControl: UIViewRepresentable {
     func updateUIView(_ uiView: _PeriodMenuUIControl, context: Context) {
         uiView.update(current: period, periodLabel: periodLabel)
     }
+
+    /// Dynamic Type で拡大した実サイズを SwiftUI に伝える。
+    /// これが無いと拡大時に確保枠が足りず、上の行と重なって切れる。
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: _PeriodMenuUIControl, context: Context) -> CGSize? {
+        uiView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+    }
 }
 
 /// 実体の UIControl サブクラス。
@@ -67,7 +73,9 @@ final class _PeriodMenuUIControl: UIControl {
     /// 通常時は `>` (chevron.right)、メニュー展開中は `↓` (chevron.down) になるよう
     /// シンボル画像をスワップする。ラベルに合わせて Dynamic Type で拡大する。
     private let chevron: UIImageView = {
+        // Dynamic Type で拡大 (textStyle) しつつ semibold ウェイトにする。
         let cfg = UIImage.SymbolConfiguration(textStyle: .title3, scale: .small)
+            .applying(UIImage.SymbolConfiguration(weight: .semibold))
         let img = UIImage(systemName: "chevron.right", withConfiguration: cfg)
         let v = UIImageView(image: img)
         v.tintColor = .secondaryLabel
@@ -115,9 +123,17 @@ final class _PeriodMenuUIControl: UIControl {
     }
 
     override var intrinsicContentSize: CGSize {
-        let h = max(stack.intrinsicContentSize.height, 22)
-        let w = stack.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
-        return CGSize(width: w, height: h)
+        // 幅・高さとも実レイアウトから求める (Dynamic Type 拡大に追従)。
+        let size = stack.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        return CGSize(width: size.width, height: max(size.height, 22))
+    }
+
+    /// 文字サイズ設定が変わったら再計測して枠を更新する。
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        if previous?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+            invalidateIntrinsicContentSize()
+        }
     }
 
     // MARK: - Menu
