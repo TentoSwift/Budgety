@@ -449,16 +449,31 @@ struct SheetListView: View {
         return UIMenu(title: "", children: children)
     }
 
-    /// 長押し時のプレビュー（シートアイコン＋名前）。
+    /// 長押し時のプレビュー。解錠済み（またはロック無し）は詳細画面
+    /// (SheetDetailView) をそのまま表示し、ロック中（未解錠）は中身を保護して
+    /// 「ロックされています」表示にする。
     private func rowPreview(for sheet: ExpenseSheet) -> AnyView {
-        AnyView(
-            HStack(spacing: 14) {
-                SheetIconView(record: sheet, size: 44)
-                Text(sheet.displayName)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+        if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
+            return AnyView(
+                VStack(spacing: 16) {
+                    SheetIconView(record: sheet, size: 60)
+                    Text(sheet.displayName)
+                        .font(.headline)
+                    Label("このシートはロックされています", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 44)
+                .padding(.horizontal, 24)
+            )
+        }
+        // 詳細画面をそのままプレビュー表示（context を引き継ぐ）。
+        return AnyView(
+            NavigationStack {
+                SheetDetailView(record: sheet)
             }
-            .padding(16)
+            .environment(\.managedObjectContext, viewContext)
         )
     }
     #endif

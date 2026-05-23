@@ -91,9 +91,15 @@ struct SheetRowInteraction: UIViewRepresentable {
             let host = UIHostingController(rootView: preview)
             host.view.backgroundColor = .clear
             let targetWidth = bounds.width > 1 ? bounds.width : 320
-            host.preferredContentSize = host.sizeThatFits(
+            var size = host.sizeThatFits(
                 in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude)
             )
+            // SheetDetailView など背の高いプレビューが画面いっぱいにならないよう上限。
+            let maxHeight: CGFloat = 540
+            size.width = targetWidth
+            size.height = (size.height.isFinite && size.height > 1)
+                ? min(size.height, maxHeight) : maxHeight
+            host.preferredContentSize = size
             return host
         }
     }
