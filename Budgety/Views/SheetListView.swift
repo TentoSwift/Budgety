@@ -13,6 +13,29 @@ private enum SearchScope: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// シート行のコンテキストメニューから開くサブ画面（モーダル提示）。
+/// `path` (= シート詳細への push) を壊さないよう、これらは sheet で出す。
+private enum SheetSubScreen: Identifiable {
+    case settlement(ExpenseSheet)
+    case stats(ExpenseSheet)
+    case categories(ExpenseSheet)
+
+    var id: String {
+        let uri = sheet.objectID.uriRepresentation().absoluteString
+        switch self {
+        case .settlement: return "settle-\(uri)"
+        case .stats: return "stats-\(uri)"
+        case .categories: return "cat-\(uri)"
+        }
+    }
+
+    private var sheet: ExpenseSheet {
+        switch self {
+        case .settlement(let s), .stats(let s), .categories(let s): return s
+        }
+    }
+}
+
 struct SheetListView: View {
     @Environment(\.managedObjectContext) private var viewContext
 
@@ -41,6 +64,10 @@ struct SheetListView: View {
     @State private var editingSearchExpense: Expense?
     /// 検索結果から解錠しようとしているロック中シート。
     @State private var unlockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くロック設定シート。
+    @State private var lockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くサブ画面（精算/統計/カテゴリ）。
+    @State private var subScreen: SheetSubScreen?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
@@ -84,6 +111,9 @@ struct SheetListView: View {
                         ForEach(sheets) { sheet in
                             NavigationLink(value: sheet.objectID) {
                                 SheetRowView(record: sheet)
+                            }
+                            .contextMenu {
+                                sheetContextMenu(for: sheet)
                             }
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
@@ -149,6 +179,21 @@ struct SheetListView: View {
                         onUnlock: { unlockingSheet = nil },
                         onCancel: { unlockingSheet = nil }
                     )
+                }
+            }
+            .sheet(item: $lockingSheet) { sheet in
+                NavigationStack {
+                    SetSheetPasswordView(record: sheet)
+                }
+            }
+            .sheet(item: $subScreen) { screen in
+                NavigationStack {
+                    subScreenContent(screen)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("閉じる") { subScreen = nil }
+                            }
+                        }
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -249,6 +294,79 @@ struct SheetListView: View {
             (e.note ?? "").lowercased()
         ]
         return fields.contains { $0.contains(q) }
+    }
+
+    // MARK: - Context Menu (シート行の長押し)
+
+    /// シート一覧の行を長押しした時のコンテキストメニュー。
+    /// ロック中（未解錠）のシートは中身を保護するため、精算/統計/カテゴリは出さない。
+    @ViewBuilder
+    private func sheetContextMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.isUnlocked(sheet) {
+            Button { subScreen = .settlement(sheet) } label: {
+                Label("精算", systemImage: "arrow.left.arrow.right.circle")
+            }
+            Button { subScreen = .stats(sheet) } label: {
+                Label("統計", systemImage: "chart.pie.fill")
+            }
+            Button { subScreen = .categories(sheet) } label: {
+                Label("カテゴリを管理", systemImage: "tag.fill")
+            }
+        }
+        if lockMenuApplicable(for: sheet) {
+            Divider()
+            sheetLockMenu(for: sheet)
+        }
+    }
+
+    @ViewBuilder
+    private func sheetLockMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                Button {
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                } label: {
+                    Label("今すぐロック", systemImage: "lock.fill")
+                }
+            }
+            if sheet.isOwnedByCurrentUser {
+                Button { presentLockSetup(sheet) } label: {
+                    Label("ロック設定", systemImage: "lock.fill")
+                }
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            Button { presentLockSetup(sheet) } label: {
+                Label("シートをロック", systemImage: "lock")
+            }
+        }
+    }
+
+    /// ロック関連項目を出す価値があるか（空セクション＋Divider を避ける）。
+    private func lockMenuApplicable(for sheet: ExpenseSheet) -> Bool {
+        if sheet.isOwnedByCurrentUser { return true }
+        // 非オーナーは「今すぐロック」(= パスワード有 & 解錠済み) の時だけ。
+        return lockManager.hasPassword(for: sheet) && lockManager.isUnlocked(sheet)
+    }
+
+    /// プレミアム加入者ならロック設定を開く。未加入なら Paywall。
+    private func presentLockSetup(_ sheet: ExpenseSheet) {
+        if PurchaseManager.shared.isPremium {
+            lockingSheet = sheet
+        } else {
+            showingPaywall = true
+            Haptics.warning()
+        }
+    }
+
+    /// 長押しメニューから開くサブ画面の中身。
+    @ViewBuilder
+    private func subScreenContent(_ screen: SheetSubScreen) -> some View {
+        switch screen {
+        case .settlement(let s): SettlementView(record: s)
+        case .stats(let s): StatsView(record: s)
+        case .categories(let s): CategoryListView(record: s)
+        }
     }
 
     @ViewBuilder
