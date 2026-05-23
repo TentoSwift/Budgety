@@ -5,6 +5,9 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// 検索のスコープ。検索バー下の Picker で切り替える。
 private enum SearchScope: String, CaseIterable, Identifiable {
@@ -109,12 +112,7 @@ struct SheetListView: View {
                 } else {
                     List {
                         ForEach(sheets) { sheet in
-                            NavigationLink(value: sheet.objectID) {
-                                SheetRowView(record: sheet)
-                            }
-                            .contextMenu {
-                                sheetContextMenu(for: sheet)
-                            }
+                            sheetListRow(sheet)
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
@@ -368,6 +366,102 @@ struct SheetListView: View {
         case .categories(let s): CategoryListView(record: s)
         }
     }
+
+    /// シート一覧の 1 行。
+    /// iOS/visionOS では UIContextMenuInteraction ブリッジを使い、プレビューの
+    /// タップでも詳細へ遷移できるようにする（NavigationLink は使わず path に積む）。
+    /// それ以外のプラットフォームは従来どおり NavigationLink + .contextMenu。
+    @ViewBuilder
+    private func sheetListRow(_ sheet: ExpenseSheet) -> some View {
+        #if canImport(UIKit) && !os(watchOS)
+        SheetRowView(record: sheet, showsDisclosure: true)
+            .contentShape(Rectangle())
+            .overlay {
+                SheetRowInteraction(
+                    onOpen: { openSheet(sheet) },
+                    makeMenu: { makeRowMenu(for: sheet) },
+                    preview: rowPreview(for: sheet)
+                )
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { openSheet(sheet) }
+        #else
+        NavigationLink(value: sheet.objectID) {
+            SheetRowView(record: sheet)
+        }
+        .contextMenu {
+            sheetContextMenu(for: sheet)
+        }
+        #endif
+    }
+
+    /// 行のタップ／プレビュータップで詳細へ遷移（path に積む = 復元ロジックと整合）。
+    private func openSheet(_ sheet: ExpenseSheet) {
+        path.append(sheet.objectID)
+    }
+
+    #if canImport(UIKit) && !os(watchOS)
+    /// UIKit の長押しメニュー。SwiftUI 版 sheetContextMenu と同じ構成。
+    private func makeRowMenu(for sheet: ExpenseSheet) -> UIMenu {
+        var top: [UIMenuElement] = []
+        if lockManager.isUnlocked(sheet) {
+            top.append(UIAction(title: "精算",
+                                image: UIImage(systemName: "arrow.left.arrow.right.circle")) { _ in
+                subScreen = .settlement(sheet)
+            })
+            top.append(UIAction(title: "統計",
+                                image: UIImage(systemName: "chart.pie.fill")) { _ in
+                subScreen = .stats(sheet)
+            })
+            top.append(UIAction(title: "カテゴリを管理",
+                                image: UIImage(systemName: "tag.fill")) { _ in
+                subScreen = .categories(sheet)
+            })
+        }
+
+        var lock: [UIMenuElement] = []
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                lock.append(UIAction(title: "今すぐロック",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                })
+            }
+            if sheet.isOwnedByCurrentUser {
+                lock.append(UIAction(title: "ロック設定",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    presentLockSetup(sheet)
+                })
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            lock.append(UIAction(title: "シートをロック",
+                                 image: UIImage(systemName: "lock")) { _ in
+                presentLockSetup(sheet)
+            })
+        }
+
+        var children = top
+        if !lock.isEmpty {
+            children.append(UIMenu(title: "", options: .displayInline, children: lock))
+        }
+        return UIMenu(title: "", children: children)
+    }
+
+    /// 長押し時のプレビュー（シートアイコン＋名前）。
+    private func rowPreview(for sheet: ExpenseSheet) -> AnyView {
+        AnyView(
+            HStack(spacing: 14) {
+                SheetIconView(record: sheet, size: 44)
+                Text(sheet.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+            .padding(16)
+        )
+    }
+    #endif
 
     @ViewBuilder
     private var searchResultsList: some View {
@@ -798,6 +892,9 @@ private struct SearchResultRow: View {
 
 private struct SheetRowView: View {
     @ObservedObject var record: ExpenseSheet
+    /// UIKit ブリッジ経由の行は NavigationLink が無いので、自前で
+    /// ディスクロージャ (>) を表示してタップ可能なことを示す。
+    var showsDisclosure: Bool = false
     @StateObject private var lockManager = SheetLockManager.shared
 
     var body: some View {
@@ -810,6 +907,11 @@ private struct SheetRowView: View {
                 Image(systemName: lockManager.isUnlocked(record) ? "lock.open.fill" : "lock.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+            }
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 4)
