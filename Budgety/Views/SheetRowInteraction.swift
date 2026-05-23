@@ -80,7 +80,9 @@ struct SheetRowInteraction: UIViewRepresentable {
             animator: UIContextMenuInteractionCommitAnimating
         ) {
             // プレビュー（持ち上がった行）をタップした時にここが呼ばれる。
-            animator.preferredCommitStyle = .pop
+            // .pop はプレビューが広がって詳細へモーフする演出になるため、
+            // .dismiss にしてプレビューを閉じてから通常の push 遷移にする。
+            animator.preferredCommitStyle = .dismiss
             animator.addCompletion { [weak self] in self?.onOpen?() }
         }
 
