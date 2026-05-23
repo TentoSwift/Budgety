@@ -468,12 +468,11 @@ struct SheetListView: View {
                 .padding(.horizontal, 24)
             )
         }
-        // 詳細画面をそのままプレビュー表示（context を引き継ぐ）。
+        // 詳細画面の中身をプレビュー表示。isPreview=true で検索バー・ツールバーを
+        // 描画しないので、本文（サマリ＋一覧）だけが出る。
         return AnyView(
-            NavigationStack {
-                SheetDetailView(record: sheet)
-            }
-            .environment(\.managedObjectContext, viewContext)
+            SheetDetailView(record: sheet, isPreview: true)
+                .environment(\.managedObjectContext, viewContext)
         )
     }
     #endif

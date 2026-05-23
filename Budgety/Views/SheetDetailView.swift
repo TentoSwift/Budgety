@@ -13,6 +13,8 @@ import CustomNavigationTitle
 
 struct SheetDetailView: View {
     @ObservedObject var record: ExpenseSheet
+    /// プレビュー表示用。true なら検索バー・ツールバーを描画しない。
+    let isPreview: Bool
     @Environment(\.managedObjectContext) private var viewContext
 
     enum Period: String, CaseIterable, Identifiable {
@@ -116,8 +118,9 @@ struct SheetDetailView: View {
     /// (date / amount 等) で SwiftUI 再描画が走らず、編集後に古い日付グループに残り続けてしまう。
     @FetchRequest private var allExpenses: FetchedResults<Expense>
 
-    init(record: ExpenseSheet) {
+    init(record: ExpenseSheet, isPreview: Bool = false) {
         self.record = record
+        self.isPreview = isPreview
         self._allExpenses = FetchRequest<Expense>(
             sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
             predicate: NSPredicate(format: "sheet == %@", record),
@@ -243,6 +246,9 @@ struct SheetDetailView: View {
         // 並列に並べる。ToolbarSpacer で間を空ける。
         // (Liquid Glass デザインの推奨パターン:
         //  https://qiita.com/RS6/items/2f55281499ef7bad96b2)
+        // プレビュー時は検索バー・ツールバー（iOS 26 の bottomBar 検索＋追加ボタン含む）を出さない。
+        .applyIf(!isPreview) { content in
+        content
         .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出、収入を検索"))
         .searchFocused($searchFocused)
         .onChange(of: searchFocused) { _, focused in
@@ -385,6 +391,7 @@ struct SheetDetailView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+        }
         }
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(record: record)
@@ -1587,5 +1594,13 @@ private struct ExpenseRowView: View {
 
     private var showSubtitle: Bool {
         !(expense.paidBy?.isEmpty ?? true) || (expense.note?.isEmpty == false)
+    }
+}
+
+private extension View {
+    /// 条件が真のときだけ modifier 群を適用する（プレビューで検索/ツールバーを外す用途）。
+    @ViewBuilder
+    func applyIf<V: View>(_ condition: Bool, _ transform: (Self) -> V) -> some View {
+        if condition { transform(self) } else { self }
     }
 }
