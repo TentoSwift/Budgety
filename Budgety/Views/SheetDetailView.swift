@@ -42,6 +42,28 @@ struct SheetDetailView: View {
         /// 期間フィルタが有効か (全期間以外なら絞り込み中)。
         var isFiltering: Bool { self != .all }
 
+        /// サマリカードのヘッダー表示 ("2026年11月" / "先月の年月" / "2026年" / "全期間")。
+        /// SummaryCard / 検索結果カードの期間ピッカーで共通利用する。
+        var headerLabel: String {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "ja_JP")
+            df.dateFormat = "yyyy年M月"
+            switch self {
+            case .thisMonth:
+                return df.string(from: .now)
+            case .lastMonth:
+                let last = Calendar.current.date(byAdding: .month, value: -1, to: .now) ?? .now
+                return df.string(from: last)
+            case .thisYear:
+                let yf = DateFormatter()
+                yf.locale = Locale(identifier: "ja_JP")
+                yf.dateFormat = "yyyy年"
+                return yf.string(from: .now)
+            case .all:
+                return "全期間"
+            }
+        }
+
         /// 指定日がこの期間に含まれるか。`.all` は常に true。
         func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> Bool {
             guard self != .all else { return true }
@@ -1028,23 +1050,7 @@ private struct SummaryCard: View {
     }
 
     /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "カスタム")
-    private var periodHeaderLabel: String {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "ja_JP")
-        df.dateFormat = "yyyy年M月"
-        switch period {
-        case .thisMonth: return df.string(from: .now)
-        case .lastMonth:
-            let last = Calendar.current.date(byAdding: .month, value: -1, to: .now) ?? .now
-            return df.string(from: last)
-        case .thisYear:
-            let yf = DateFormatter()
-            yf.locale = Locale(identifier: "ja_JP")
-            yf.dateFormat = "yyyy年"
-            return yf.string(from: .now)
-        case .all: return "全期間"
-        }
-    }
+    private var periodHeaderLabel: String { period.headerLabel }
 
     /// 期間に応じた支出キャプション
     private var expenseCaption: String {
