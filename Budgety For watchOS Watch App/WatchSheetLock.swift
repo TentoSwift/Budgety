@@ -71,7 +71,6 @@ struct WatchSheetLockView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .frame(height: statusHeight)
-                Spacer(minLength: 0)
                 ForEach(rows, id: \.self) { row in
                     HStack(spacing: spacing) {
                         ForEach(row, id: \.self) { key in
@@ -79,9 +78,10 @@ struct WatchSheetLockView: View {
                         }
                     }
                 }
-                Spacer(minLength: 0)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            // Spacer は使わない (VStack の隙間数が増えて高さ計算とずれ、行が重なるため)。
+            // 上限でボタンが小さくなった分の余白は frame の中央寄せで吸収する。
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
         .navigationTitle(sheet.displayName)
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
@@ -99,22 +99,32 @@ struct WatchSheetLockView: View {
 
     @ViewBuilder
     private func keyButton(_ key: String, width: CGFloat, height: CGFloat) -> some View {
-        Button {
+        let isUnlock = key == "→"
+        let disabled = isUnlock && password.isEmpty
+        // .buttonStyle(.bordered) は固有の最小サイズを持ち、算出した height より大きく
+        // 描画されて行が重なることがある。.plain + 自前 RoundedRectangle で寸法を
+        // 厳密に width × height に固定し、重なりを防ぐ。
+        let fill: Color = (isUnlock && !disabled) ? sheet.tint : Color.white.opacity(0.18)
+        return Button {
             handle(key)
         } label: {
             Group {
                 switch key {
                 case "⌫": Image(systemName: "delete.left.fill")
                 case "→": Image(systemName: "lock.open.fill")
-                default:  Text(key).font(.body)
+                default:  Text(key).font(.title3)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundStyle(.white)
+            .frame(width: width, height: height)
+            .background(
+                RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
+                    .fill(fill)
+            )
+            .opacity(disabled ? 0.5 : 1)
         }
-        .buttonStyle(.bordered)
-        .tint(key == "→" ? sheet.tint : .gray)
-        .disabled(key == "→" && password.isEmpty)
-        .frame(width: width, height: height)
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
     private func handle(_ key: String) {
