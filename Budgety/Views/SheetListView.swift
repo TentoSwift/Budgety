@@ -71,6 +71,8 @@ struct SheetListView: View {
     @State private var lockingSheet: ExpenseSheet?
     /// 行の長押しメニューから開くサブ画面（精算/統計/カテゴリ）。
     @State private var subScreen: SheetSubScreen?
+    /// コンテキストメニュー表示中のシート。その行を一時的に隠す（プレビューと二重に見せない）。
+    @State private var menuActiveSheetID: NSManagedObjectID?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
@@ -375,12 +377,18 @@ struct SheetListView: View {
     private func sheetListRow(_ sheet: ExpenseSheet) -> some View {
         #if canImport(UIKit) && !os(watchOS)
         SheetRowView(record: sheet, showsDisclosure: true)
+            // コンテキストメニュー表示中はこの行を隠し、閉じたら戻す。
+            .opacity(menuActiveSheetID == sheet.objectID ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: menuActiveSheetID)
             .contentShape(Rectangle())
             .overlay {
                 SheetRowInteraction(
                     onOpen: { openSheet(sheet) },
                     makeMenu: { makeRowMenu(for: sheet) },
-                    preview: rowPreview(for: sheet)
+                    preview: rowPreview(for: sheet),
+                    onMenuActiveChange: { active in
+                        menuActiveSheetID = active ? sheet.objectID : nil
+                    }
                 )
             }
             .accessibilityElement(children: .combine)
