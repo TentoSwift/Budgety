@@ -95,7 +95,6 @@ struct CloudSharingView: View {
             groupHeader
             if let share = existingShare {
                 participantsSection(share: share)
-                shareIDSection(share: share)
             }
             inviteSection
             shareLinkSection
@@ -125,7 +124,6 @@ struct CloudSharingView: View {
             // premiumForm (オーナー画面) と同じ条件・同じレンダラで参加者を表示する。
             if let share = existingShare {
                 participantsSection(share: share)
-                shareIDSection(share: share)
             }
 
             Section {
@@ -272,46 +270,6 @@ struct CloudSharingView: View {
         // 明示的なプロフェッチは不要 (互換のため空実装で残す)。
     }
 
-    @ViewBuilder
-    private func shareIDSection(share: CKShare) -> some View {
-        let recordName = share.recordID.recordName
-        let zoneName = share.recordID.zoneID.zoneName
-        let ownerName = share.recordID.zoneID.ownerName
-        Section {
-            VStack(alignment: .leading, spacing: 6) {
-                row(label: "Record", value: recordName)
-                row(label: "Zone", value: zoneName)
-                row(label: "Owner", value: ownerName)
-            }
-            Button {
-                UIPasteboard.general.string = recordName
-                withAnimation { showCopiedToast = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                    withAnimation { showCopiedToast = false }
-                }
-            } label: {
-                Label("Record ID をコピー", systemImage: "doc.on.doc")
-                    .font(.caption)
-            }
-        } header: {
-            Text("CKShare ID")
-        }
-    }
-
-    private func row(label: String, value: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .foregroundStyle(.primary)
-        }
-    }
 
     private var inviteSection: some View {
         Section {
