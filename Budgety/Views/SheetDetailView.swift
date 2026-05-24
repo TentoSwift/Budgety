@@ -318,17 +318,20 @@ struct SheetDetailView: View {
                 Menu {
                     NavigationLink {
                         SettlementView(record: record)
+                            .dismissOnRelock(record)
                     } label: {
                         Label("精算", systemImage: "arrow.left.arrow.right.circle")
                     }
                     NavigationLink {
                         StatsView(record: record)
+                            .dismissOnRelock(record)
                     } label: {
                         Label("統計", systemImage: "chart.pie.fill")
                     }
                     if SheetAIChat.isAvailable {
                         NavigationLink {
                             SheetAIChatView(record: record)
+                                .dismissOnRelock(record)
                         } label: {
                             Label("AI チャット", systemImage: "sparkles.rectangle.stack")
                         }
@@ -349,6 +352,7 @@ struct SheetDetailView: View {
                     }
                     NavigationLink {
                         CategoryListView(record: record)
+                            .dismissOnRelock(record)
                     } label: {
                         Label("カテゴリを管理", systemImage: "tag.fill")
                     }
@@ -372,6 +376,7 @@ struct SheetDetailView: View {
                     }
                     NavigationLink {
                         RecurringListView(record: record)
+                            .dismissOnRelock(record)
                     } label: {
                         Label("定期項目", systemImage: "repeat")
                     }
@@ -497,12 +502,15 @@ struct SheetDetailView: View {
         }
         .navigationDestination(isPresented: $showRecurringListAutoEdit) {
             RecurringListView(record: record, autoEditRule: recurringListAutoEdit)
+                .dismissOnRelock(record)
         }
         .navigationDestination(isPresented: $demoOpenStats) {
             StatsView(record: record)
+                .dismissOnRelock(record)
         }
         .navigationDestination(isPresented: $demoOpenChat) {
             SheetAIChatView(record: record)
+                .dismissOnRelock(record)
         }
     }
 
@@ -1397,6 +1405,8 @@ private struct ExpenseRowContainer: View {
         // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
         NavigationLink {
             ExpenseDetailView(expense: expense)
+                // 親シートが再ロックされたら詳細(と、そこから開いた編集シート)を閉じる。
+                .dismissOnRelock(expense.sheet)
         } label: {
             ExpenseRowView(expense: expense)
         }
@@ -1628,5 +1638,35 @@ private extension View {
     @ViewBuilder
     func applyIf<V: View>(_ condition: Bool, _ transform: (Self) -> V) -> some View {
         if condition { transform(self) } else { self }
+    }
+}
+
+/// アプリがバックグラウンドへ移行した時、ロック対象シートの子画面を自動的に閉じる
+/// モディファイア。LockedSheetGate は SheetDetailView だけを覆うので、そこから push した
+/// 精算/統計/詳細/編集などの子画面は、復帰時に解錠済みの内容が残ってしまう。
+/// バックグラウンド移行で閉じておけば、復帰時に SheetDetailView 側の LockedSheetGate が
+/// ロック画面を出す（lockAll() で再ロック済みのため）。
+///
+/// 解錠状態 (isUnlocked) ではなく scenePhase を監視するのが要点。解錠状態を見ると、
+/// 子画面への通常遷移と無関係なロック状態の変化に反応して即座に閉じてしまう恐れがある。
+private struct DismissOnRelockModifier: ViewModifier {
+    let record: ExpenseSheet?
+    @ObservedObject private var lockManager = SheetLockManager.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content.onChange(of: scenePhase) { _, phase in
+            guard phase == .background,
+                  let record, lockManager.hasPassword(for: record) else { return }
+            dismiss()
+        }
+    }
+}
+
+private extension View {
+    /// バックグラウンド移行時、`record` がロック対象ならこの画面を閉じる（子画面用）。
+    func dismissOnRelock(_ record: ExpenseSheet?) -> some View {
+        modifier(DismissOnRelockModifier(record: record))
     }
 }
