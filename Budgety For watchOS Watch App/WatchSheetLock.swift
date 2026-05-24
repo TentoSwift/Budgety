@@ -55,15 +55,14 @@ struct WatchSheetLockView: View {
         // 内では中身が表示されないことがあるため)。シート名はナビバーのタイトルに出して
         // 本文はステータス行 + キーパッドだけにし、キーパッドの面積を最大化する。
         GeometryReader { geo in
-            let spacing: CGFloat = 4
+            let spacing: CGFloat = 6
             let statusHeight: CGFloat = 22
             let rowCount = CGFloat(rows.count)            // 4
-            // VStack の子は [ステータス, 4 行] = 5 個 → 隙間は rowCount(=4) 個。
             let buttonWidth = (geo.size.width - spacing * 2) / 3
-            let buttonHeight = max(
-                20,
-                (geo.size.height - statusHeight - spacing * rowCount) / rowCount
-            )
+            // ボタン高さ = 「均等割り」と「幅の 0.72 倍」の小さい方。大きい画面で
+            // ボタンが縦長・巨大になりすぎないよう上限を設け、余りは上下中央寄せで吸収。
+            let evenHeight = (geo.size.height - statusHeight - spacing * rowCount) / rowCount
+            let buttonHeight = max(20, min(evenHeight, buttonWidth * 0.72))
             VStack(spacing: spacing) {
                 // 入力状況を 1 行で表示 (未入力=案内 / 入力中=● / エラー=赤)。
                 Text(statusText)
@@ -72,6 +71,7 @@ struct WatchSheetLockView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .frame(height: statusHeight)
+                Spacer(minLength: 0)
                 ForEach(rows, id: \.self) { row in
                     HStack(spacing: spacing) {
                         ForEach(row, id: \.self) { key in
@@ -79,8 +79,9 @@ struct WatchSheetLockView: View {
                         }
                     }
                 }
+                Spacer(minLength: 0)
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .navigationTitle(sheet.displayName)
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
