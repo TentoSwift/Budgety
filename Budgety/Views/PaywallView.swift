@@ -67,7 +67,7 @@ struct PaywallView: View {
             Text("Budgety Premium")
                 .font(.title.bold())
                 .multilineTextAlignment(.center)
-            Text("家族とシートを共有")
+            Text("すべての機能を解放して、もっと自由に。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -77,33 +77,55 @@ struct PaywallView: View {
     }
 
     private var featuresList: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Premium でできること")
+                .font(.headline)
+                .padding(.horizontal)
+
             featureRow("person.2.fill",
                        color: Color(red: 0.36, green: 0.55, blue: 0.94),
-                       title: "シートを共有")
+                       title: "シートを共有",
+                       detail: "家族やパートナーを招待して、ひとつの家計簿を一緒に管理。")
+            featureRow("lock.fill",
+                       color: Color(red: 0.96, green: 0.26, blue: 0.33),
+                       title: "パスワードでロック",
+                       detail: "大事なシートをパスワードと Face ID / Touch ID で保護。")
             featureRow("rectangle.stack.fill.badge.plus",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
-                       title: "シートを無制限")
+                       title: "シートを無制限に",
+                       detail: "無料プランは 5 個まで。用途ごとにいくつでも作成。")
             featureRow("tag.fill",
                        color: Color(red: 1.00, green: 0.58, blue: 0.00),
-                       title: "カテゴリ無制限")
+                       title: "カテゴリを無制限に",
+                       detail: "1 シートあたり 20 個の上限を解除。")
             featureRow("doc.richtext",
                        color: Color(red: 0.20, green: 0.78, blue: 0.35),
-                       title: "PDF / CSV 出力")
+                       title: "PDF / CSV で書き出し",
+                       detail: "家計データを書き出してバックアップ・共有。")
+            featureRow("paintpalette.fill",
+                       color: Color(red: 0.93, green: 0.35, blue: 0.62),
+                       title: "プレミアムアイコン",
+                       detail: "シートとカテゴリで使える特別なアイコンを解放。")
         }
     }
 
-    private func featureRow(_ icon: String, color: Color, title: String) -> some View {
-        // カテゴリ風アイコン (色付き円 + 白シンボル)。
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
+    private func featureRow(_ icon: String, color: Color, title: String, detail: String) -> some View {
+        // カテゴリ風アイコン (色付き円 + 白シンボル) + 見出し + 説明。
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
                 .background(Circle().fill(color.gradient))
-            Text(title)
-                .font(.body.weight(.medium))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer(minLength: 8)
         }
         .padding(.horizontal)
