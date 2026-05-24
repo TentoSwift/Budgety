@@ -43,6 +43,21 @@ struct EditCategoryView: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// このカテゴリが属する (新規作成なら作成先の) シート。
+    private var contextSheet: ExpenseSheet? {
+        switch mode {
+        case .create(let record): return record
+        case .edit(let category): return category.sheet
+        }
+    }
+
+    /// このシートで課金機能 (プレミアムアイコン) が使えるか。
+    /// 自分が Premium、または共有シートなら true。
+    private var premiumUnlocked: Bool {
+        if let sheet = contextSheet { return PurchaseManager.hasPremiumAccess(to: sheet) }
+        return PurchaseManager.isCurrentUserPremium
+    }
+
     private var previewColor: Color {
         Color(hex: selectedColor) ?? .gray
     }
@@ -228,7 +243,8 @@ struct EditCategoryView: View {
                 CategoryIconPickerView(
                     selectedSymbol: $selectedSymbol,
                     tint: previewColor,
-                    origSymbol: origSymbol
+                    origSymbol: origSymbol,
+                    premiumUnlocked: premiumUnlocked
                 )
             } label: {
                 HStack {
@@ -261,7 +277,7 @@ struct EditCategoryView: View {
         // ただし「既に保存済みのシンボル (= 編集ロード時にこの ID と一致)」は
         // ロックを外して再選択可能にする (= 後で課金が切れた時の救済)。
         let isLockedForUser = isPremiumOnly
-            && !PurchaseManager.shared.isPremium
+            && !premiumUnlocked
             && sym != origSymbol
         return Button {
             if isLockedForUser {

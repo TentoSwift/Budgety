@@ -321,17 +321,25 @@ extension PurchaseManager {
     /// キャッシュしているのでメインスレッド外でも参照できる。
     static var isCurrentUserPremium: Bool { isPremiumCached }
 
+    /// このシート上で課金機能 (カテゴリ無制限・エクスポート・プレミアムアイコン等) が
+    /// 使えるか。
+    /// 1. 自分が Premium → どのシートでも使える。
+    /// 2. 共有されたシート (= 自分が所有者でない参加者側のシート) → 使える。
+    ///    シートを共有するにはオーナーが Premium である必要があるため、その共有
+    ///    シートに参加しているユーザーも、そのシート上では課金機能を使える。
+    static func hasPremiumAccess(to sheet: ExpenseSheet) -> Bool {
+        if isCurrentUserPremium { return true }
+        // 自分が所有していない = Shared ストアにある = Premium オーナーが共有した
+        // シート。参加者も課金機能を使える。
+        if !sheet.isOwnedByCurrentUser { return true }
+        return false
+    }
+
     /// 指定シートに新しいカテゴリを 1 つ追加できるか。
     /// 上限は `FreeTierLimits.categoriesPerSheet`。
-    /// シート上に Premium が 1 人でもいれば (= ownerIsPremium or
-    /// 任意の participantProfile.isPremium) 上限を無視できる。
+    /// シートが課金アクセス可 (自分が Premium、または共有シート) なら上限を無視できる。
     static func canAddCategory(to sheet: ExpenseSheet) -> Bool {
-        if isCurrentUserPremium { return true }
-        if sheet.ownerIsPremium { return true }
-        if let profiles = sheet.participantProfiles as? Set<ParticipantProfile>,
-           profiles.contains(where: { $0.isPremium }) {
-            return true
-        }
+        if hasPremiumAccess(to: sheet) { return true }
         let count = (sheet.categories as? Set<ExpenseCategory>)?.count ?? 0
         return count < FreeTierLimits.categoriesPerSheet
     }
