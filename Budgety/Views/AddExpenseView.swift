@@ -1059,9 +1059,10 @@ struct AddExpenseView: View {
             onAttempt: { showDiscardConfirm = true }
         )
         .ignoresSafeArea()
-        // ロック対象シートの編集中にバックグラウンド復帰した時、編集画面を閉じず
-        // ロックを重ねる (解除で編集画面に戻る)。
-        .sheetLockCover(contextSheet)
+        // 注意: ここに sheetLockCover (fullScreenCover) を付けると、
+        // DismissAwareHostingController を使うこのシートが再ホストされ、
+        // @State がリセットされて編集中の入力が消える。編集画面のロック保護は
+        // 行わない (詳細/精算など push 画面のみ sheetLockCover で保護)。
     }
 
     /// AX で縦 (VStack)、通常で横 (HStack) に切り替える `AnyLayout`。
