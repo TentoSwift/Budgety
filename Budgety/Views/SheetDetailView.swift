@@ -534,7 +534,9 @@ struct SheetDetailView: View {
         var parts: [String] = []
         if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
         if selectedCategory != nil { parts.append("カテゴリ") }
-        if selectedPayerID != nil { parts.append("支払い者") }
+        // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
+        // 「支払い者」ではなく「メンバー」と表示する。
+        if selectedPayerID != nil { parts.append("メンバー") }
         return parts.joined(separator: "・") + "で絞り込まれています。"
     }
 
@@ -607,16 +609,18 @@ struct SheetDetailView: View {
                                 colorHex: info.colorHex,
                                 size: 36
                             )
+                            // strokeBorder は枠内に描くので、枠が見切れない。
                             .overlay(
-                                Circle().stroke(record.tint, lineWidth: isSelected ? 2.5 : 0)
+                                Circle().strokeBorder(record.tint, lineWidth: isSelected ? 2.5 : 0)
                             )
                             Text(info.name)
-                                .font(.caption2.weight(isSelected ? .semibold : .regular))
+                                .font(.caption2.weight(.semibold))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                                 .foregroundStyle(isSelected ? record.tint : .secondary)
                         }
                         .frame(maxWidth: 80)
+                        .padding(.vertical, 3)
                     }
                     .buttonStyle(.plain)
                 }
@@ -671,13 +675,13 @@ struct SheetDetailView: View {
                             Image(systemName: cat.displaySymbol)
                             Text(cat.displayName)
                         }
-                        .font(.caption.weight(selectedCategory?.objectID == cat.objectID ? .semibold : .regular))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint.opacity(0.22) : Color.platformTertiarySystemBackground)
+                            Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformTertiarySystemBackground)
                         )
-                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? cat.tint : .primary)
+                        .foregroundStyle(.primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -917,9 +921,6 @@ private struct SummaryCard: View {
             // 期間ピッカー + カテゴリ pill (検索中も期間を変更できるよう常に表示)
             HStack(spacing: 8) {
                 periodMenuLabel
-                if let cat = selectedCategory {
-                    categoryPill(cat)
-                }
                 Spacer()
                 if isSearching {
                     Text("\(t.hitCount)件")
@@ -988,9 +989,6 @@ private struct SummaryCard: View {
                 searchPill
             } else {
                 periodMenuLabel
-            }
-            if let cat = selectedCategory {
-                categoryPill(cat)
             }
             Spacer()
         }
@@ -1177,18 +1175,12 @@ private struct SummaryCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
                     leadingPill
-                    if let cat = selectedCategory {
-                        categoryPill(cat)
-                    }
                     Spacer()
                 }
             }
         } else {
             HStack {
                 leadingPill
-                if let cat = selectedCategory {
-                    categoryPill(cat)
-                }
                 Spacer()
             }
         }
@@ -1234,19 +1226,6 @@ private struct SummaryCard: View {
             .padding(.vertical, 4)
             .background(Capsule().fill(record.tint.opacity(0.18)))
         }
-    }
-
-    private func categoryPill(_ cat: ExpenseCategory) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: cat.displaySymbol)
-                .font(.caption2)
-            Text(cat.displayName)
-                .font(.caption.weight(.semibold))
-        }
-        .foregroundStyle(cat.tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(cat.tint.opacity(0.18)))
     }
 
     /// 支出 / 収入の内訳行。AX サイズでは横一列に収まらないので、
