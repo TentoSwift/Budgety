@@ -657,13 +657,14 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                 } label: {
                     Text("すべて")
-                        .font(.caption.weight(selectedCategory == nil ? .semibold : .regular))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory == nil ? record.tint.opacity(0.18) : Color.platformTertiarySystemBackground)
+                            Capsule().fill(selectedCategory == nil ? record.tint : Color.platformTertiarySystemBackground)
                         )
-                        .foregroundStyle(selectedCategory == nil ? record.tint : .primary)
+                        // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
+                        .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
                 }
                 .buttonStyle(.plain)
 
