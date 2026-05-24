@@ -798,12 +798,6 @@ private struct SearchTotalCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(.snappy, value: income)
             .animation(.snappy, value: expense)
-
-            if mixed {
-                Label("通貨が混在するため \(currency) に換算した概算です。", systemImage: "arrow.left.arrow.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)

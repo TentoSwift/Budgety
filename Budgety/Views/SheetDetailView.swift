@@ -278,32 +278,6 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
-            // パスワード設定済みのシートは「解錠中」を示すボタンを表示。
-            // 閲覧中は LockedSheetGate により常に解錠済みなので必ず open アイコン。
-            // タップすると一覧へ戻り、再ロックは LockedSheetGate.onDisappear が行う。
-            if lockManager.hasPassword(for: record) {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        // ここで lockManager.lock() を呼ぶと、まだ画面に残っている
-                        // LockedSheetGate が即 SheetLockView に切り替わり、Face ID が
-                        // 自動発火して「一覧へ戻った直後に再認証して開き直す」バグになる。
-                        // 再ロックは pop 後の onDisappear に任せ、ここでは dismiss だけ。
-                        Haptics.warning()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "lock.open.fill")
-                    }
-                    .tint(record.tint)
-                    .accessibilityLabel("今すぐロック")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingShare = true
-                } label: {
-                    Image(systemName: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
-                }
-            }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             ToolbarSpacer(.fixed, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
@@ -316,6 +290,22 @@ struct SheetDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        showingShare = true
+                    } label: {
+                        Label(record.isOwnedByCurrentUser ? "シートを共有" : "共有メンバー",
+                              systemImage: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
+                    }
+                    // パスワード設定済みなら「今すぐロック」(= 一覧へ戻り再ロック)。
+                    if lockManager.hasPassword(for: record) {
+                        Button {
+                            Haptics.warning()
+                            dismiss()
+                        } label: {
+                            Label("今すぐロック", systemImage: "lock.fill")
+                        }
+                    }
+                    Divider()
                     NavigationLink {
                         SettlementView(record: record)
                             .sheetLockCover(record)
@@ -962,15 +952,11 @@ private struct SummaryCard: View {
                 cleanBudgetBar(spent: t.expense, budget: budget)
             }
 
-            // 為替警告
+            // 為替レート未取得の警告のみ表示 (「為替: … 基準」の常時表示はしない)
             if !t.missing.isEmpty {
                 Label("\(t.missing.sorted().joined(separator: ", ")) のレート未取得", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-            } else if hasMultipleCurrencies, let date = fx.lastRateDate {
-                Label("為替: \(date) 基準", systemImage: "arrow.left.arrow.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(20)
