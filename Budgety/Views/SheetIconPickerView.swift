@@ -12,6 +12,9 @@ import SwiftUI
 struct SheetIconPickerView: View {
     @Binding var selectedSymbol: String
     let tint: Color
+    /// このシートで課金機能が使えるか (自分が Premium / 共有シート)。
+    /// true ならプレミアムアイコンもロックせず選択できる。
+    var premiumUnlocked: Bool = PurchaseManager.isCurrentUserPremium
 
     @Environment(\.dismiss) private var dismiss
     @State private var showingPaywall: Bool = false
@@ -62,7 +65,7 @@ struct SheetIconPickerView: View {
     @ViewBuilder
     private func iconButton(_ sym: String) -> some View {
         let isSelected = selectedSymbol == sym
-        let isLocked = SheetSymbols.isPremiumSymbol(sym) && !PurchaseManager.shared.isPremium
+        let isLocked = SheetSymbols.isPremiumSymbol(sym) && !premiumUnlocked
         Button {
             if isLocked {
                 showingPaywall = true

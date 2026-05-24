@@ -747,10 +747,10 @@ struct SheetDetailView: View {
         return result.sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    /// CSV / PDF エクスポートのエントリ。Premium で gate して、
+    /// CSV / PDF エクスポートのエントリ。Premium (または共有シート) で gate して、
     /// 通れば一時ファイルを作って `ShareSheet` で共有する。
     private func startExport(_ kind: ExportKind) {
-        guard PurchaseManager.shared.isPremium else {
+        guard PurchaseManager.hasPremiumAccess(to: record) else {
             exportPaywall = true
             Haptics.warning()
             return

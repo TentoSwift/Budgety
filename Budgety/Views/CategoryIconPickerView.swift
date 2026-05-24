@@ -14,6 +14,9 @@ struct CategoryIconPickerView: View {
     let tint: Color
     /// 編集中の既存シンボル (= 後で Premium が切れても再選択できるよう救済)
     var origSymbol: String = ""
+    /// このシートで課金機能が使えるか (自分が Premium / 共有シート)。
+    /// true ならプレミアムアイコンもロックせず選択できる。
+    var premiumUnlocked: Bool = PurchaseManager.isCurrentUserPremium
 
     @Environment(\.dismiss) private var dismiss
     @State private var showingPaywall: Bool = false
@@ -66,7 +69,7 @@ struct CategoryIconPickerView: View {
         let isSelected = selectedSymbol == sym
         // 保存済みの symbol は救済 (後で Premium が切れても再選択できるように)
         let isLocked = CategoryDefaults.isPremiumSymbol(sym)
-            && !PurchaseManager.shared.isPremium
+            && !premiumUnlocked
             && sym != origSymbol
         Button {
             if isLocked {
