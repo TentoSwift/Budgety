@@ -260,7 +260,7 @@ struct EditSheetView: View {
 
     private var currencyPicker: some View {
         Picker("通貨", selection: $defaultCurrencyCode) {
-            ForEach(CurrencyCatalog.all) { opt in
+            ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                 Text(opt.symbol + "  " + opt.code + " — " + opt.displayName).tag(opt.code)
             }
         }

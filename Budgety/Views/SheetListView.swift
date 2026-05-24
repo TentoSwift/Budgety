@@ -794,7 +794,7 @@ private struct SearchTotalCard: View {
     private var currencyMenu: some View {
         Menu {
             Picker("通貨", selection: $currency) {
-                ForEach(CurrencyCatalog.all) { opt in
+                ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                     Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
                 }
             }

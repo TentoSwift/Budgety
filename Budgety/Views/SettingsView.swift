@@ -109,7 +109,7 @@ struct SettingsView: View {
                         // 自動 = システムの地域設定に従う
                         Text("自動 (\(CurrencyCatalog.option(for: CurrencyCatalog.localeDefaultCode).displayName))")
                             .tag("")
-                        ForEach(CurrencyCatalog.all) { opt in
+                        ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                             Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
                         }
                     } label: {

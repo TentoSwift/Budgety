@@ -887,7 +887,7 @@ struct AddExpenseView: View {
                             }
                     }
                     Picker("通貨", selection: $currencyCode) {
-                        ForEach(CurrencyCatalog.all) { opt in
+                        ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                             Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
                         }
                     }
