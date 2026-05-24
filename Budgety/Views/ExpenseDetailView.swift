@@ -17,6 +17,7 @@ struct ExpenseDetailView: View {
     @ObservedObject private var pub = PublicProfileSync.shared
     @ObservedObject private var profileStore = UserProfileStore.shared
     @State private var showingEdit = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         List {
@@ -98,13 +99,20 @@ struct ExpenseDetailView: View {
         }
     }
 
+    /// ラベル/値の行。AX サイズでは横に収まらないので AnyLayout で縦積みに切替
+    /// (WWDC24「Get started with Dynamic Type」推奨パターン)。縦積み時は左寄せ。
     private func detailRow(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 12) {
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Text(label).foregroundStyle(.secondary)
-            Spacer(minLength: 8)
+            if !isAX { Spacer(minLength: 8) }
             Text(value)
                 .foregroundStyle(.primary)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(isAX ? .leading : .trailing)
+                .frame(maxWidth: isAX ? .infinity : nil, alignment: isAX ? .leading : .trailing)
         }
     }
 
@@ -118,10 +126,26 @@ struct ExpenseDetailView: View {
     @ViewBuilder
     private var participantsSection: some View {
         Section {
-            HStack(spacing: 12) {
-                Text(expense.kind == .income ? "受け取った人" : "支払った人")
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
+            payerRow
+            if let sheet = expense.sheet {
+                detailRow(expense.kind == .income ? "受け取り対象" : "受益者",
+                          beneficiaryText(in: sheet))
+            }
+        }
+    }
+
+    /// 支払った人/受け取った人の行。AX サイズではラベルの下にアバター+名前を縦積み。
+    @ViewBuilder
+    private var payerRow: some View {
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
+            Text(expense.kind == .income ? "受け取った人" : "支払った人")
+                .foregroundStyle(.secondary)
+            if !isAX { Spacer(minLength: 8) }
+            HStack(spacing: 8) {
                 PayerAvatar(
                     member: expense.resolvedPayer,
                     participantProfile: expense.resolvedParticipantProfile,
@@ -131,10 +155,6 @@ struct ExpenseDetailView: View {
                     size: 22
                 )
                 Text(expense.displayPaidBy).foregroundStyle(.primary)
-            }
-            if let sheet = expense.sheet {
-                detailRow(expense.kind == .income ? "受け取り対象" : "受益者",
-                          beneficiaryText(in: sheet))
             }
         }
     }
