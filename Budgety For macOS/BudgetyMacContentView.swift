@@ -27,6 +27,7 @@ struct BudgetyMacContentView: View {
     @State private var showingPaywall: Bool = false
     @State private var showSyncWaitingAlert: Bool = false
     @State private var showOfflineAlert: Bool = false
+    @State private var showNotSignedInAlert: Bool = false
     @StateObject private var lockManager = SheetLockManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -75,6 +76,11 @@ struct BudgetyMacContentView: View {
         } message: {
             Text("シートの新規作成には iCloud との同期が必要です。インターネットに接続してから再度お試しください。")
         }
+        .alert("iCloud にサインインしてください", isPresented: $showNotSignedInAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("シートの作成には iCloud へのサインインが必要です。システム設定の Apple アカウントから iCloud にサインインしてください。")
+        }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
         }
@@ -87,6 +93,8 @@ struct BudgetyMacContentView: View {
         .onChange(of: scenePhase) { _, phase in
             // アプリがバックグラウンド (非表示) になったら全シートを再ロック。
             if phase == .background { lockManager.lockAll() }
+            // 前面化時に iCloud サインイン状態を再取得。
+            if phase == .active { PersistenceController.shared.refreshAccountStatus() }
         }
     }
 
@@ -131,6 +139,9 @@ struct BudgetyMacContentView: View {
         switch PurchaseManager.sheetCreationGate() {
         case .allowed:
             showingAddSheet = true
+        case .notSignedIn:
+            showNotSignedInAlert = true
+            Haptics.warning()
         case .waitingForSync:
             showSyncWaitingAlert = true
             Haptics.warning()

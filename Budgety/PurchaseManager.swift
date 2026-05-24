@@ -317,6 +317,7 @@ extension PurchaseManager {
     /// - `.overLimit`: Free 上限到達 → Paywall 案内
     enum SheetCreationGate {
         case allowed
+        case notSignedIn
         case waitingForSync
         case offline
         case overLimit
@@ -324,6 +325,8 @@ extension PurchaseManager {
 
     @MainActor
     static func sheetCreationGate() -> SheetCreationGate {
+        // iCloud 未サインインでは (Premium 有無に関わらず) シートを作成させない。
+        if !PersistenceController.shared.iCloudAccountAvailable { return .notSignedIn }
         if isCurrentUserPremium { return .allowed }
         // 初回 import がまだ完了していない時は、既に CloudKit 上に上限分の
         // シートがある可能性を排除できないので保守的に block する。
