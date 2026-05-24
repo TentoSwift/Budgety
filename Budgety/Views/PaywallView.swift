@@ -93,7 +93,7 @@ struct PaywallView: View {
             featureRow("rectangle.stack.fill.badge.plus",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
                        title: "シートを無制限に",
-                       detail: "無料プランは 5 個まで。用途ごとにいくつでも作成。")
+                       detail: "無料プランは 3 個まで。用途ごとにいくつでも作成。")
             featureRow("tag.fill",
                        color: Color(red: 1.00, green: 0.58, blue: 0.00),
                        title: "カテゴリを無制限に",
