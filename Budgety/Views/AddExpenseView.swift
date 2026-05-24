@@ -1139,43 +1139,6 @@ struct AddExpenseView: View {
                     payerPreview
                 }
             }
-            if BuildInfo.isInternalBuild {
-                payerDebugIDRow
-            }
-        }
-    }
-
-    /// DEBUG ビルドのみ表示: 現在の selectedPayer / Expense.payerProfileID / payerMemberID を
-    /// 識別 ID と共に表示してデバッグできるようにする。
-    @ViewBuilder
-    private var payerDebugIDRow: some View {
-        let memberID = selectedPayer?.id
-        let memberRN = selectedPayer?.recordName
-        let memberName = selectedPayer?.name ?? "(nil)"
-        let storedProfileID: String? = {
-            if case .edit(let e) = mode { return e.payerProfileID?.isEmpty == false ? e.payerProfileID : nil }
-            return nil
-        }()
-        let storedMemberID: UUID? = {
-            if case .edit(let e) = mode { return e.payerMemberID }
-            return nil
-        }()
-        VStack(alignment: .leading, spacing: 4) {
-            Text("DEBUG").font(.system(size: 9, weight: .bold)).foregroundStyle(.orange)
-            Group {
-                Text("name: \(memberName)")
-                Text("Member.id: \(memberID?.uuidString ?? "(nil)")")
-                Text("Member.recordName: \(memberRN ?? "(empty)")")
-                if let storedMemberID {
-                    Text("Expense.payerMemberID: \(storedMemberID.uuidString)")
-                }
-                if let storedProfileID {
-                    Text("Expense.payerProfileID: \(storedProfileID)")
-                }
-            }
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .textSelection(.enabled)
         }
     }
 

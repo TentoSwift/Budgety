@@ -204,18 +204,6 @@ struct MemberPickerView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                // このシート用の canonical self ID を優先表示する (Member.recordName は
-                // 旧 userRecordName が残っていることがあるため)。
-                if let rn = (profile.canonicalSelfID(forShare: share)
-                                ?? selfMember?.recordName
-                                ?? profile.userRecordName), !rn.isEmpty {
-                    Text("ID: \(rn)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
             }
             Spacer()
             if isSelected {
@@ -297,14 +285,6 @@ struct MemberPickerView: View {
                             Text("過去の記録")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
-                            if let rn = info.profileID, !rn.isEmpty {
-                                Text("ID: \(rn)")
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .textSelection(.enabled)
-                            }
                         }
                         Spacer()
                         if legacyRowIsSelected(info) {
@@ -499,15 +479,6 @@ struct MemberPickerView: View {
                     Text(p.role == .owner ? "オーナー" : (p.acceptanceStatus == .pending ? "招待中" : "参加者"))
                         .font(.caption2)
                         .foregroundStyle(p.acceptanceStatus == .pending ? .orange : .secondary)
-                    // participantID を常時表示 (= 全ビルドで見える)
-                    if let rn = info.recordName, !rn.isEmpty {
-                        Text("ID: \(rn)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
                 }
                 Spacer()
                 if isSelected {
