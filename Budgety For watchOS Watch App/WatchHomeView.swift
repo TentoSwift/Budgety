@@ -58,12 +58,10 @@ struct WatchHomeView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task {
-            ensureDefaultSheetIfNeeded()
             restoreSelectedSheet()
         }
-        // CloudKit 初回同期完了時に再判定 (= 実機で「同期完了したらシート 0 件 → seed」用)
+        // CloudKit 初回同期完了時に、降ってきたシートから選択を復元する。
         .onChange(of: persistence.initialSyncComplete) { _, _ in
-            ensureDefaultSheetIfNeeded()
             restoreSelectedSheet()
         }
     }
@@ -81,30 +79,6 @@ struct WatchHomeView: View {
         }
     }
 
-    /// シート / カテゴリが 1 つも無ければデフォルトを作る。
-    /// 実機では CloudKit 初回同期完了を待ってから判定 (= iPhone のデータが
-    /// 降ってくる前に seed して重複作成するのを防ぐ)。
-    /// シミュレータでは CloudKit に繋がらないため即時 seed する。
-    private func ensureDefaultSheetIfNeeded() {
-        #if !targetEnvironment(simulator)
-        // 実機: CloudKit 同期完了を待つ (= iPhone のシートが降りてくる)
-        guard PersistenceController.shared.initialSyncComplete else { return }
-        #endif
-
-        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        req.fetchLimit = 1
-        let existing = (try? ctx.fetch(req)) ?? []
-        guard existing.isEmpty else { return }
-
-        let sheet = ExpenseSheet(context: ctx)
-        sheet.name = "家計簿"
-        sheet.symbol = "yensign.circle.fill"
-        sheet.colorHex = "#5B8DEF"
-        sheet.defaultCurrencyCode = CurrencyCatalog.defaultCode
-        sheet.createdAt = .now
-        PersistenceController.seedDefaultCategories(for: sheet, in: ctx)
-        try? ctx.save()
-    }
 }
 
 // MARK: - Single Sheet Page (= TabView の 1 ページ)
