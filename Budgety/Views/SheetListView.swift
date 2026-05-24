@@ -568,9 +568,7 @@ struct SheetListView: View {
                     income: total.income,
                     currency: $searchTotalCurrency,
                     period: $searchPeriod,
-                    count: total.count,
-                    query: trimmedQuery,
-                    mixed: total.mixed
+                    count: total.count
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -732,8 +730,6 @@ private struct SearchTotalCard: View {
     /// 期間フィルタ。カードのメニューで変更できる。
     @Binding var period: SheetDetailView.Period
     let count: Int
-    let query: String
-    let mixed: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func doubleValue(_ d: Decimal) -> Double {
@@ -743,13 +739,15 @@ private struct SearchTotalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 上段: 検索アイコン + 見出し + 通貨メニュー
+            // (SummaryCard の「シートアイコン + 名前」行に対応)
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.accentColor.gradient)
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
+                        // SummaryCard のシンボルと同じ固定サイズ。
+                        .font(.system(size: 20, weight: .semibold))
                 }
                 .frame(width: 40, height: 40)
                 Text("検索結果")
@@ -759,16 +757,13 @@ private struct SearchTotalCard: View {
                 currencyMenu
             }
 
-            // 検索クエリ件数 pill + 期間メニュー
+            // 期間ピッカー + 件数 (SummaryCard と同じ: 期間メニュー左、件数右)
             HStack(spacing: 8) {
-                Text(query.isEmpty ? "すべて · \(count)件" : "「\(query)」 · \(count)件")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    .foregroundStyle(Color.accentColor)
-                periodMenu
+                periodMenuLabel
                 Spacer()
+                Text("\(count)件")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
 
             // 大型の支出合計 (SummaryCard と同じ rounded font + 数値トランジション)
@@ -807,7 +802,8 @@ private struct SearchTotalCard: View {
         )
     }
 
-    /// 表示通貨を切り替えるメニュー。
+    /// 表示通貨を切り替えるメニュー。SummaryCard の期間ピッカーと同じ控えめな
+    /// テキスト + chevron スタイル (pill なし) に統一する。
     private var currencyMenu: some View {
         Menu {
             Picker("通貨", selection: $currency) {
@@ -822,15 +818,21 @@ private struct SearchTotalCard: View {
                     .font(.caption2)
             }
             .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(.secondary)
         }
     }
 
-    /// 期間を切り替えるメニュー。絞り込み中 (全期間以外) は色付きで強調。
-    private var periodMenu: some View {
+    /// 期間ピッカー。SummaryCard と同一の見た目にするため、iOS は
+    /// `PeriodMenuControl` (ソースを残したまま展開する UIControl ラッパー) を使う。
+    @ViewBuilder
+    private var periodMenuLabel: some View {
+        #if os(iOS)
+        PeriodMenuControl(
+            period: $period,
+            periodLabel: period.headerLabel
+        )
+        .fixedSize()
+        #else
         Menu {
             Picker("期間", selection: $period) {
                 ForEach(SheetDetailView.Period.allCases) { p in
@@ -838,21 +840,16 @@ private struct SearchTotalCard: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: period.isFiltering
-                      ? "line.3.horizontal.decrease.circle.fill"
-                      : "calendar")
-                    .font(.caption2)
-                Text(period.label)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
+            HStack(spacing: 6) {
+                Text(period.headerLabel)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.secondary)
             }
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.accentColor.opacity(period.isFiltering ? 0.28 : 0.15)))
-            .foregroundStyle(Color.accentColor)
         }
+        #endif
     }
 }
 
