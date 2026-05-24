@@ -56,8 +56,11 @@ struct WatchSheetLockView: View {
                 Text("パスワードを入力")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                SecureField("パスワード", text: $password)
-                    .textContentType(.password)
+                // watchOS の SecureField は入力（特に数字のみ）が反映されないことが
+                // あるため、通常の TextField を使う（watch は個人デバイスなので
+                // 伏せ字でなくても許容）。textContentType(.password) も付けない
+                // ── Keychain AutoFill 経路になり手入力できなくなるため。
+                TextField("パスワード", text: $password)
                     .submitLabel(.go)
                     .onSubmit(attemptUnlock)
                 Button {
