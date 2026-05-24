@@ -5,12 +5,38 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// 検索のスコープ。検索バー下の Picker で切り替える。
 private enum SearchScope: String, CaseIterable, Identifiable {
     case sheets = "シート"
     case expenses = "支出・収入"
     var id: String { rawValue }
+}
+
+/// シート行のコンテキストメニューから開くサブ画面（モーダル提示）。
+/// `path` (= シート詳細への push) を壊さないよう、これらは sheet で出す。
+private enum SheetSubScreen: Identifiable {
+    case settlement(ExpenseSheet)
+    case stats(ExpenseSheet)
+    case categories(ExpenseSheet)
+
+    var id: String {
+        let uri = sheet.objectID.uriRepresentation().absoluteString
+        switch self {
+        case .settlement: return "settle-\(uri)"
+        case .stats: return "stats-\(uri)"
+        case .categories: return "cat-\(uri)"
+        }
+    }
+
+    private var sheet: ExpenseSheet {
+        switch self {
+        case .settlement(let s), .stats(let s), .categories(let s): return s
+        }
+    }
 }
 
 struct SheetListView: View {
@@ -41,6 +67,10 @@ struct SheetListView: View {
     @State private var editingSearchExpense: Expense?
     /// 検索結果から解錠しようとしているロック中シート。
     @State private var unlockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くロック設定シート。
+    @State private var lockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くサブ画面（精算/統計/カテゴリ）。
+    @State private var subScreen: SheetSubScreen?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
@@ -82,9 +112,7 @@ struct SheetListView: View {
                 } else {
                     List {
                         ForEach(sheets) { sheet in
-                            NavigationLink(value: sheet.objectID) {
-                                SheetRowView(record: sheet)
-                            }
+                            sheetListRow(sheet)
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
@@ -149,6 +177,21 @@ struct SheetListView: View {
                         onUnlock: { unlockingSheet = nil },
                         onCancel: { unlockingSheet = nil }
                     )
+                }
+            }
+            .sheet(item: $lockingSheet) { sheet in
+                NavigationStack {
+                    SetSheetPasswordView(record: sheet)
+                }
+            }
+            .sheet(item: $subScreen) { screen in
+                NavigationStack {
+                    subScreenContent(screen)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("閉じる") { subScreen = nil }
+                            }
+                        }
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -250,6 +293,189 @@ struct SheetListView: View {
         ]
         return fields.contains { $0.contains(q) }
     }
+
+    // MARK: - Context Menu (シート行の長押し)
+
+    /// シート一覧の行を長押しした時のコンテキストメニュー。
+    /// ロック中（未解錠）のシートは中身を保護するため、精算/統計/カテゴリは出さない。
+    @ViewBuilder
+    private func sheetContextMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.isUnlocked(sheet) {
+            Button { subScreen = .settlement(sheet) } label: {
+                Label("精算", systemImage: "arrow.left.arrow.right.circle")
+            }
+            Button { subScreen = .stats(sheet) } label: {
+                Label("統計", systemImage: "chart.pie.fill")
+            }
+            Button { subScreen = .categories(sheet) } label: {
+                Label("カテゴリを管理", systemImage: "tag.fill")
+            }
+        }
+        if lockMenuApplicable(for: sheet) {
+            Divider()
+            sheetLockMenu(for: sheet)
+        }
+    }
+
+    @ViewBuilder
+    private func sheetLockMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                Button {
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                } label: {
+                    Label("今すぐロック", systemImage: "lock.fill")
+                }
+            }
+            if sheet.isOwnedByCurrentUser {
+                Button { presentLockSetup(sheet) } label: {
+                    Label("ロック設定", systemImage: "lock.fill")
+                }
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            Button { presentLockSetup(sheet) } label: {
+                Label("シートをロック", systemImage: "lock")
+            }
+        }
+    }
+
+    /// ロック関連項目を出す価値があるか（空セクション＋Divider を避ける）。
+    private func lockMenuApplicable(for sheet: ExpenseSheet) -> Bool {
+        if sheet.isOwnedByCurrentUser { return true }
+        // 非オーナーは「今すぐロック」(= パスワード有 & 解錠済み) の時だけ。
+        return lockManager.hasPassword(for: sheet) && lockManager.isUnlocked(sheet)
+    }
+
+    /// プレミアム加入者ならロック設定を開く。未加入なら Paywall。
+    private func presentLockSetup(_ sheet: ExpenseSheet) {
+        if PurchaseManager.shared.isPremium {
+            lockingSheet = sheet
+        } else {
+            showingPaywall = true
+            Haptics.warning()
+        }
+    }
+
+    /// 長押しメニューから開くサブ画面の中身。
+    @ViewBuilder
+    private func subScreenContent(_ screen: SheetSubScreen) -> some View {
+        switch screen {
+        case .settlement(let s): SettlementView(record: s)
+        case .stats(let s): StatsView(record: s)
+        case .categories(let s): CategoryListView(record: s)
+        }
+    }
+
+    /// シート一覧の 1 行。
+    /// iOS/visionOS では UIContextMenuInteraction ブリッジを使い、プレビューの
+    /// タップでも詳細へ遷移できるようにする（NavigationLink は使わず path に積む）。
+    /// それ以外のプラットフォームは従来どおり NavigationLink + .contextMenu。
+    @ViewBuilder
+    private func sheetListRow(_ sheet: ExpenseSheet) -> some View {
+        #if canImport(UIKit) && !os(watchOS)
+        SheetRowView(record: sheet, showsDisclosure: true)
+            .contentShape(Rectangle())
+            .overlay {
+                SheetRowInteraction(
+                    onOpen: { openSheet(sheet) },
+                    makeMenu: { makeRowMenu(for: sheet) },
+                    preview: rowPreview(for: sheet)
+                )
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { openSheet(sheet) }
+        #else
+        NavigationLink(value: sheet.objectID) {
+            SheetRowView(record: sheet)
+        }
+        .contextMenu {
+            sheetContextMenu(for: sheet)
+        }
+        #endif
+    }
+
+    /// 行のタップ／プレビュータップで詳細へ遷移（path に積む = 復元ロジックと整合）。
+    private func openSheet(_ sheet: ExpenseSheet) {
+        path.append(sheet.objectID)
+    }
+
+    #if canImport(UIKit) && !os(watchOS)
+    /// UIKit の長押しメニュー。SwiftUI 版 sheetContextMenu と同じ構成。
+    private func makeRowMenu(for sheet: ExpenseSheet) -> UIMenu {
+        var top: [UIMenuElement] = []
+        if lockManager.isUnlocked(sheet) {
+            top.append(UIAction(title: "精算",
+                                image: UIImage(systemName: "arrow.left.arrow.right.circle")) { _ in
+                subScreen = .settlement(sheet)
+            })
+            top.append(UIAction(title: "統計",
+                                image: UIImage(systemName: "chart.pie.fill")) { _ in
+                subScreen = .stats(sheet)
+            })
+            top.append(UIAction(title: "カテゴリを管理",
+                                image: UIImage(systemName: "tag.fill")) { _ in
+                subScreen = .categories(sheet)
+            })
+        }
+
+        var lock: [UIMenuElement] = []
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                lock.append(UIAction(title: "今すぐロック",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                })
+            }
+            if sheet.isOwnedByCurrentUser {
+                lock.append(UIAction(title: "ロック設定",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    presentLockSetup(sheet)
+                })
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            lock.append(UIAction(title: "シートをロック",
+                                 image: UIImage(systemName: "lock")) { _ in
+                presentLockSetup(sheet)
+            })
+        }
+
+        var children = top
+        if !lock.isEmpty {
+            children.append(UIMenu(title: "", options: .displayInline, children: lock))
+        }
+        return UIMenu(title: "", children: children)
+    }
+
+    /// 長押し時のプレビュー。解錠済み（またはロック無し）は詳細画面
+    /// (SheetDetailView) をそのまま表示し、ロック中（未解錠）は中身を保護して
+    /// 「ロックされています」表示にする。
+    private func rowPreview(for sheet: ExpenseSheet) -> AnyView {
+        if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
+            return AnyView(
+                VStack(spacing: 16) {
+                    SheetIconView(record: sheet, size: 60)
+                    Text(sheet.displayName)
+                        .font(.headline)
+                    Label("このシートはロックされています", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 44)
+                .padding(.horizontal, 24)
+            )
+        }
+        // 詳細画面の中身をプレビュー表示。isPreview=true で検索バー・ツールバーを
+        // 描画しないので、本文（サマリ＋一覧）だけが出る。
+        return AnyView(
+            SheetDetailView(record: sheet, isPreview: true)
+                .environment(\.managedObjectContext, viewContext)
+        )
+    }
+    #endif
 
     @ViewBuilder
     private var searchResultsList: some View {
@@ -680,6 +906,9 @@ private struct SearchResultRow: View {
 
 private struct SheetRowView: View {
     @ObservedObject var record: ExpenseSheet
+    /// UIKit ブリッジ経由の行は NavigationLink が無いので、自前で
+    /// ディスクロージャ (>) を表示してタップ可能なことを示す。
+    var showsDisclosure: Bool = false
     @StateObject private var lockManager = SheetLockManager.shared
 
     var body: some View {
@@ -692,6 +921,11 @@ private struct SheetRowView: View {
                 Image(systemName: lockManager.isUnlocked(record) ? "lock.open.fill" : "lock.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+            }
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 4)
