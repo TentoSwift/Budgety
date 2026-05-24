@@ -7,7 +7,9 @@
 //  - パスワードハッシュ/ソルトは ExpenseSheet 自身のプロパティとして
 //    Core Data + CloudKit に保存される (= 共有シートの参加者間で共有される)
 //  - hash = SHA256( salt + password )
-//  - 生体認証 ON/OFF はデバイス毎の好みなので UserDefaults にローカル保持
+//  - 生体認証 ON/OFF もシートの設定として Core Data + CloudKit 同期される。
+//    実際に生体認証が使えるかは解錠時に端末側で評価するため、非対応端末では
+//    自動的にパスワード入力へフォールバックする (= 非対応端末で ON にしても安全)
 //  - セッション解錠状態は in-memory (アプリ再起動でロック再要求)
 //
 
@@ -27,8 +29,6 @@ final class SheetLockManager: ObservableObject {
     @Published private(set) var unlockedSheetURIs: Set<String> = []
 
     private let defaults: UserDefaults
-    /// 生体認証 ON/OFF を覚えておくキー prefix (デバイスローカル)。
-    private let bioPrefix = "BudgetySheetLockBio."
     /// マイグレーション元の旧 key prefix (v0.x で UserDefaults にハッシュごと格納していたもの)。
     static let legacyPrefix = "BudgetySheetLock."
 
@@ -59,8 +59,8 @@ final class SheetLockManager: ObservableObject {
         let hash = Self.hash(password: password, salt: salt)
         sheet.lockPasswordSalt = salt
         sheet.lockPasswordHash = hash
+        sheet.lockBiometricEnabled = enableBiometric
         saveContext(of: sheet)
-        defaults.set(enableBiometric, forKey: bioKey(for: sheet))
         // 設定直後は当然解錠扱い
         unlockedSheetURIs.insert(uriString(for: sheet))
         objectWillChange.send()
@@ -70,8 +70,8 @@ final class SheetLockManager: ObservableObject {
     func clearPassword(for sheet: ExpenseSheet) {
         sheet.lockPasswordHash = nil
         sheet.lockPasswordSalt = nil
+        sheet.lockBiometricEnabled = false
         saveContext(of: sheet)
-        defaults.removeObject(forKey: bioKey(for: sheet))
         unlockedSheetURIs.remove(uriString(for: sheet))
         objectWillChange.send()
     }
@@ -138,13 +138,14 @@ final class SheetLockManager: ObservableObject {
     }
     #endif
 
-    /// 生体認証 ON/OFF (デバイス毎)。
+    /// 生体認証 ON/OFF (シート設定として CloudKit 同期)。
     func isBiometricEnabled(for sheet: ExpenseSheet) -> Bool {
-        defaults.bool(forKey: bioKey(for: sheet))
+        sheet.lockBiometricEnabled
     }
 
     func setBiometricEnabled(_ enabled: Bool, for sheet: ExpenseSheet) {
-        defaults.set(enabled, forKey: bioKey(for: sheet))
+        sheet.lockBiometricEnabled = enabled
+        saveContext(of: sheet)
         objectWillChange.send()
     }
 
@@ -192,9 +193,9 @@ final class SheetLockManager: ObservableObject {
                 sheet.lockPasswordHash = hash
                 sheet.lockPasswordSalt = salt
             }
-            // 生体認証フラグは新フォーマット (デバイスローカル) に転記
+            // 生体認証フラグはシート属性 (CloudKit 同期) に転記
             if let bio = entry["biometric"] as? Bool {
-                defaults.set(bio, forKey: bioKey(for: sheet))
+                sheet.lockBiometricEnabled = bio
             }
             defaults.removeObject(forKey: key)
         }
@@ -205,10 +206,6 @@ final class SheetLockManager: ObservableObject {
     }
 
     // MARK: - Helpers
-
-    private func bioKey(for sheet: ExpenseSheet) -> String {
-        bioPrefix + uriString(for: sheet)
-    }
 
     private func uriString(for sheet: ExpenseSheet) -> String {
         sheet.objectID.uriRepresentation().absoluteString
