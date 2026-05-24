@@ -59,7 +59,7 @@ struct ExpensoApp: App {
                 .alert("Premium が終了しました", isPresented: $premiumExpiredAlertShown) {
                     Button("OK", role: .cancel) {}
                 } message: {
-                    Text("自分が作成した共有とシートロックを解除しました。")
+                    Text("自分が作成した共有を解除しました。設定済みのシートロックはそのまま残ります。")
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoSaveFailed)) { note in
                     let message = (note.userInfo?["message"] as? String) ?? "保存に失敗しました"
