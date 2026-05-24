@@ -397,7 +397,9 @@ struct SheetListView: View {
     }
 
     /// 行のタップ／プレビュータップで詳細へ遷移（path に積む = 復元ロジックと整合）。
+    /// 既に遷移済み（path が非空）なら二重 push しない（遷移直前の誤タップ対策）。
     private func openSheet(_ sheet: ExpenseSheet) {
+        guard path.isEmpty else { return }
         path.append(sheet.objectID)
     }
 
