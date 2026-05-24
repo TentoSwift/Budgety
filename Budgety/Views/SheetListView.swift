@@ -952,29 +952,17 @@ private struct SheetRowView: View {
     }
 }
 
-/// ロック対象シートの開封ゲート。未解錠なら SheetLockView を出し、
-/// 解錠後/最初からロック無しなら子コンテンツ (SheetDetailView) を表示。
+/// ロック対象シートの開封ゲート。子コンテンツ (SheetDetailView) は常に描画し、
+/// ロック中は SheetLockView を全画面で重ねる (`sheetLockCover`)。
+/// content を差し替えず重ねるので、ここから push した精算/詳細などの子画面も
+/// 含め、バックグラウンド復帰時に画面を閉じずロックだけを重ねられる。
 /// シートから離脱 (= 一覧に戻る) した時の再ロックは SheetListView 側で
-/// `path` の変化を見て行う（ここで `.onDisappear` を使うと、精算/詳細など
-/// 子画面を push した時にも発火して即再ロックされてしまうため）。
+/// `path` の変化を見て行う。
 private struct LockedSheetGate<Content: View>: View {
     @ObservedObject var record: ExpenseSheet
     let content: () -> Content
 
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var lockManager = SheetLockManager.shared
-
     var body: some View {
-        Group {
-            if lockManager.isUnlocked(record) {
-                content()
-            } else {
-                SheetLockView(
-                    record: record,
-                    onUnlock: { /* state 更新で自動で content に切替 */ },
-                    onCancel: { dismiss() }
-                )
-            }
-        }
+        content().sheetLockCover(record)
     }
 }
