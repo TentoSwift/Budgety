@@ -99,22 +99,32 @@ struct WatchSheetLockView: View {
 
     @ViewBuilder
     private func keyButton(_ key: String, width: CGFloat, height: CGFloat) -> some View {
-        Button {
+        let isUnlock = key == "→"
+        let disabled = isUnlock && password.isEmpty
+        // .buttonStyle(.bordered) は固有の最小サイズを持ち、算出した height より大きく
+        // 描画されて行が重なることがある。.plain + 自前 RoundedRectangle で寸法を
+        // 厳密に width × height に固定し、重なりを防ぐ。
+        let fill: Color = (isUnlock && !disabled) ? sheet.tint : Color.white.opacity(0.18)
+        return Button {
             handle(key)
         } label: {
             Group {
                 switch key {
                 case "⌫": Image(systemName: "delete.left.fill")
                 case "→": Image(systemName: "lock.open.fill")
-                default:  Text(key).font(.body)
+                default:  Text(key).font(.title3)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundStyle(.white)
+            .frame(width: width, height: height)
+            .background(
+                RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
+                    .fill(fill)
+            )
+            .opacity(disabled ? 0.5 : 1)
         }
-        .buttonStyle(.bordered)
-        .tint(key == "→" ? sheet.tint : .gray)
-        .disabled(key == "→" && password.isEmpty)
-        .frame(width: width, height: height)
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
     private func handle(_ key: String) {
