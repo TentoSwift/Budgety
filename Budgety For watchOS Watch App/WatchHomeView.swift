@@ -48,7 +48,15 @@ struct WatchHomeView: View {
                         }
                     }
                     .tabViewStyle(.verticalPage)
-                    .onChange(of: selectedSheetID) { _, new in
+                    .onChange(of: selectedSheetID) { old, new in
+                        // 離れたシートを再ロック (次に開く時にパスワードを要求)。
+                        // ゲート側の onDisappear での再ロックは解錠遷移とぶつかるため、
+                        // ここでシート切替を見て行う。
+                        if let old,
+                           let sheet = try? ctx.existingObject(with: old) as? ExpenseSheet,
+                           SheetLockManager.shared.hasPassword(for: sheet) {
+                            SheetLockManager.shared.lock(sheet)
+                        }
                         if let new {
                             selectedSheetIDString = new.uriRepresentation().absoluteString
                         }

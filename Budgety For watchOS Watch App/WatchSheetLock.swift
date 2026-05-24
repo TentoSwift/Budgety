@@ -18,18 +18,14 @@ struct WatchLockedSheetGate<Content: View>: View {
     @StateObject private var lockManager = SheetLockManager.shared
 
     var body: some View {
-        Group {
-            if lockManager.isUnlocked(sheet) {
-                content()
-            } else {
-                WatchSheetLockView(sheet: sheet)
-            }
-        }
-        .onDisappear {
-            // 次回開く時にもう一度パスワード要求する
-            if lockManager.hasPassword(for: sheet) {
-                lockManager.lock(sheet)
-            }
+        // 注意: 以前は `Group { if/else }.onDisappear { lock }` だったが、Group に付けた
+        // modifier は各ブランチに適用されるため、解錠してロック画面ブランチが消える
+        // 瞬間に onDisappear が発火し即再ロックされ、解錠しても支出が表示されなかった。
+        // 再ロックは WatchHomeView 側でシート切替 (onChange) を見て行う。
+        if lockManager.isUnlocked(sheet) {
+            content()
+        } else {
+            WatchSheetLockView(sheet: sheet)
         }
     }
 }
