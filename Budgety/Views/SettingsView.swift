@@ -11,6 +11,7 @@ struct SettingsView: View {
     @StateObject private var fx = FXRatesService.shared
     @StateObject private var profile = UserProfileStore.shared
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss
     @State private var showPaywall: Bool = false
     @State private var showEraseConfirm: Bool = false
     @State private var showingProfileEdit: Bool = false
@@ -197,6 +198,16 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("設定")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("閉じる")
+                }
+            }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }
