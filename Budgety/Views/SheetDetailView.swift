@@ -949,19 +949,7 @@ private struct SummaryCard: View {
                 .animation(.snappy, value: t.expense)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
-            HStack(spacing: 12) {
-                Text("+ \(CurrencyCatalog.format(t.income, code: code))")
-                    .contentTransition(.numericText(value: doubleValue(t.income)))
-                Text("|")
-                    .foregroundStyle(.tertiary)
-                Text("- \(CurrencyCatalog.format(t.expense, code: code))")
-                    .contentTransition(.numericText(value: doubleValue(t.expense)))
-            }
-            .font(.subheadline.monospacedDigit().weight(.medium))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.snappy, value: t.income)
-            .animation(.snappy, value: t.expense)
+            incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
             // メトリクス列 (収入 / 残予算 / 収支)
             metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
@@ -1238,40 +1226,30 @@ private struct SummaryCard: View {
         }
     }
 
-    /// 支出 / 収入の内訳行。AX サイズでは横一列に収まらないので、
-    /// `AnyLayout` で V/H を切替 (WWDC24 推奨パターン)。
+    /// 「+収入 | -支出」のサマリ行。AX サイズでは横一列に収まらないので、
+    /// `AnyLayout` で縦積みに切替 (WWDC24「Get started with Dynamic Type」推奨パターン)。
+    /// 縦積み時は区切りの "|" を省く。
     @ViewBuilder
-    private func expenseIncomeBreakdown(expense: Decimal, income: Decimal) -> some View {
+    private func incomeExpenseSummaryRow(income: Decimal, expense: Decimal) -> some View {
         let layout: AnyLayout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-            : AnyLayout(HStackLayout(spacing: 24))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 12))
 
         layout {
-            Label {
-                Text(CurrencyCatalog.format(expense, code: code))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: doubleValue(expense)))
-                    .animation(.snappy, value: expense)
-            } icon: {
-                Image(systemName: "minus.circle")
+            Text("+ \(CurrencyCatalog.format(income, code: code))")
+                .contentTransition(.numericText(value: doubleValue(income)))
+            if !dynamicTypeSize.isAccessibilitySize {
+                Text("|")
+                    .foregroundStyle(.tertiary)
             }
-            .foregroundStyle(.secondary)
-
-            Label {
-                Text(CurrencyCatalog.format(income, code: code))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: doubleValue(income)))
-                    .animation(.snappy, value: income)
-            } icon: {
-                Image(systemName: "plus.circle")
-            }
-            .foregroundStyle(.secondary)
+            Text("- \(CurrencyCatalog.format(expense, code: code))")
+                .contentTransition(.numericText(value: doubleValue(expense)))
         }
-        .font(.subheadline)
-        .frame(
-            maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
-            alignment: .leading
-        )
+        .font(.subheadline.monospacedDigit().weight(.medium))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.snappy, value: income)
+        .animation(.snappy, value: expense)
     }
 
     private var hasMultipleCurrencies: Bool {
