@@ -16,6 +16,7 @@
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="defaultCurrencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="lockBiometricEnabled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="lockPasswordHash" optional="YES" attributeType="String"/>
         <attribute name="lockPasswordSalt" optional="YES" attributeType="String"/>
         <attribute name="monthlyBudget" optional="YES" attributeType="Decimal" defaultValueString="0"/>
