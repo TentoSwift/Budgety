@@ -34,7 +34,11 @@ struct WatchLockedSheetGate<Content: View>: View {
     }
 }
 
-/// パスワード入力 UI。SecureField で watch のスクリブル / 音声入力経由で入力可。
+/// パスワード入力 UI（数字キーパッド）。
+/// watchOS の SecureField / TextField は数字のみのパスワードが入力できない（反映
+/// されない）ことがあるため、タップ式の数字キーパッドで確実に入力できるようにする。
+/// （Apple Watch 標準のパスコード入力と同じ方式。英字を含むパスワードは iPhone 側で
+/// 解錠してください。）
 struct WatchSheetLockView: View {
     @ObservedObject var sheet: ExpenseSheet
     @StateObject private var lockManager = SheetLockManager.shared
@@ -42,57 +46,82 @@ struct WatchSheetLockView: View {
     @State private var password: String = ""
     @State private var errorMessage: String?
 
+    private let rows: [[String]] = [
+        ["1", "2", "3"],
+        ["4", "5", "6"],
+        ["7", "8", "9"],
+        ["⌫", "0", "→"],
+    ]
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                Image(systemName: "lock.fill")
-                    .font(.title2)
-                    .foregroundStyle(sheet.tint)
-                    .padding(.top, 4)
+            VStack(spacing: 8) {
                 Text(sheet.displayName)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                Text("パスワードを入力")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                // watchOS の SecureField は入力（特に数字のみ）が反映されないことが
-                // あるため、通常の TextField を使う（watch は個人デバイスなので
-                // 伏せ字でなくても許容）。textContentType(.password) も付けない
-                // ── Keychain AutoFill 経路になり手入力できなくなるため。
-                TextField("パスワード", text: $password)
-                    .submitLabel(.go)
-                    .onSubmit(attemptUnlock)
-                Button {
-                    attemptUnlock()
-                } label: {
-                    Label("解錠", systemImage: "lock.open.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(sheet.tint)
-                .disabled(password.isEmpty)
+                    .lineLimit(1)
+                // 入力済みは伏せ字（●）で桁数だけ表示。未入力時は案内。
+                Text(password.isEmpty ? "パスワードを入力" : String(repeating: "●", count: password.count))
+                    .font(password.isEmpty ? .caption2 : .title3)
+                    .foregroundStyle(password.isEmpty ? .secondary : .primary)
+                    .lineLimit(1)
+                    .frame(minHeight: 22)
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.caption2)
                         .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                }
+                ForEach(rows, id: \.self) { row in
+                    HStack(spacing: 6) {
+                        ForEach(row, id: \.self) { key in
+                            keyButton(key)
+                        }
+                    }
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 4)
         }
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
     }
 
+    @ViewBuilder
+    private func keyButton(_ key: String) -> some View {
+        Button {
+            handle(key)
+        } label: {
+            Group {
+                switch key {
+                case "⌫": Image(systemName: "delete.left.fill")
+                case "→": Image(systemName: "lock.open.fill")
+                default:  Text(key).font(.title3)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 36)
+        }
+        .buttonStyle(.bordered)
+        .tint(key == "→" ? sheet.tint : .gray)
+        .disabled(key == "→" && password.isEmpty)
+    }
+
+    private func handle(_ key: String) {
+        errorMessage = nil
+        switch key {
+        case "⌫": if !password.isEmpty { password.removeLast() }
+        case "→": attemptUnlock()
+        default:  password.append(key)
+        }
+    }
+
     private func attemptUnlock() {
-        let ok = lockManager.unlock(sheet, withPassword: password)
-        if ok {
+        guard !password.isEmpty else { return }
+        if lockManager.unlock(sheet, withPassword: password) {
             WKInterfaceDevice.current().play(.success)
             password = ""
             errorMessage = nil
         } else {
             WKInterfaceDevice.current().play(.failure)
             errorMessage = "パスワードが違います"
+            password = ""
         }
     }
 }
