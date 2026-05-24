@@ -5,17 +5,14 @@
 
 import SwiftUI
 import SwiftData
-import CloudKit
 
 struct SettingsView: View {
     @StateObject private var pm = PurchaseManager.shared
     @StateObject private var fx = FXRatesService.shared
-    @StateObject private var persistence = PersistenceController.shared
     @StateObject private var profile = UserProfileStore.shared
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showPaywall: Bool = false
     @State private var showEraseConfirm: Bool = false
-    @State private var iCloudAccountStatus: CKAccountStatus = .couldNotDetermine
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
@@ -85,39 +82,6 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                }
-
-                Section("カテゴリ") {
-                    Text("カテゴリはシートごとに設定します。各シート画面の右上「⋯」メニューからカテゴリ管理を開けます。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("iCloud 同期") {
-                    iCloudStatusRows
-                    Text("シートのデータは iCloud に保存され、同じ Apple ID の iPhone・iPad・Mac で自動同期されます。無料でご利用いただけます。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("シートの共有") {
-                    if pm.isPremium {
-                        Label("招待を送る (オーナー)", systemImage: "person.badge.shield.checkmark")
-                        Text("シート画面の右上の人型アイコンから相手のメールアドレスを入力すると、iCloud アカウントを検索し「編集可能 / 閲覧のみ」の権限を付与してから招待リンクをメールで送信します。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Label("招待を送るのは Premium 限定", systemImage: "lock.fill")
-                            .foregroundStyle(.secondary)
-                        Text("Premium にアップグレードすると、家族や友人を権限付きで招待できます。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Label("招待を受けて参加 (無料)", systemImage: "envelope.open.fill")
-                        .foregroundStyle(.green)
-                    Text("オーナーから送られた招待メールのリンクをタップすると、課金なしでそのシートに参加できます。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 if pm.isPremium {
@@ -220,32 +184,6 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("デバッグ") {
-                    NavigationLink("閉じる確認ダイアログ サンプル") {
-                        DismissConfirmDemoView()
-                            .navigationTitle("Dismiss Confirm Demo")
-                    }
-                    NavigationLink("プロモ用デモアニメーション") {
-                        DemoShowcaseView()
-                    }
-                    NavigationLink("アシスティブアクセス画面プレビュー") {
-                        AssistiveAccessView()
-                            .navigationTitle("AA プレビュー")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-                    #if DEBUG
-                    Button("Premium 期限切れの解除フローを試す") {
-                        Task { @MainActor in
-                            await PurchaseManager.runExpiryRevokeForDebug()
-                        }
-                    }
-                    Button("「テスト」シートにサンプル支出を 30 件追加") {
-                        SampleDataGenerator.populateTestSheet(in: viewContext)
-                        Haptics.success()
-                    }
-                    #endif
-                }
-
                 Section {
                     Button(role: .destructive) {
                         showEraseConfirm = true
@@ -288,59 +226,6 @@ struct SettingsView: View {
             } message: {
                 Text("すべてのデータ・プロフィール・設定を削除し、アプリを初期状態に戻します。元に戻せません。削除後はアプリを再起動してください。")
             }
-        }
-    }
-
-    @ViewBuilder
-    private var iCloudStatusRows: some View {
-        let (icon, color, text) = iCloudStatusDisplay
-        Label {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(text).foregroundStyle(.primary)
-                Text(syncStateText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } icon: {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-        }
-        .task {
-            await refreshAccountStatus()
-        }
-    }
-
-    private var iCloudStatusDisplay: (icon: String, color: Color, text: String) {
-        switch iCloudAccountStatus {
-        case .available:
-            return ("icloud.fill", .blue, "iCloud にサインイン済み")
-        case .noAccount:
-            return ("icloud.slash", .orange, "iCloud にサインインしていません")
-        case .restricted:
-            return ("exclamationmark.icloud.fill", .red, "iCloud アクセスが制限されています")
-        case .temporarilyUnavailable:
-            return ("icloud.slash", .orange, "iCloud に一時的にアクセスできません")
-        case .couldNotDetermine:
-            return ("icloud", .secondary, "iCloud 状態を確認中...")
-        @unknown default:
-            return ("icloud", .secondary, "iCloud 状態不明")
-        }
-    }
-
-    private var syncStateText: String {
-        if iCloudAccountStatus != .available {
-            return "ローカル単独モードで動作"
-        }
-        return persistence.initialSyncComplete ? "同期完了" : "同期中..."
-    }
-
-    @MainActor
-    private func refreshAccountStatus() async {
-        let container = CKContainer(identifier: "iCloud.com.tento.budgety")
-        do {
-            iCloudAccountStatus = try await container.accountStatus()
-        } catch {
-            iCloudAccountStatus = .couldNotDetermine
         }
     }
 }
