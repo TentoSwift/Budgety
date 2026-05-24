@@ -24,6 +24,9 @@ struct BudgetyMacContentView: View {
     @State private var showingAddSheet: Bool = false
     @State private var showSettingsView: Bool = false
     @State private var showingProfileEdit: Bool = false
+    @State private var showingPaywall: Bool = false
+    @State private var showSyncWaitingAlert: Bool = false
+    @State private var showOfflineAlert: Bool = false
     @StateObject private var lockManager = SheetLockManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -57,6 +60,19 @@ struct BudgetyMacContentView: View {
         }
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
+        }
+        .sheet(isPresented: $showingPaywall) {
+            MacModalSheet { PaywallView() }
+        }
+        .alert("同期完了を待っています", isPresented: $showSyncWaitingAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("iCloud から既存のシートを取得中です。少し待ってからもう一度お試しください。")
+        }
+        .alert("インターネット接続が必要です", isPresented: $showOfflineAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("シートの新規作成には iCloud との同期が必要です。インターネットに接続してから再度お試しください。")
         }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
@@ -99,12 +115,30 @@ struct BudgetyMacContentView: View {
             }
             ToolbarItem {
                 Button {
-                    showingAddSheet = true
+                    tryShowAddSheet()
                 } label: {
                     Image(systemName: "plus")
                 }
                 .help("シートを追加")
             }
+        }
+    }
+
+    /// Free 上限・同期状態を確認してから新規シート作成ダイアログを出す (iOS と同じゲート)。
+    /// 無料プランは自分が作成したシートを `FreeTierLimits.ownedSheets` 個までに制限する。
+    private func tryShowAddSheet() {
+        switch PurchaseManager.sheetCreationGate() {
+        case .allowed:
+            showingAddSheet = true
+        case .waitingForSync:
+            showSyncWaitingAlert = true
+            Haptics.warning()
+        case .offline:
+            showOfflineAlert = true
+            Haptics.warning()
+        case .overLimit:
+            showingPaywall = true
+            Haptics.warning()
         }
     }
 
