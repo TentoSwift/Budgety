@@ -36,8 +36,9 @@ struct BudgetyMacContentView: View {
                     BudgetyMacSheetView(sheet: sheet)
                 } else {
                     // ロック中はパスワード入力画面を detail に表示。
+                    // macOS は物理キーボードで入力できる MacSheetLockView を使う。
                     // 解錠すると lockManager の変化で自動的にシート本体へ切り替わる。
-                    SheetLockView(
+                    MacSheetLockView(
                         record: sheet,
                         onUnlock: { },
                         onCancel: { selectedSheet = nil }
