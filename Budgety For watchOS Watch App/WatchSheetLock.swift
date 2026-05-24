@@ -50,35 +50,39 @@ struct WatchSheetLockView: View {
     ]
 
     var body: some View {
-        // ScrollView は使わない。verticalPage の TabView ページ内では ScrollView が
-        // レイアウトされず中身が表示されないことがあるため。画面いっぱいに収め、
-        // キーパッドが残りの高さを埋めるようにする。
-        VStack(spacing: 3) {
-            Text(sheet.displayName)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            // 入力状況を 1 行で表示 (未入力=案内 / 入力中=● / エラー=赤)。
-            // 行を固定にしてレイアウトがずれないようにする。
-            Text(statusText)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(statusColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .frame(maxWidth: .infinity)
-            // 数字キーパッド: 4 行で残りの高さを均等に埋める。
-            ForEach(rows, id: \.self) { row in
-                HStack(spacing: 4) {
-                    ForEach(row, id: \.self) { key in
-                        keyButton(key)
+        // GeometryReader で実際の表示領域を測り、3 列 × 4 行のキーパッドが画面ちょうどに
+        // 収まるようボタン寸法を算出する。ScrollView は使わない (verticalPage TabView
+        // 内では中身が表示されないことがあるため)。シート名はナビバーのタイトルに出して
+        // 本文はステータス行 + キーパッドだけにし、キーパッドの面積を最大化する。
+        GeometryReader { geo in
+            let spacing: CGFloat = 4
+            let statusHeight: CGFloat = 22
+            let rowCount = CGFloat(rows.count)            // 4
+            // VStack の子は [ステータス, 4 行] = 5 個 → 隙間は rowCount(=4) 個。
+            let buttonWidth = (geo.size.width - spacing * 2) / 3
+            let buttonHeight = max(
+                20,
+                (geo.size.height - statusHeight - spacing * rowCount) / rowCount
+            )
+            VStack(spacing: spacing) {
+                // 入力状況を 1 行で表示 (未入力=案内 / 入力中=● / エラー=赤)。
+                Text(statusText)
+                    .font(.headline)
+                    .foregroundStyle(statusColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(height: statusHeight)
+                ForEach(rows, id: \.self) { row in
+                    HStack(spacing: spacing) {
+                        ForEach(row, id: \.self) { key in
+                            keyButton(key, width: buttonWidth, height: buttonHeight)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
-        .padding(.horizontal, 2)
-        .padding(.bottom, 2)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle(sheet.displayName)
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
     }
 
@@ -93,7 +97,7 @@ struct WatchSheetLockView: View {
     }
 
     @ViewBuilder
-    private func keyButton(_ key: String) -> some View {
+    private func keyButton(_ key: String, width: CGFloat, height: CGFloat) -> some View {
         Button {
             handle(key)
         } label: {
@@ -109,6 +113,7 @@ struct WatchSheetLockView: View {
         .buttonStyle(.bordered)
         .tint(key == "→" ? sheet.tint : .gray)
         .disabled(key == "→" && password.isEmpty)
+        .frame(width: width, height: height)
     }
 
     private func handle(_ key: String) {
