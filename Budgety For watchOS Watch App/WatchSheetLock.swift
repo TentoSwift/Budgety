@@ -71,7 +71,6 @@ struct WatchSheetLockView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .frame(height: statusHeight)
-                Spacer(minLength: 0)
                 ForEach(rows, id: \.self) { row in
                     HStack(spacing: spacing) {
                         ForEach(row, id: \.self) { key in
@@ -79,9 +78,10 @@ struct WatchSheetLockView: View {
                         }
                     }
                 }
-                Spacer(minLength: 0)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            // Spacer は使わない (VStack の隙間数が増えて高さ計算とずれ、行が重なるため)。
+            // 上限でボタンが小さくなった分の余白は frame の中央寄せで吸収する。
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
         .navigationTitle(sheet.displayName)
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
