@@ -11,6 +11,17 @@ import CustomPicker
 import CustomNavigationTitle
 #endif
 
+/// 支出の支払い者が指定 profileID と一致するか。
+/// 「自分」(selfIDs のいずれか) を選んだ場合は、payerProfileID が selfIDs に
+/// 含まれれば一致とみなす（旧 ID でも自分として拾えるように）。
+fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
+    let pid = exp.payerProfileID ?? ""
+    if selfIDs.contains(payerID) {
+        return selfIDs.contains(pid)
+    }
+    return pid == payerID
+}
+
 struct SheetDetailView: View {
     @ObservedObject var record: ExpenseSheet
     /// プレビュー表示用。true なら検索バー・ツールバーを描画しない。
@@ -93,6 +104,8 @@ struct SheetDetailView: View {
     /// 検索専用の期間。普段の表示の `period` とは独立で、検索開始時は常に全期間。
     @State private var searchPeriod: Period = .all
     @State private var selectedCategory: ExpenseCategory?
+    /// 支払い者で絞り込む時の profileID（membersStrip のタップで設定）。nil = 全員。
+    @State private var selectedPayerID: String?
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
@@ -172,6 +185,11 @@ struct SheetDetailView: View {
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         }
+        if let payerID = selectedPayerID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
+        }
         // 検索中は検索専用の期間で絞り込む。
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
@@ -201,6 +219,7 @@ struct SheetDetailView: View {
                     period: effectivePeriodBinding,
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
+                    selectedPayerID: selectedPayerID,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
                 #if os(iOS)
@@ -508,13 +527,16 @@ struct SheetDetailView: View {
 
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
-        selectedCategory != nil || (isSearchActive && searchPeriod.isFiltering)
+        selectedCategory != nil || selectedPayerID != nil || (isSearchActive && searchPeriod.isFiltering)
     }
 
     private var filterDescription: String {
         var parts: [String] = []
         if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
         if selectedCategory != nil { parts.append("カテゴリ") }
+        // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
+        // 「支払い者」ではなく「メンバー」と表示する。
+        if selectedPayerID != nil { parts.append("メンバー") }
         return parts.joined(separator: "・") + "で絞り込まれています。"
     }
 
@@ -532,6 +554,7 @@ struct SheetDetailView: View {
             } actions: {
                 Button("フィルタをオフにする") {
                     selectedCategory = nil
+                    selectedPayerID = nil
                     searchPeriod = .all
                 }
             }
@@ -574,20 +597,32 @@ struct SheetDetailView: View {
             HStack(spacing: 12) {
                 ForEach(ids, id: \.self) { id in
                     let info = record.memberDisplayInfo(for: id)
-                    VStack(spacing: 4) {
-                        AvatarView(
-                            photoData: info.photoData,
-                            displayName: info.name,
-                            colorHex: info.colorHex,
-                            size: 36
-                        )
-                        Text(info.name)
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .foregroundStyle(.secondary)
+                    let isSelected = selectedPayerID == id
+                    Button {
+                        // タップで「その人が支払い者」の絞り込みをトグル。
+                        selectedPayerID = isSelected ? nil : id
+                    } label: {
+                        VStack(spacing: 4) {
+                            AvatarView(
+                                photoData: info.photoData,
+                                displayName: info.name,
+                                colorHex: info.colorHex,
+                                size: 36
+                            )
+                            // strokeBorder は枠内に描くので、枠が見切れない。
+                            .overlay(
+                                Circle().strokeBorder(record.tint, lineWidth: isSelected ? 2.5 : 0)
+                            )
+                            Text(info.name)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(isSelected ? record.tint : .secondary)
+                        }
+                        .frame(maxWidth: 80)
+                        .padding(.vertical, 3)
                     }
-                    .frame(maxWidth: 80)
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 8)
@@ -622,13 +657,14 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                 } label: {
                     Text("すべて")
-                        .font(.caption.weight(selectedCategory == nil ? .semibold : .regular))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory == nil ? record.tint.opacity(0.18) : Color.platformTertiarySystemBackground)
+                            Capsule().fill(selectedCategory == nil ? record.tint : Color.platformTertiarySystemBackground)
                         )
-                        .foregroundStyle(selectedCategory == nil ? record.tint : .primary)
+                        // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
+                        .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
                 }
                 .buttonStyle(.plain)
 
@@ -640,13 +676,14 @@ struct SheetDetailView: View {
                             Image(systemName: cat.displaySymbol)
                             Text(cat.displayName)
                         }
-                        .font(.caption.weight(selectedCategory?.objectID == cat.objectID ? .semibold : .regular))
+                        .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint.opacity(0.22) : Color.platformTertiarySystemBackground)
+                            Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformTertiarySystemBackground)
                         )
-                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? cat.tint : .primary)
+                        // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
+                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -770,6 +807,7 @@ private struct SummaryCard: View {
     /// アクティブ かつ クエリ未入力なら合計は 0 (= 行リストの「0 件」と一致させる)。
     let searchActive: Bool
     let selectedCategory: ExpenseCategory?
+    let selectedPayerID: String?
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
     /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
     let searchQuery: String
@@ -786,12 +824,14 @@ private struct SummaryCard: View {
         period: Binding<SheetDetailView.Period>,
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
+        selectedPayerID: String? = nil,
         searchQuery: String = ""
     ) {
         self.record = record
         self._period = period
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
+        self.selectedPayerID = selectedPayerID
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
             sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
@@ -814,12 +854,15 @@ private struct SummaryCard: View {
         let categoryID = selectedCategory?.objectID
         let target = code
         let q = searchQuery.lowercased()
+        let selfIDs: Set<String> = selectedPayerID == nil ? [] :
+            UserProfileStore.shared.canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: record))
         var expenseSum: Decimal = 0
         var incomeSum: Decimal = 0
         var missing: Set<String> = []
         var hitCount = 0
         for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
+            if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
                     || e.displayPaidBy.lowercased().contains(q)
@@ -845,7 +888,7 @@ private struct SummaryCard: View {
         let net = t.income - t.expense
         let budget = record.monthlyBudgetDecimal
         let showBudgetMetrics = !isSearching && period == .thisMonth
-            && selectedCategory == nil && budget != nil
+            && selectedCategory == nil && selectedPayerID == nil && budget != nil
         VStack(alignment: .leading, spacing: 12) {
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
             HStack(spacing: 10) {
@@ -880,9 +923,6 @@ private struct SummaryCard: View {
             // 期間ピッカー + カテゴリ pill (検索中も期間を変更できるよう常に表示)
             HStack(spacing: 8) {
                 periodMenuLabel
-                if let cat = selectedCategory {
-                    categoryPill(cat)
-                }
                 Spacer()
                 if isSearching {
                     Text("\(t.hitCount)件")
@@ -951,9 +991,6 @@ private struct SummaryCard: View {
                 searchPill
             } else {
                 periodMenuLabel
-            }
-            if let cat = selectedCategory {
-                categoryPill(cat)
             }
             Spacer()
         }
@@ -1140,18 +1177,12 @@ private struct SummaryCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
                     leadingPill
-                    if let cat = selectedCategory {
-                        categoryPill(cat)
-                    }
                     Spacer()
                 }
             }
         } else {
             HStack {
                 leadingPill
-                if let cat = selectedCategory {
-                    categoryPill(cat)
-                }
                 Spacer()
             }
         }
@@ -1197,19 +1228,6 @@ private struct SummaryCard: View {
             .padding(.vertical, 4)
             .background(Capsule().fill(record.tint.opacity(0.18)))
         }
-    }
-
-    private func categoryPill(_ cat: ExpenseCategory) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: cat.displaySymbol)
-                .font(.caption2)
-            Text(cat.displayName)
-                .font(.caption.weight(.semibold))
-        }
-        .foregroundStyle(cat.tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(cat.tint.opacity(0.18)))
     }
 
     /// 支出 / 収入の内訳行。AX サイズでは横一列に収まらないので、
