@@ -12,6 +12,8 @@ import SwiftUI
 
 struct SheetLockView: View {
     let record: ExpenseSheet
+    /// ロック画面の説明文を差し替える (例: 全データ削除のための解錠)。nil なら既定文。
+    var subtitle: String? = nil
     let onUnlock: () -> Void
     let onCancel: () -> Void
 
@@ -44,9 +46,10 @@ struct SheetLockView: View {
                 }
                 Text(record.displayName)
                     .font(.title3.bold())
-                Text("このシートはロックされています")
+                Text(subtitle ?? "このシートはロックされています")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             .padding(.top, 24)
 
