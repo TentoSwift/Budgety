@@ -54,34 +54,46 @@ struct WatchSheetLockView: View {
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                Text(sheet.displayName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                // 入力済みは伏せ字（●）で桁数だけ表示。未入力時は案内。
-                Text(password.isEmpty ? "パスワードを入力" : String(repeating: "●", count: password.count))
-                    .font(password.isEmpty ? .caption2 : .title3)
-                    .foregroundStyle(password.isEmpty ? .secondary : .primary)
-                    .lineLimit(1)
-                    .frame(minHeight: 22)
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                }
-                ForEach(rows, id: \.self) { row in
-                    HStack(spacing: 6) {
-                        ForEach(row, id: \.self) { key in
-                            keyButton(key)
-                        }
+        // ScrollView は使わない。verticalPage の TabView ページ内では ScrollView が
+        // レイアウトされず中身が表示されないことがあるため。画面いっぱいに収め、
+        // キーパッドが残りの高さを埋めるようにする。
+        VStack(spacing: 3) {
+            Text(sheet.displayName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            // 入力状況を 1 行で表示 (未入力=案内 / 入力中=● / エラー=赤)。
+            // 行を固定にしてレイアウトがずれないようにする。
+            Text(statusText)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity)
+            // 数字キーパッド: 4 行で残りの高さを均等に埋める。
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 4) {
+                    ForEach(row, id: \.self) { key in
+                        keyButton(key)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(.horizontal, 4)
         }
+        .padding(.horizontal, 2)
+        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(sheet.tint.opacity(0.25).gradient, for: .navigation)
+    }
+
+    /// 入力状況の 1 行表示 (案内 / ● / エラー)。
+    private var statusText: String {
+        if let errorMessage { return errorMessage }
+        return password.isEmpty ? "パスワードを入力" : String(repeating: "●", count: password.count)
+    }
+    private var statusColor: Color {
+        if errorMessage != nil { return .red }
+        return password.isEmpty ? .secondary : .primary
     }
 
     @ViewBuilder
@@ -93,10 +105,10 @@ struct WatchSheetLockView: View {
                 switch key {
                 case "⌫": Image(systemName: "delete.left.fill")
                 case "→": Image(systemName: "lock.open.fill")
-                default:  Text(key).font(.title3)
+                default:  Text(key).font(.body)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 36)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(.bordered)
         .tint(key == "→" ? sheet.tint : .gray)
