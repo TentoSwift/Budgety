@@ -23,9 +23,6 @@ struct AddExpenseIntent: AppIntent {
     @Parameter(title: "シート", description: "支出を記録するシート")
     var sheet: ExpenseSheetEntity
 
-    @Parameter(title: "タイトル", description: "支出の内容 (例: ランチ)")
-    var title: String
-
     @Parameter(
         title: "金額",
         description: "支払った金額。シートの既定通貨で記録されます。",
@@ -38,6 +35,12 @@ struct AddExpenseIntent: AppIntent {
         description: "支出のカテゴリ。「AI 提案」を選ぶとタイトルから自動推測、「未分類」を選ぶとカテゴリなしで保存します。"
     )
     var category: ExpenseCategoryEntity
+
+    @Parameter(
+        title: "タイトル (任意)",
+        description: "支出の内容 (例: ランチ)。未入力ならカテゴリ名が表示名になります。"
+    )
+    var title: String?
 
     @Parameter(title: "メモ (任意)", default: "")
     var note: String
@@ -60,10 +63,11 @@ struct AddExpenseIntent: AppIntent {
     )
     var sheetName: String?
 
-    // シートとカテゴリはメイン行に出して、その場で選べるようにする。
-    // 日時/メモ/MCP 用の文字列指定は「詳細を表示」配下に隠す。
+    // タイトルは入力させない (= 任意・詳細配下)。必須は シート → 金額 → カテゴリ の
+    // 順に尋ね、カテゴリを最後に選ばせる。
     static var parameterSummary: some ParameterSummary {
-        Summary("\(\.$sheet) の \(\.$category) に \(\.$title) (\(\.$amount)) を追加") {
+        Summary("\(\.$sheet) に \(\.$amount) を \(\.$category) で追加") {
+            \.$title
             \.$note
             \.$date
             \.$dateText
@@ -116,10 +120,8 @@ struct AddExpenseIntent: AppIntent {
             coreSheet = fallback
         }
 
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            throw AppIntentError.emptyTitle
-        }
+        // タイトルは任意。未入力なら表示名はカテゴリ名にフォールバックする (nil で保存)。
+        let trimmedTitle = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard amount > 0 else {
             throw AppIntentError.invalidAmount
         }
@@ -130,7 +132,7 @@ struct AddExpenseIntent: AppIntent {
             ctx.assign(expense, to: store)
         }
 
-        expense.title = trimmedTitle
+        expense.title = trimmedTitle.isEmpty ? nil : trimmedTitle
         expense.amount = NSDecimalNumber(decimal: Decimal(amount))
         expense.kindRaw = TransactionKind.expense.rawValue
         expense.currencyCode = coreSheet.resolvedDefaultCurrencyCode
@@ -174,10 +176,14 @@ struct AddExpenseIntent: AppIntent {
             Decimal(amount),
             code: coreSheet.resolvedDefaultCurrencyCode
         )
-        let categoryNote = resolvedCategory.map { " /  \($0.displayName)" } ?? ""
+        let categoryNote = resolvedCategory.map { " / \($0.displayName)" } ?? ""
+        // タイトル未入力時はタイトルの引用を出さない。
+        let body = trimmedTitle.isEmpty
+            ? "\(amountDisplay)\(categoryNote)"
+            : "「\(trimmedTitle)」(\(amountDisplay)\(categoryNote))"
         return .result(
             dialog: IntentDialog(
-                full: "「\(coreSheet.displayName)」に「\(trimmedTitle)」(\(amountDisplay)\(categoryNote)) を追加しました",
+                full: "「\(coreSheet.displayName)」に \(body) を追加しました",
                 supporting: "支出を追加しました"
             )
         )
