@@ -297,7 +297,7 @@ struct CloudSharingView: View {
         } header: {
             Text("人を招待")
         } footer: {
-            Text("招待先の Apple ID に登録済みメールアドレスを入力してください。参加者はシートを編集できます (閲覧のみは廃止)。")
+            Text("招待相手の Apple ID（メールアドレス）を入力します。")
         }
     }
 
@@ -320,12 +320,6 @@ struct CloudSharingView: View {
                 } label: {
                     Label("リンクをコピー", systemImage: "doc.on.doc")
                 }
-                Text(url.absoluteString)
-                    .font(.caption.monospaced())
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .foregroundStyle(.secondary)
             } else {
                 Button {
                     Task { await prepareLinkOnly() }
@@ -346,9 +340,9 @@ struct CloudSharingView: View {
             Text("リンクで共有")
         } footer: {
             if resolvedURL == nil {
-                Text("リンクを生成して、上で招待した相手に AirDrop / メッセージ等で送れます。招待されていない人がリンクをタップしても参加できません。")
+                Text("リンクを作成して招待相手に送れます。")
             } else {
-                Text("このリンクは上で招待した相手だけが使えます (Apple ID 必須)。招待されていない人がタップしても参加できません。")
+                Text("招待した相手だけがこのリンクで参加できます。")
             }
         }
     }
@@ -647,14 +641,6 @@ private struct ParticipantRow: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    if let rn = displayedRecordName {
-                        Text(rn)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
                 }
                 Spacer()
             }
