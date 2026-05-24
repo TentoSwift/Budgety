@@ -45,7 +45,7 @@ struct WatchHomeView: View {
                     }
                 }
             }
-            .navigationTitle("Budgety")
+            .navigationTitle("シート")
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
                     WatchLockedSheetGate(sheet: sheet) {
