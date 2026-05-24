@@ -24,13 +24,25 @@ struct BudgetyMacContentView: View {
     @State private var showingAddSheet: Bool = false
     @State private var showSettingsView: Bool = false
     @State private var showingProfileEdit: Bool = false
+    @StateObject private var lockManager = SheetLockManager.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
             if let sheet = selectedSheet {
-                BudgetyMacSheetView(sheet: sheet)
+                if lockManager.isUnlocked(sheet) {
+                    BudgetyMacSheetView(sheet: sheet)
+                } else {
+                    // ロック中はパスワード入力画面を detail に表示。
+                    // 解錠すると lockManager の変化で自動的にシート本体へ切り替わる。
+                    SheetLockView(
+                        record: sheet,
+                        onUnlock: { },
+                        onCancel: { selectedSheet = nil }
+                    )
+                }
             } else {
                 ContentUnavailableView {
                     Label("シートを選択", systemImage: "rectangle.stack")
@@ -48,6 +60,16 @@ struct BudgetyMacContentView: View {
         }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
+        }
+        .onChange(of: selectedSheet) { old, _ in
+            // 別シートへ移動したら、離れたシートを再ロックする。
+            if let old, lockManager.hasPassword(for: old) {
+                lockManager.lock(old)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // アプリがバックグラウンド (非表示) になったら全シートを再ロック。
+            if phase == .background { lockManager.lockAll() }
         }
     }
 
@@ -130,10 +152,17 @@ struct BudgetyMacContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if sheet.isOwnedByCurrentUser == false {
-                Image(systemName: "person.2.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            HStack(spacing: 4) {
+                if lockManager.hasPassword(for: sheet) {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                if sheet.isOwnedByCurrentUser == false {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .padding(.vertical, 2)
