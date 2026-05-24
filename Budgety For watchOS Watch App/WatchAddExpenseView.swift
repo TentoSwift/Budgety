@@ -263,7 +263,7 @@ struct WatchCategoryPicker: View {
                                 .foregroundStyle(.white)
                                 .frame(width: 28, height: 28)
                                 .background(
-                                    Circle().fill(Color(hex: cat.colorHex ?? "#5B8DEF") ?? .blue)
+                                    Circle().fill((Color(hex: cat.colorHex ?? "#5B8DEF") ?? .blue).gradient)
                                 )
                             Text(cat.name ?? "")
                                 .font(.body)
