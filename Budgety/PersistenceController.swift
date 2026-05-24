@@ -22,6 +22,11 @@ final class PersistenceController: ObservableObject {
     /// 一度 true になったら UserDefaults に永続化し、次回起動時は最初から true。
     @Published private(set) var initialSyncComplete: Bool = UserDefaults.standard.bool(forKey: PersistenceController.initialSyncCompleteKey)
 
+    /// iCloud アカウントが利用可能か (= サインイン済み)。
+    /// `.noAccount` / `.restricted` の時のみ false。判定前は楽観的に true。
+    /// シート作成ゲートで同期的に参照するためキャッシュしている。
+    @Published private(set) var iCloudAccountAvailable: Bool = true
+
     private static let cloudKitContainerIdentifier = "iCloud.com.tento.budgety"
     private static let initialSyncCompleteKey = "ExpensoInitialSyncComplete"
 
@@ -162,13 +167,13 @@ final class PersistenceController: ObservableObject {
             }
         }
 
-        // iCloud アカウントが利用不可なら待つ意味が無いので即時開放
-        if !UserDefaults.standard.bool(forKey: Self.initialSyncCompleteKey) {
-            CKContainer(identifier: Self.cloudKitContainerIdentifier)
-                .accountStatus { [weak self] status, _ in
-                    guard let self, status != .available else { return }
-                    self.markInitialSyncComplete()
-                }
+        // iCloud サインイン状態を取得・監視 (シート作成ゲートで参照)。
+        // 未サインイン等で利用不可なら初回同期を待つ意味が無いのでゲートも即時開放する。
+        refreshAccountStatus()
+        NotificationCenter.default.addObserver(
+            forName: .CKAccountChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.refreshAccountStatus()
         }
 
         container.viewContext.automaticallyMergesChangesFromParent = true
@@ -188,6 +193,23 @@ final class PersistenceController: ObservableObject {
             seedDevDataIfNeeded()
         }
         #endif
+    }
+
+    /// iCloud アカウント状態を取得して `iCloudAccountAvailable` を更新する。
+    /// 起動時・`.CKAccountChanged`・前面化時に呼ぶ。
+    func refreshAccountStatus() {
+        CKContainer(identifier: Self.cloudKitContainerIdentifier).accountStatus { [weak self] status, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // サインイン済みか (作成ゲート用): .noAccount / .restricted のみ false。
+                let signedIn = (status != .noAccount && status != .restricted)
+                if self.iCloudAccountAvailable != signedIn {
+                    self.iCloudAccountAvailable = signedIn
+                }
+                // .available 以外なら初回同期を待つ意味が無いのでゲート開放 (従来挙動)。
+                if status != .available { self.markInitialSyncComplete() }
+            }
+        }
     }
 
     /// `initialSyncComplete` を 1 度だけ true にする (= idempotent)。

@@ -52,6 +52,7 @@ struct SheetListView: View {
     @State private var showingPaywall = false
     @State private var showSyncWaitingAlert = false
     @State private var showOfflineAlert = false
+    @State private var showNotSignedInAlert = false
     @State private var path: [NSManagedObjectID] = []
     @State private var didRestorePath = false
     @State private var searchText: String = ""
@@ -211,6 +212,11 @@ struct SheetListView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("シートの新規作成には iCloud との同期が必要です。Wi-Fi またはモバイル通信に接続してから再度お試しください。")
+            }
+            .alert("iCloud にサインインしてください", isPresented: $showNotSignedInAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("シートの作成には iCloud へのサインインが必要です。「設定」アプリの最上部から Apple アカウントにサインインしてください。")
             }
             .onAppear {
                 applyDemoLaunch()
@@ -689,6 +695,9 @@ struct SheetListView: View {
         switch PurchaseManager.sheetCreationGate() {
         case .allowed:
             showingAddSheet = true
+        case .notSignedIn:
+            showNotSignedInAlert = true
+            Haptics.warning()
         case .waitingForSync:
             showSyncWaitingAlert = true
             Haptics.warning()

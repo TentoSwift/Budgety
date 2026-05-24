@@ -131,6 +131,8 @@ struct ExpensoApp: App {
                     switch newPhase {
                     case .active:
                         Task { await PurchaseManager.shared.refreshEntitlements() }
+                        // iCloud サインイン状態を再取得 (設定でサインインして戻った場合に追従)
+                        persistenceController.refreshAccountStatus()
                         let ctx = persistenceController.container.viewContext
                         RecurringExpenseGenerator.generateAll(in: ctx)
                         Task { @MainActor in
