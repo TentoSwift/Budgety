@@ -95,6 +95,8 @@ struct ExpensoApp: App {
                     // (= 起動時の auto upload は Public DB の quota を消費するので削除。
                     //  upload は ProfileEditView での明示保存時のみ実行する)
                     await UserProfileStore.shared.refreshOwnPublicProfile()
+                    // 自分のシート数を Public プロフィールに publish (前回から変化した時のみ)
+                    await UserProfileStore.shared.publishSheetCountIfChanged()
                     await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     // CKShare の participant nameComponents を PP にハイドレートして
                     // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
@@ -137,6 +139,8 @@ struct ExpensoApp: App {
                             }
                             // 同 Apple ID の他デバイスで編集された自分のプロフィールを取り込む
                             await UserProfileStore.shared.refreshOwnPublicProfile()
+                            // 前面化のたびにシート数が変わっていれば publish
+                            await UserProfileStore.shared.publishSheetCountIfChanged()
                             if BuildInfo.profileFeatureEnabled {
                                 UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
                                 UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
