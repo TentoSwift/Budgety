@@ -33,6 +33,10 @@ struct BudgetyMacSheetView: View {
     /// true のときだけツールバーのタイトルにシート名を出す (= iOS の fade 風)。
     @State private var isScrolledPastHero = false
 
+    @StateObject private var lockManager = SheetLockManager.shared
+    @State private var showingSetPassword = false
+    @State private var showingLockPaywall = false
+
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
@@ -145,6 +149,21 @@ struct BudgetyMacSheetView: View {
                     Button { showingEditSheet = true } label: {
                         Label("シートを編集", systemImage: "pencil")
                     }
+                    Divider()
+                    if lockManager.hasPassword(for: sheet) {
+                        Button { lockManager.lock(sheet) } label: {
+                            Label("今すぐロック", systemImage: "lock.fill")
+                        }
+                        if sheet.isOwnedByCurrentUser {
+                            Button { presentLockSetup() } label: {
+                                Label("ロック設定を変更", systemImage: "key.fill")
+                            }
+                        }
+                    } else if sheet.isOwnedByCurrentUser {
+                        Button { presentLockSetup() } label: {
+                            Label("シートをロック", systemImage: "lock")
+                        }
+                    }
                 } label: {
                     Label("その他", systemImage: "ellipsis.circle")
                 }
@@ -180,6 +199,22 @@ struct BudgetyMacSheetView: View {
         }
         .sheet(isPresented: $showingShare) {
             MacShareSheetView(sheet: sheet)
+        }
+        .sheet(isPresented: $showingSetPassword) {
+            MacModalSheet { SetSheetPasswordView(record: sheet) }
+        }
+        .sheet(isPresented: $showingLockPaywall) {
+            PaywallView()
+        }
+    }
+
+    /// Premium ならロック設定画面を、未加入なら Paywall を開く。
+    /// (ロックは Premium 機能。オーナー判定は SetSheetPasswordView 側でも行う)
+    private func presentLockSetup() {
+        if PurchaseManager.shared.isPremium {
+            showingSetPassword = true
+        } else {
+            showingLockPaywall = true
         }
     }
 
