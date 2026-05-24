@@ -1382,9 +1382,10 @@ private struct ExpenseRowContainer: View {
     var body: some View {
         // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
         NavigationLink {
+            // ロックは ExpenseDetailView 側で overlay 方式 (lockOverlay) で重ねる。
+            // ここで fullScreenCover 版 (sheetLockCover) を使うと、詳細から開く
+            // 編集シートと競合して編集画面が閉じてしまうため使わない。
             ExpenseDetailView(expense: expense)
-                // 親シートが再ロックされたら詳細画面にロックを重ねる。
-                .sheetLockCover(expense.sheet)
         } label: {
             ExpenseRowView(expense: expense)
         }

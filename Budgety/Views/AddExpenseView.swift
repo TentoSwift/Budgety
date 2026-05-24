@@ -27,13 +27,6 @@ struct AddExpenseView: View {
         }
     }
 
-    /// 親シートがロック対象 (パスワードあり & 未解錠) か。
-    /// バックグラウンド復帰時にロックを重ねる判定に使う。
-    private var isSheetLocked: Bool {
-        guard let sheet = contextSheet else { return false }
-        return !lockManager.isUnlocked(sheet)
-    }
-
     /// 現在のシートに対する CKShare (= 支払者の canonical ID 解決に使う)。
     /// 非共有シートなら nil。
     @MainActor
@@ -52,8 +45,6 @@ struct AddExpenseView: View {
 
     @StateObject private var profile = UserProfileStore.shared
     @StateObject private var pub = PublicProfileSync.shared
-    /// 親シートのロック状態を監視 (バックグラウンド復帰時にロックを重ねる)。
-    @StateObject private var lockManager = SheetLockManager.shared
 
     @State private var title: String = ""
     @State private var amountText: String = ""
@@ -1007,22 +998,8 @@ struct AddExpenseView: View {
                     .tint(sheetTint)
                 }
             }
-            // ロック中はナビゲーションバー(キャンセル/保存)を隠し、ロック画面を
-            // overlay で重ねる。fullScreenCover と違い再ホストしないので、編集中の
-            // 入力 (@State) が保持されたままロックできる。
-            .toolbar(isSheetLocked ? .hidden : .automatic, for: .navigationBar)
-            .overlay {
-                if isSheetLocked, let sheet = contextSheet {
-                    ZStack {
-                        Color.platformSystemBackground.ignoresSafeArea()
-                        SheetLockView(
-                            record: sheet,
-                            onUnlock: {},
-                            onCancel: { dismiss() }
-                        )
-                    }
-                }
-            }
+            // ロック中はロック画面を overlay で重ねる (再ホストしないので入力を保持)。
+            .lockOverlay(contextSheet)
             .confirmationDialog(
                 "変更の適用範囲",
                 isPresented: $showRecurringSaveChoice,
