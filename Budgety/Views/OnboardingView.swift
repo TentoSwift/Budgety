@@ -21,8 +21,15 @@ struct OnboardingView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var profile = UserProfileStore.shared
 
+    /// 既にシートがあれば「最初のシート作成」ステップを省略する。
+    /// CloudKit 同期で後から入ってくる場合にも追従できるよう @FetchRequest で監視。
+    @FetchRequest(sortDescriptors: []) private var existingSheets: FetchedResults<ExpenseSheet>
+
     @State private var step: Int = 0
-    private let lastStep = 3
+    /// シートが既にある場合は名前ステップ (2) が最後。無ければシート作成ステップ (3) まで。
+    private var hasExistingSheets: Bool { !existingSheets.isEmpty }
+    private var lastStep: Int { hasExistingSheets ? 2 : 3 }
+    private var isLastStep: Bool { step >= lastStep }
 
     // Step 0/1 のエントランス用
     @State private var heroIn = false
@@ -360,7 +367,7 @@ struct OnboardingView: View {
         VStack(spacing: 16) {
             progressDots
             Button { advance() } label: {
-                Text(step == lastStep ? "はじめる" : "次へ")
+                Text(isLastStep ? "はじめる" : "次へ")
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
@@ -372,7 +379,8 @@ struct OnboardingView: View {
             .padding(.horizontal, 28)
             .animation(.smooth, value: primaryEnabled)
 
-            if step == lastStep {
+            // 「あとで作成」はシート作成ステップ (= 既存シートが無い時の最終ステップ) のみ。
+            if isLastStep && !hasExistingSheets {
                 Button("あとで作成") { finish(createSheet: false) }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -404,7 +412,8 @@ struct OnboardingView: View {
     }
 
     private var primaryEnabled: Bool {
-        if step == lastStep {
+        // シート作成ステップのみシート名必須。それ以外 (名前ステップ等) は常に有効。
+        if isLastStep && !hasExistingSheets {
             return !sheetName.trimmingCharacters(in: .whitespaces).isEmpty
         }
         return true
@@ -413,13 +422,14 @@ struct OnboardingView: View {
     // MARK: - Actions
 
     private func advance() {
-        if step < lastStep {
+        if !isLastStep {
             if step == 2 { applyName() }   // 名前ステップを離れる時に保存
             nameFocused = false
             sheetNameFocused = false
             withAnimation(.smooth) { step += 1 }
         } else {
-            finish(createSheet: true)
+            // 既にシートがあれば作成しない (この場合は名前ステップが最後)。
+            finish(createSheet: !hasExistingSheets)
         }
     }
 
@@ -442,6 +452,8 @@ struct OnboardingView: View {
     }
 
     private func createFirstSheet() {
+        // 既にシートがある場合は作らない (二重作成防止)。
+        guard !hasExistingSheets else { return }
         let trimmed = sheetName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         let sheet = ExpenseSheet(context: viewContext)
