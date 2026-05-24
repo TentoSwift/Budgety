@@ -63,3 +63,46 @@ extension View {
         modifier(SheetLockCoverModifier(record: record))
     }
 }
+
+/// `sheetLockCover` の overlay 版。`fullScreenCover` ではなく `overlay` で重ねるので
+/// ビューが再ホストされず、@State (編集中の入力など) を保持したままロックできる。
+/// ナビゲーションバーは隠して全面を覆う。
+/// 注意: ナビバー非表示を効かせるため NavigationStack の「中身」に適用すること
+/// (push 先の View 本体や、自前 NavigationStack 内の List など)。
+/// 自前 NavigationStack をシート表示し DismissAwareHostingController を使う
+/// AddExpenseView は fullScreenCover だと再ホストされるため、こちらを使う。
+private struct SheetLockOverlayModifier: ViewModifier {
+    let record: ExpenseSheet?
+    @StateObject private var lockManager = SheetLockManager.shared
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar(isLocked ? .hidden : .automatic, for: .navigationBar, .bottomBar)
+            .overlay {
+                if isLocked, let record {
+                    ZStack {
+                        Color.platformSystemBackground.ignoresSafeArea()
+                        SheetLockView(
+                            record: record,
+                            onUnlock: { /* isUnlocked の変化で自動的に消える */ },
+                            onCancel: { dismiss() }
+                        )
+                    }
+                }
+            }
+    }
+
+    private var isLocked: Bool {
+        guard let record else { return false }
+        return !lockManager.isUnlocked(record)
+    }
+}
+
+extension View {
+    /// `record` がロック対象の間、ナビバーを隠して SheetLockView を overlay で重ねる。
+    /// `sheetLockCover` (fullScreenCover) と違い再ホストしないので、編集中の入力が消えない。
+    func lockOverlay(_ record: ExpenseSheet?) -> some View {
+        modifier(SheetLockOverlayModifier(record: record))
+    }
+}

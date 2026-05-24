@@ -51,6 +51,9 @@ struct ExpenseDetailView: View {
         .sheet(isPresented: $showingEdit) {
             AddExpenseView(expense: expense)
         }
+        // 親シートが再ロックされたら詳細画面にロックを重ねる。overlay 方式なので
+        // 編集シート表示中でも再ホストせず、編集内容を壊さない。
+        .lockOverlay(expense.sheet)
     }
 
     // MARK: - Header

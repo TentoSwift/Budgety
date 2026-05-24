@@ -998,6 +998,8 @@ struct AddExpenseView: View {
                     .tint(sheetTint)
                 }
             }
+            // ロック中はロック画面を overlay で重ねる (再ホストしないので入力を保持)。
+            .lockOverlay(contextSheet)
             .confirmationDialog(
                 "変更の適用範囲",
                 isPresented: $showRecurringSaveChoice,
