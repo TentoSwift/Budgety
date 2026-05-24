@@ -13,7 +13,6 @@ struct SettingsView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @State private var showPaywall: Bool = false
-    @State private var showEraseConfirm: Bool = false
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
@@ -186,14 +185,18 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button(role: .destructive) {
-                        showEraseConfirm = true
+                    NavigationLink {
+                        EraseAllDataView()
                     } label: {
-                        Label("全データを削除", systemImage: "trash.fill")
-                            .frame(maxWidth: .infinity)
+                        Label {
+                            Text("全データを削除")
+                        } icon: {
+                            Image(systemName: "trash.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                 } footer: {
-                    Text("シート・支出・カテゴリ・メンバー・繰り返し項目・テンプレ・プロフィール (名前/写真/色) を含む全データを削除し、設定 (シートロック等) も初期化します。自分が作成した共有は解除され iCloud からも削除されます。受信した共有シートはオーナー側のデータには影響しません。元に戻せません。")
+                    Text("全データを削除して、アプリを初期状態に戻します。元に戻せません。")
                         .font(.caption)
                 }
             }
@@ -221,21 +224,6 @@ struct SettingsView: View {
                 if ProcessInfo.processInfo.environment["EXPENSO_DEMO"] == "paywall" {
                     showPaywall = true
                 }
-            }
-            .confirmationDialog(
-                "全データを削除しますか?",
-                isPresented: $showEraseConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("削除する", role: .destructive) {
-                    Task { @MainActor in
-                        Haptics.warning()
-                        await PersistenceController.shared.eraseAllData()
-                    }
-                }
-                Button("キャンセル", role: .cancel) {}
-            } message: {
-                Text("すべてのデータ・プロフィール・設定を削除し、アプリを初期状態に戻します。元に戻せません。削除後はアプリを再起動してください。")
             }
         }
     }
