@@ -101,6 +101,15 @@ enum CurrencyCatalog {
         amount.formatted(.currency(code: code).locale(Locale.current))
     }
 
+    /// 通貨の小数桁数 (JPY / KRW = 0、USD / EUR 等 = 2)。
+    /// watchOS の金額入力ステップや表示桁数の判定に使う。
+    static func fractionDigits(for code: String) -> Int {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = code
+        return f.maximumFractionDigits
+    }
+
     static func formatPlain(_ amount: Decimal, code: String) -> String {
         let opt = option(for: code)
         let f = NumberFormatter()
