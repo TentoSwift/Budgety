@@ -54,6 +54,18 @@ enum CurrencyCatalog {
         .init(code: "ZAR", displayName: "南アフリカランド", symbol: "R")
     ]
 
+    /// ピッカー表示用の並び。システムの地域の通貨を先頭に出す。
+    /// (地域の通貨が対応一覧に無ければ既定の並び = JPY 先頭のまま)
+    static var allOrderedByLocale: [CurrencyOption] {
+        guard let code = Locale.current.currency?.identifier,
+              let idx = all.firstIndex(where: { $0.code == code }) else {
+            return all
+        }
+        var list = all
+        list.insert(list.remove(at: idx), at: 0)
+        return list
+    }
+
     /// 設定で明示選択された既定通貨を保存する UserDefaults キー。
     /// 空文字 / 未設定なら "自動 (システムの地域)" を意味する。
     static let preferredCurrencyKey = "preferredDefaultCurrency"
