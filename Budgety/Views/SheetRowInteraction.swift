@@ -82,8 +82,12 @@ struct SheetRowInteraction: UIViewRepresentable {
             // プレビュー（持ち上がった行）をタップした時にここが呼ばれる。
             // .pop はプレビューが広がって詳細へモーフする演出になるため、
             // .dismiss にしてプレビューを閉じてから通常の push 遷移にする。
+            //
+            // 遷移を addCompletion（dismiss アニメ完了後）に行うと数百 ms 遅延し、
+            // その隙に一覧の別シートをタップできてしまう。即座に onOpen を呼べば
+            // すぐ詳細が push され一覧が覆われるので、誤タップを防げる。
             animator.preferredCommitStyle = .dismiss
-            animator.addCompletion { [weak self] in self?.onOpen?() }
+            onOpen?()
         }
 
         private func makePreviewController() -> UIViewController? {
