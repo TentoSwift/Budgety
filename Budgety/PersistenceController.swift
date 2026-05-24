@@ -205,11 +205,12 @@ final class PersistenceController: ObservableObject {
     private func runOneTimeMigrationsIfNeeded() {
         // `seedDefaultMemberIfNeeded` は count(req) == 0 の高速チェックなので毎回呼んでよい
         seedDefaultMemberIfNeeded()
-        // 起動時に毎回掃除: シート紐付けが失われた孤児 Expense を削除
-        // (= CloudKit 部分同期や共有解除で sheet == nil のまま残ったレコード)
-        cleanupOrphanExpenses()
-        // CloudKit 再同期で孤児が降臨することがあるので継続監視
-        attachOrphanCleanupObserver()
+        // 注意: 以前は起動時 + CloudKit remote change ごとに「sheet == nil の Expense」を
+        // 自動削除していたが、これは CloudKit import 中に親シートやリレーションが解決される前の
+        // Expense (一時的に sheet == nil) まで消してしまい、その削除が CloudKit に同期されて
+        // データが恒久的に消える原因になっていた。特にショートカット等でアプリがバックグラウンド
+        // 起動して import が走るタイミングで顕著。孤児 Expense は UI に出ない (常に sheet で
+        // 絞って fetch) ので無害なため、自動削除は廃止し、シート削除時の Cascade ルールに任せる。
         // CKShare の zone 移動で複製されたシートを統合
         mergeDuplicateSheets()
         // 同じ参加者の Member プロフィール (名前/色/写真) を最新 ParticipantProfile に揃える
@@ -359,36 +360,6 @@ final class PersistenceController: ObservableObject {
             if didChange { member.updatedAt = .now }
         }
         if didChange, ctx.hasChanges { try? ctx.save() }
-    }
-
-    /// `expense.sheet == nil` の Expense を削除する。
-    /// Core Data の Cascade rule が CloudKit 同期の race で効かないことがあり、
-    /// シート削除後も孤児 Expense が残るケースに対応。
-    /// シート無しの支出は UI 上どこにも表示できないため安全に削除可能。
-    /// CloudKit 再同期で孤児が再降臨することがあるため、CloudKit remote change 通知でも再実行。
-    private func cleanupOrphanExpenses() {
-        let ctx = container.viewContext
-        let req = NSFetchRequest<Expense>(entityName: "Expense")
-        req.predicate = NSPredicate(format: "sheet == nil")
-        guard let orphans = try? ctx.fetch(req), !orphans.isEmpty else { return }
-        for orphan in orphans {
-            ctx.delete(orphan)
-        }
-        try? ctx.save()
-    }
-
-    /// CloudKit remote change 通知 → 200ms 待って再 fetch + cleanup。
-    /// 同期で降ってきた孤児を継続的に掃除する。
-    private func attachOrphanCleanupObserver() {
-        NotificationCenter.default.addObserver(
-            forName: .NSPersistentStoreRemoteChange,
-            object: container.persistentStoreCoordinator,
-            queue: nil
-        ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.cleanupOrphanExpenses()
-            }
-        }
     }
 
     /// アプリ初回起動時にメンバーが 1 人もいなければ「自分」を作る。
