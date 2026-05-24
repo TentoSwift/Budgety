@@ -60,11 +60,10 @@ struct AddExpenseIntent: AppIntent {
     )
     var sheetName: String?
 
-    // Summary のメイン行には日時を出さない (= Shortcuts.app で日時を聞かない)。
-    // 日時は「詳細を表示」配下に隠し、必要な時 (自動化など) だけ任意指定。
+    // シートとカテゴリはメイン行に出して、その場で選べるようにする。
+    // 日時/メモ/MCP 用の文字列指定は「詳細を表示」配下に隠す。
     static var parameterSummary: some ParameterSummary {
-        Summary("\(\.$sheet) に \(\.$title) (\(\.$amount)) を追加") {
-            \.$category
+        Summary("\(\.$sheet) の \(\.$category) に \(\.$title) (\(\.$amount)) を追加") {
             \.$note
             \.$date
             \.$dateText

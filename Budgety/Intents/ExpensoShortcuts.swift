@@ -22,34 +22,6 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             systemImageName: "plus.circle.fill"
         )
         AppShortcut(
-            intent: GetExpensesIntent(),
-            phrases: [
-                "\(.applicationName) で支出を取得",
-                "\(.applicationName) の支出を JSON で",
-                "Get expenses from \(.applicationName)"
-            ],
-            shortTitle: "支出を取得",
-            systemImageName: "square.and.arrow.up"
-        )
-        AppShortcut(
-            intent: QuickAddExpenseIntent(),
-            phrases: [
-                "\(.applicationName) でクイック追加",
-                "Quick add to \(.applicationName)"
-            ],
-            shortTitle: "クイック支出追加",
-            systemImageName: "plus.bubble.fill"
-        )
-        AppShortcut(
-            intent: QuickGetExpensesIntent(),
-            phrases: [
-                "\(.applicationName) でクイック取得",
-                "Quick get from \(.applicationName)"
-            ],
-            shortTitle: "クイック支出取得",
-            systemImageName: "tray.and.arrow.up.fill"
-        )
-        AppShortcut(
             intent: QuickBudgetIntent(),
             phrases: [
                 "\(.applicationName) で家計簿操作",

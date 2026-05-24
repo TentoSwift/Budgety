@@ -342,3 +342,62 @@ enum QuickIntentLogic {
         return f.date(from: s)
     }
 }
+
+/// 期間指定。JSON の `period` 文字列 (rawValue) から日付範囲を解決する。
+/// (旧 GetExpensesIntent の AppEnum を、内部ロジック専用の素の enum に整理したもの)
+enum PeriodOption: String {
+    case today
+    case yesterday
+    case thisWeek
+    case thisMonth
+    case lastMonth
+    case thisYear
+    case last30Days
+    case allTime
+
+    var label: String {
+        switch self {
+        case .today:      "今日"
+        case .yesterday:  "昨日"
+        case .thisWeek:   "今週"
+        case .thisMonth:  "今月"
+        case .lastMonth:  "先月"
+        case .thisYear:   "今年"
+        case .last30Days: "直近 30 日"
+        case .allTime:    "全期間"
+        }
+    }
+
+    func dateRange() -> (start: Date, end: Date) {
+        let cal = Calendar.current
+        let now = Date()
+        switch self {
+        case .today:
+            let s = cal.startOfDay(for: now)
+            let e = cal.date(byAdding: .day, value: 1, to: s)!
+            return (s, e)
+        case .yesterday:
+            let today = cal.startOfDay(for: now)
+            let s = cal.date(byAdding: .day, value: -1, to: today)!
+            return (s, today)
+        case .thisWeek:
+            let s = cal.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+            return (s, now)
+        case .thisMonth:
+            let s = cal.dateInterval(of: .month, for: now)?.start ?? now
+            return (s, now)
+        case .lastMonth:
+            let thisMonthStart = cal.dateInterval(of: .month, for: now)?.start ?? now
+            let s = cal.date(byAdding: .month, value: -1, to: thisMonthStart)!
+            return (s, thisMonthStart)
+        case .thisYear:
+            let s = cal.dateInterval(of: .year, for: now)?.start ?? now
+            return (s, now)
+        case .last30Days:
+            let s = cal.date(byAdding: .day, value: -30, to: now)!
+            return (s, now)
+        case .allTime:
+            return (Date.distantPast, Date.distantFuture)
+        }
+    }
+}
