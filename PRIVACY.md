@@ -118,4 +118,4 @@ TentoSwift（以下「当方」）は、家計簿アプリ「Budgety」（以下
 本ポリシーに関するお問い合わせは、以下までご連絡ください。
 
 - 開発者: TentoSwift
-- メール: tento1209@icloud.com
+- メール: swiftappdeve@gmail.com
