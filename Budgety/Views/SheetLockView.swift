@@ -3,6 +3,8 @@
 //  Budgety
 //
 //  ロック済みシートを開く時に表示するパスワード入力モーダル。
+//  パスワードは数字のみなので、タップ式の数字キーパッドで入力する
+//  (watchOS の WatchSheetLockView と同じ方式)。
 //  Face ID / Touch ID が有効な場合は生体認証も提案する。
 //
 
@@ -17,9 +19,15 @@ struct SheetLockView: View {
     @State private var shake: Bool = false
     @State private var errorMessage: String?
     @State private var displayUnlocked: Bool = false
-    @FocusState private var focused: Bool
 
     @StateObject private var lockManager = SheetLockManager.shared
+
+    private let rows: [[String]] = [
+        ["1", "2", "3"],
+        ["4", "5", "6"],
+        ["7", "8", "9"],
+        ["⌫", "0", "→"],
+    ]
 
     var body: some View {
         VStack(spacing: 20) {
@@ -42,20 +50,9 @@ struct SheetLockView: View {
             }
             .padding(.top, 24)
 
-            // Password field
-            SecureField("パスワード", text: $password)
-                .textContentType(.password)
-                .submitLabel(.go)
-                .focused($focused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.platformSecondarySystemBackground)
-                )
-                .padding(.horizontal, 16)
+            // 入力済みの桁数を伏せ字 (●) で表示。未入力時は案内。
+            passwordDots
                 .offset(x: shake ? -6 : 0)
-                .onSubmit { tryUnlock() }
 
             if let errorMessage {
                 Text(errorMessage)
@@ -63,19 +60,17 @@ struct SheetLockView: View {
                     .foregroundStyle(.red)
             }
 
-            // Unlock button
-            Button {
-                tryUnlock()
-            } label: {
-                Text("ロックを解除")
-                    .font(.callout.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+            // 数字キーパッド
+            VStack(spacing: 16) {
+                ForEach(rows, id: \.self) { row in
+                    HStack(spacing: 28) {
+                        ForEach(row, id: \.self) { key in
+                            keyButton(key)
+                        }
+                    }
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(tint)
-            .padding(.horizontal, 16)
-            .disabled(password.isEmpty)
+            .padding(.top, 4)
 
             // Biometric option
             if lockManager.isBiometricEnabled(for: record) {
@@ -86,6 +81,7 @@ struct SheetLockView: View {
                         .font(.callout.weight(.medium))
                 }
                 .buttonStyle(.bordered)
+                .padding(.top, 4)
             }
 
             Spacer()
@@ -95,11 +91,76 @@ struct SheetLockView: View {
         }
         .background(Color.platformSystemBackground)
         .onAppear {
-            focused = true
             // 起動時に自動で生体認証を試す
             if lockManager.isBiometricEnabled(for: record) {
                 Task { await tryBiometric() }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var passwordDots: some View {
+        if password.isEmpty {
+            Text("パスワードを入力")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(height: 28)
+        } else {
+            Text(String(repeating: "●", count: password.count))
+                .font(.title2)
+                .kerning(6)
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .frame(height: 28)
+        }
+    }
+
+    @ViewBuilder
+    private func keyButton(_ key: String) -> some View {
+        Button {
+            handle(key)
+        } label: {
+            ZStack {
+                Circle().fill(keyBackground(key))
+                keyLabel(key)
+                    .foregroundStyle(keyForeground(key))
+            }
+            .frame(width: 76, height: 76)
+        }
+        .buttonStyle(.plain)
+        .disabled(key == "→" && password.isEmpty)
+    }
+
+    @ViewBuilder
+    private func keyLabel(_ key: String) -> some View {
+        switch key {
+        case "⌫": Image(systemName: "delete.left").font(.title2)
+        case "→": Image(systemName: "lock.open.fill").font(.title2.weight(.semibold))
+        default:  Text(key).font(.title.weight(.regular))
+        }
+    }
+
+    private func keyBackground(_ key: String) -> Color {
+        switch key {
+        case "⌫": return .clear
+        case "→": return password.isEmpty ? Color.platformSecondarySystemBackground : tint
+        default:  return Color.platformSecondarySystemBackground
+        }
+    }
+
+    private func keyForeground(_ key: String) -> Color {
+        switch key {
+        case "→": return password.isEmpty ? .secondary : .white
+        default:  return .primary
+        }
+    }
+
+    private func handle(_ key: String) {
+        errorMessage = nil
+        switch key {
+        case "⌫": if !password.isEmpty { password.removeLast() }
+        case "→": tryUnlock()
+        default:  password.append(key)
         }
     }
 

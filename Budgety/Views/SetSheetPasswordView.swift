@@ -99,8 +99,7 @@ struct SetSheetPasswordView: View {
 
             if hasExistingPassword {
                 Section {
-                    SecureField("現在のパスワード", text: $currentPassword)
-                        .textContentType(.password)
+                    numericSecureField("現在のパスワード", text: $currentPassword)
                 } header: {
                     Text("本人確認")
                 } footer: {
@@ -109,14 +108,12 @@ struct SetSheetPasswordView: View {
             }
 
             Section {
-                SecureField("新しいパスワード", text: $newPassword)
-                    .textContentType(.newPassword)
-                SecureField("確認用パスワード (もう一度)", text: $confirmPassword)
-                    .textContentType(.newPassword)
+                numericSecureField("新しいパスワード", text: $newPassword)
+                numericSecureField("確認用パスワード (もう一度)", text: $confirmPassword)
             } header: {
                 Text(hasExistingPassword ? "パスワードを変更" : "パスワードを設定")
             } footer: {
-                Text("4 文字以上の任意の文字列。忘れるとシートを再ロックできなくなる以外の影響はありませんが、念のため安全な場所に控えておくことを推奨します。")
+                Text("4 桁以上の数字。忘れるとシートを再ロックできなくなる以外の影響はありませんが、念のため安全な場所に控えておくことを推奨します。")
             }
 
             // 新規ロック設定時: パスワード設定と同時に生体認証を有効化するかの選択
@@ -205,6 +202,18 @@ struct SetSheetPasswordView: View {
 
     private var tint: Color {
         Color(hex: record.colorHex ?? "#5B8DEF") ?? .blue
+    }
+
+    /// 数字のみ入力できる SecureField。パスワードは数字のみ保存するため、数字
+    /// キーパッドを表示し、貼り付け等で混入した数字以外の文字は取り除く。
+    @ViewBuilder
+    private func numericSecureField(_ titleKey: String, text: Binding<String>) -> some View {
+        SecureField(titleKey, text: text)
+            .keyboardType(.numberPad)
+            .onChange(of: text.wrappedValue) { _, newValue in
+                let filtered = String(newValue.filter(\.isNumber))
+                if filtered != newValue { text.wrappedValue = filtered }
+            }
     }
 
     private var canSave: Bool {
