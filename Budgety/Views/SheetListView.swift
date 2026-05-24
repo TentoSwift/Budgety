@@ -231,8 +231,15 @@ struct SheetListView: View {
                 // ここは「シートそのものを離脱した時」だけ発火する。
                 let removed = Set(oldPath).subtracting(newPath)
                 for id in removed {
-                    if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
-                       lockManager.hasPassword(for: sheet) {
+                    guard let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
+                          lockManager.hasPassword(for: sheet) else { continue }
+                    // pop アニメーション完了後に再ロックする。pop の最中に再ロックすると、
+                    // まだ階層に残っている LockedSheetGate の fullScreenCover (パスワード画面)
+                    // が一覧の上に出てしまう (= 「一覧に戻るとパスワード画面が表示される」)。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        // 0.5s 以内に同じシートを開き直していた (= path に戻っている) 場合は、
+                        // 表示中のシートを誤ってロックしないようにスキップする。
+                        guard !path.contains(id) else { return }
                         lockManager.lock(sheet)
                     }
                 }
@@ -727,6 +734,11 @@ private struct SearchTotalCard: View {
     let count: Int
     let query: String
     let mixed: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private func doubleValue(_ d: Decimal) -> Double {
+        NSDecimalNumber(decimal: d).doubleValue
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -759,22 +771,33 @@ private struct SearchTotalCard: View {
                 Spacer()
             }
 
-            // 大型の支出合計 (SummaryCard と同じ rounded font)
+            // 大型の支出合計 (SummaryCard と同じ rounded font + 数値トランジション)
             Text(CurrencyCatalog.format(expense, code: currency))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                .contentTransition(.numericText(value: doubleValue(expense)))
+                .animation(.snappy, value: expense)
 
-            // 「+収入 | -支出」行 (左寄せ)
-            HStack(spacing: 12) {
+            // 「+収入 | -支出」行 (SummaryCard と同じく AX サイズでは縦積み)
+            let ieLayout: AnyLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 12))
+            ieLayout {
                 Text("+ \(CurrencyCatalog.format(income, code: currency))")
-                Text("|").foregroundStyle(.tertiary)
+                    .contentTransition(.numericText(value: doubleValue(income)))
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text("|").foregroundStyle(.tertiary)
+                }
                 Text("- \(CurrencyCatalog.format(expense, code: currency))")
+                    .contentTransition(.numericText(value: doubleValue(expense)))
             }
             .font(.subheadline.monospacedDigit().weight(.medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .animation(.snappy, value: income)
+            .animation(.snappy, value: expense)
 
             if mixed {
                 Label("通貨が混在するため \(currency) に換算した概算です。", systemImage: "arrow.left.arrow.right")
