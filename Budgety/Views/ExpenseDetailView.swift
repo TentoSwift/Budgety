@@ -7,6 +7,9 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ExpenseDetailView: View {
     @ObservedObject var expense: Expense
@@ -22,6 +25,7 @@ struct ExpenseDetailView: View {
             if showsParticipants {
                 participantsSection
             }
+            photoSection
             if let note = expense.note,
                !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("メモ") {
@@ -85,6 +89,9 @@ struct ExpenseDetailView: View {
             if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {
                 detailRow("通貨", expense.resolvedCurrencyCode)
             }
+            if let created = expense.createdAt {
+                detailRow("追加日", created.formatted(date: .long, time: .shortened))
+            }
         }
     }
 
@@ -137,5 +144,22 @@ struct ExpenseDetailView: View {
         }
         let names = ids.map { sheet.memberDisplayInfo(for: $0).name }
         return names.joined(separator: ", ")
+    }
+
+    // MARK: - Photo
+
+    @ViewBuilder
+    private var photoSection: some View {
+        #if canImport(UIKit)
+        if let data = expense.photoData, let ui = UIImage(data: data) {
+            Section("写真") {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        #endif
     }
 }
