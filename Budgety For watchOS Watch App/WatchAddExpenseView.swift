@@ -48,6 +48,19 @@ struct WatchAddExpenseView: View {
         CurrencyCatalog.option(for: sheet.resolvedDefaultCurrencyCode).symbol
     }
 
+    /// シート既定通貨の小数桁数 (0 = JPY/KRW 等 / 2 = USD/EUR 等)。
+    private var currencyDecimals: Int {
+        CurrencyCatalog.fractionDigits(for: sheet.resolvedDefaultCurrencyCode)
+    }
+    /// Digital Crown の刻み。小数なし通貨は 100、小数あり通貨は 1。
+    private var amountStep: Double { currencyDecimals == 0 ? 100 : 1 }
+    /// クイック加算ボタンの刻み (通貨の桁数に合わせる)。
+    private var quickSteps: [Int] { currencyDecimals == 0 ? [100, 500, 1000] : [1, 10, 100] }
+    /// 金額を通貨フォーマットしたテキスト (¥5,000 / $5.00 など)。
+    private var amountText: String {
+        CurrencyCatalog.format(Decimal(amount), code: sheet.resolvedDefaultCurrencyCode)
+    }
+
     var body: some View {
         ZStack {
             content
@@ -96,7 +109,7 @@ struct WatchAddExpenseView: View {
         VStack(spacing: 6) {
             categoryPreview
             Spacer(minLength: 0)
-            Text("\(currencySymbol)\(Int(amount))")
+            Text(amountText)
                 .font(.system(size: 48, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
@@ -108,9 +121,9 @@ struct WatchAddExpenseView: View {
                 .foregroundStyle(.white.opacity(0.8))
             Spacer(minLength: 0)
             HStack(spacing: 6) {
-                quickButton(100)
-                quickButton(500)
-                quickButton(1000)
+                ForEach(quickSteps, id: \.self) { step in
+                    quickButton(step)
+                }
             }
         }
         .padding(.horizontal, 4)
@@ -118,7 +131,7 @@ struct WatchAddExpenseView: View {
         .focused($crownFocused)
         .digitalCrownRotation(
             $amount,
-            from: 0, through: 100_000, by: 100,
+            from: 0, through: 100_000, by: amountStep,
             sensitivity: .high,
             isContinuous: true,
             isHapticFeedbackEnabled: true

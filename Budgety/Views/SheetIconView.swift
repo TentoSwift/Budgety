@@ -51,9 +51,11 @@ struct SheetIconView: View {
         let badgeSize = size * 0.5
         ZStack {
             Circle()
-                .fill(Color.green.gradient)
+                .fill(Color.primary)
+            // primary 背景は light=黒 / dark=白 と反転するので、アイコンは背景色
+            // (反転色) の抜き文字にして両モードで視認できるようにする。
             Image(systemName: "person.2.fill")
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.platformSystemBackground)
                 .font(.system(size: badgeSize * 0.55, weight: .bold))
         }
         .frame(width: badgeSize, height: badgeSize)

@@ -44,6 +44,16 @@ struct SetSheetPasswordView: View {
         }
     }
 
+    /// 生体認証トグルの説明文。設定はデバイス間で同期されるため、生体認証 非対応の
+    /// 端末では「対応端末で有効になる」旨を案内する。
+    private var biometricFooterText: String {
+        if biometricSupported {
+            return "オンにすると、対応端末では Face ID / Touch ID で素早く開けます。失敗した場合はパスワードで開けます。設定は同じ iCloud のすべての端末に同期されます。"
+        } else {
+            return "この端末は生体認証に対応していませんが、設定は同期され、Face ID / Touch ID 対応の端末で有効になります。"
+        }
+    }
+
     var body: some View {
         if !record.isOwnedByCurrentUser {
             notOwnerView
@@ -84,7 +94,8 @@ struct SetSheetPasswordView: View {
 
             // 既存ロック済シートの場合: 生体認証 ON/OFF を独立トグルで即時切替できるようにする。
             // (パスワード再入力なしで Face ID だけ ON にしたいケースに対応)
-            if hasExistingPassword, biometricSupported {
+            // 設定はシート属性として同期されるので、生体認証 非対応の端末でも選べる。
+            if hasExistingPassword {
                 Section {
                     Toggle(biometricLabel, isOn: Binding(
                         get: { lockManager.isBiometricEnabled(for: record) },
@@ -93,14 +104,13 @@ struct SetSheetPasswordView: View {
                 } header: {
                     Text("生体認証")
                 } footer: {
-                    Text("オンにするとパスワードを入力しなくてもこの端末で素早く開けます。生体認証が失敗した場合はパスワードで開けます。")
+                    Text(biometricFooterText)
                 }
             }
 
             if hasExistingPassword {
                 Section {
-                    SecureField("現在のパスワード", text: $currentPassword)
-                        .textContentType(.password)
+                    numericSecureField("現在のパスワード", text: $currentPassword)
                 } header: {
                     Text("本人確認")
                 } footer: {
@@ -109,22 +119,21 @@ struct SetSheetPasswordView: View {
             }
 
             Section {
-                SecureField("新しいパスワード", text: $newPassword)
-                    .textContentType(.newPassword)
-                SecureField("確認用パスワード (もう一度)", text: $confirmPassword)
-                    .textContentType(.newPassword)
+                numericSecureField("新しいパスワード", text: $newPassword)
+                numericSecureField("確認用パスワード (もう一度)", text: $confirmPassword)
             } header: {
                 Text(hasExistingPassword ? "パスワードを変更" : "パスワードを設定")
             } footer: {
-                Text("4 文字以上の任意の文字列。忘れるとシートを再ロックできなくなる以外の影響はありませんが、念のため安全な場所に控えておくことを推奨します。")
+                Text("4 桁以上の数字。忘れるとシートを再ロックできなくなる以外の影響はありませんが、念のため安全な場所に控えておくことを推奨します。")
             }
 
-            // 新規ロック設定時: パスワード設定と同時に生体認証を有効化するかの選択
-            if !hasExistingPassword, biometricSupported {
+            // 新規ロック設定時: パスワード設定と同時に生体認証を有効化するかの選択。
+            // 設定はシート属性として同期されるので、生体認証 非対応の端末でも選べる。
+            if !hasExistingPassword {
                 Section {
                     Toggle(biometricLabel, isOn: $enableBiometric)
                 } footer: {
-                    Text("生体認証が失敗した場合はパスワードで開けます。")
+                    Text(biometricFooterText)
                 }
             }
 
@@ -205,6 +214,18 @@ struct SetSheetPasswordView: View {
 
     private var tint: Color {
         Color(hex: record.colorHex ?? "#5B8DEF") ?? .blue
+    }
+
+    /// 数字のみ入力できる SecureField。パスワードは数字のみ保存するため、数字
+    /// キーパッドを表示し、貼り付け等で混入した数字以外の文字は取り除く。
+    @ViewBuilder
+    private func numericSecureField(_ titleKey: String, text: Binding<String>) -> some View {
+        SecureField(titleKey, text: text)
+            .keyboardType(.numberPad)
+            .onChange(of: text.wrappedValue) { _, newValue in
+                let filtered = String(newValue.filter(\.isNumber))
+                if filtered != newValue { text.wrappedValue = filtered }
+            }
     }
 
     private var canSave: Bool {

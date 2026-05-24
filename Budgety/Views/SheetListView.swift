@@ -5,12 +5,38 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// 検索のスコープ。検索バー下の Picker で切り替える。
 private enum SearchScope: String, CaseIterable, Identifiable {
     case sheets = "シート"
     case expenses = "支出・収入"
     var id: String { rawValue }
+}
+
+/// シート行のコンテキストメニューから開くサブ画面（モーダル提示）。
+/// `path` (= シート詳細への push) を壊さないよう、これらは sheet で出す。
+private enum SheetSubScreen: Identifiable {
+    case settlement(ExpenseSheet)
+    case stats(ExpenseSheet)
+    case categories(ExpenseSheet)
+
+    var id: String {
+        let uri = sheet.objectID.uriRepresentation().absoluteString
+        switch self {
+        case .settlement: return "settle-\(uri)"
+        case .stats: return "stats-\(uri)"
+        case .categories: return "cat-\(uri)"
+        }
+    }
+
+    private var sheet: ExpenseSheet {
+        switch self {
+        case .settlement(let s), .stats(let s), .categories(let s): return s
+        }
+    }
 }
 
 struct SheetListView: View {
@@ -29,26 +55,44 @@ struct SheetListView: View {
     @State private var path: [NSManagedObjectID] = []
     @State private var didRestorePath = false
     @State private var searchText: String = ""
-    /// 検索バーがアクティブ (フォーカス) かどうか。未入力でもフォーカスで結果を出す。
-    @State private var searchPresented: Bool = false
+    /// 検索バーがフォーカスされているか。未入力でもフォーカスで結果を出す。
+    @FocusState private var searchFocused: Bool
     /// 検索スコープ (シート名 / 支出・収入)。
     @State private var searchScope: SearchScope = .expenses
     /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
     @State private var searchTotalCurrency: String = CurrencyCatalog.defaultCode
+    /// 検索の期間フィルタ。既定は全期間 (= 絞り込みなし)。
+    @State private var searchPeriod: SheetDetailView.Period = .all
     /// 検索結果からタップした支出 (= 全シート横断検索のヒット) を編集する。
     @State private var editingSearchExpense: Expense?
+    /// 検索結果から解錠しようとしているロック中シート。
+    @State private var unlockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くロック設定シート。
+    @State private var lockingSheet: ExpenseSheet?
+    /// 行の長押しメニューから開くサブ画面（精算/統計/カテゴリ）。
+    @State private var subScreen: SheetSubScreen?
+    /// コンテキストメニュー表示中のシート。その行を一時的に隠す（プレビューと二重に見せない）。
+    @State private var menuActiveSheetID: NSManagedObjectID?
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
+    /// シートの解錠状態に追従して検索結果を再計算するため observe する。
+    @ObservedObject private var lockManager = SheetLockManager.shared
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
 
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespaces)
     }
 
+    /// 検索バーがアクティブか (フォーカス中 or クエリ入力済み)。
+    /// 入力後にキーボードを閉じても検索結果は維持する。
+    private var isSearchActive: Bool {
+        searchFocused || !trimmedQuery.isEmpty
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                if searchPresented {
+                if isSearchActive {
                     // フォーカス中は (未入力でも) 全シート横断の検索結果を表示する。
                     searchResultsList
                 } else if sheets.isEmpty {
@@ -70,16 +114,14 @@ struct SheetListView: View {
                 } else {
                     List {
                         ForEach(sheets) { sheet in
-                            NavigationLink(value: sheet.objectID) {
-                                SheetRowView(record: sheet)
-                            }
+                            sheetListRow(sheet)
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Budgety")
+            .navigationTitle("シート")
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet {
                     LockedSheetGate(record: sheet) {
@@ -89,11 +131,16 @@ struct SheetListView: View {
             }
             // SheetDetailView と同じく、検索バーは bottomBar の DefaultToolbarItem に置き、
             // `+` を ToolbarItem で並列に並べる。検索すると全シートから支出を横断検索。
-            .searchable(text: $searchText, isPresented: $searchPresented, placement: .toolbar, prompt: Text("シート・支出を検索"))
+            .searchable(text: $searchText, placement: .toolbar, prompt: Text("シート・支出を検索"))
+            .searchFocused($searchFocused)
             .searchScopes($searchScope) {
                 ForEach(SearchScope.allCases) { scope in
                     Text(scope.rawValue).tag(scope)
                 }
+            }
+            .onChange(of: searchFocused) { _, focused in
+                // 新規検索 (フォーカス取得かつ未入力) のたびに期間を全期間から始める。
+                if focused && trimmedQuery.isEmpty { searchPeriod = .all }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -124,6 +171,31 @@ struct SheetListView: View {
             .sheet(item: $editingSearchExpense) { expense in
                 AddExpenseView(expense: expense)
             }
+            .sheet(item: $unlockingSheet) { sheet in
+                NavigationStack {
+                    SheetLockView(
+                        record: sheet,
+                        // 解錠すると lockManager の更新で検索結果に含まれる。
+                        onUnlock: { unlockingSheet = nil },
+                        onCancel: { unlockingSheet = nil }
+                    )
+                }
+            }
+            .sheet(item: $lockingSheet) { sheet in
+                NavigationStack {
+                    SetSheetPasswordView(record: sheet)
+                }
+            }
+            .sheet(item: $subScreen) { screen in
+                NavigationStack {
+                    subScreenContent(screen)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("閉じる") { subScreen = nil }
+                            }
+                        }
+                }
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
@@ -147,12 +219,29 @@ struct SheetListView: View {
             .onChange(of: sheets.count) { _, _ in
                 restoreLastOpenedSheetIfNeeded()
             }
-            .onChange(of: path) { _, newPath in
+            .onChange(of: path) { oldPath, newPath in
                 // 末尾のシート URI を覚えておき、次回起動時に復元する
                 if let last = newPath.last {
                     lastOpenedSheetURI = last.uriRepresentation().absoluteString
                 } else {
                     lastOpenedSheetURI = ""
+                }
+                // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
+                // 精算/詳細などの子画面 push は label ベースで path を変えないため、
+                // ここは「シートそのものを離脱した時」だけ発火する。
+                let removed = Set(oldPath).subtracting(newPath)
+                for id in removed {
+                    guard let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
+                          lockManager.hasPassword(for: sheet) else { continue }
+                    // pop アニメーション完了後に再ロックする。pop の最中に再ロックすると、
+                    // まだ階層に残っている LockedSheetGate の fullScreenCover (パスワード画面)
+                    // が一覧の上に出てしまう (= 「一覧に戻るとパスワード画面が表示される」)。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        // 0.5s 以内に同じシートを開き直していた (= path に戻っている) 場合は、
+                        // 表示中のシートを誤ってロックしないようにスキップする。
+                        guard !path.contains(id) else { return }
+                        lockManager.lock(sheet)
+                    }
                 }
             }
         }
@@ -166,6 +255,12 @@ struct SheetListView: View {
         let q = trimmedQuery.lowercased()
         guard !q.isEmpty else { return [] }
         return sheets.filter { $0.displayName.lowercased().contains(q) }
+    }
+
+    /// ロック中 (パスワードあり & 未解錠) のシート。
+    /// 中身は検索対象外なので、解除導線を出すために列挙する。
+    private var lockedSheets: [ExpenseSheet] {
+        sheets.filter { lockManager.hasPassword(for: $0) && !lockManager.isUnlocked($0) }
     }
 
     /// 検索ヒットをシートごとにまとめた1グループ。
@@ -192,7 +287,7 @@ struct SheetListView: View {
             if lock.hasPassword(for: sheet) && !lock.isUnlocked(sheet) { continue }
             guard let exps = sheet.expenses as? Set<Expense> else { continue }
             let matched = exps
-                .filter { matchesExpense($0, query: q) }
+                .filter { searchPeriod.contains($0.date) && matchesExpense($0, query: q) }
                 .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             guard !matched.isEmpty else { continue }
             let target = sheet.resolvedDefaultCurrencyCode
@@ -217,6 +312,197 @@ struct SheetListView: View {
         ]
         return fields.contains { $0.contains(q) }
     }
+
+    // MARK: - Context Menu (シート行の長押し)
+
+    /// シート一覧の行を長押しした時のコンテキストメニュー。
+    /// ロック中（未解錠）のシートは中身を保護するため、精算/統計/カテゴリは出さない。
+    @ViewBuilder
+    private func sheetContextMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.isUnlocked(sheet) {
+            Button { subScreen = .settlement(sheet) } label: {
+                Label("精算", systemImage: "arrow.left.arrow.right.circle")
+            }
+            Button { subScreen = .stats(sheet) } label: {
+                Label("統計", systemImage: "chart.pie.fill")
+            }
+            Button { subScreen = .categories(sheet) } label: {
+                Label("カテゴリを管理", systemImage: "tag.fill")
+            }
+        }
+        if lockMenuApplicable(for: sheet) {
+            Divider()
+            sheetLockMenu(for: sheet)
+        }
+    }
+
+    @ViewBuilder
+    private func sheetLockMenu(for sheet: ExpenseSheet) -> some View {
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                Button {
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                } label: {
+                    Label("今すぐロック", systemImage: "lock.fill")
+                }
+            }
+            if sheet.isOwnedByCurrentUser {
+                Button { presentLockSetup(sheet) } label: {
+                    Label("ロック設定", systemImage: "lock.fill")
+                }
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            Button { presentLockSetup(sheet) } label: {
+                Label("シートをロック", systemImage: "lock")
+            }
+        }
+    }
+
+    /// ロック関連項目を出す価値があるか（空セクション＋Divider を避ける）。
+    private func lockMenuApplicable(for sheet: ExpenseSheet) -> Bool {
+        if sheet.isOwnedByCurrentUser { return true }
+        // 非オーナーは「今すぐロック」(= パスワード有 & 解錠済み) の時だけ。
+        return lockManager.hasPassword(for: sheet) && lockManager.isUnlocked(sheet)
+    }
+
+    /// プレミアム加入者ならロック設定を開く。未加入なら Paywall。
+    private func presentLockSetup(_ sheet: ExpenseSheet) {
+        if PurchaseManager.shared.isPremium {
+            lockingSheet = sheet
+        } else {
+            showingPaywall = true
+            Haptics.warning()
+        }
+    }
+
+    /// 長押しメニューから開くサブ画面の中身。
+    @ViewBuilder
+    private func subScreenContent(_ screen: SheetSubScreen) -> some View {
+        switch screen {
+        case .settlement(let s): SettlementView(record: s)
+        case .stats(let s): StatsView(record: s)
+        case .categories(let s): CategoryListView(record: s)
+        }
+    }
+
+    /// シート一覧の 1 行。
+    /// iOS/visionOS では UIContextMenuInteraction ブリッジを使い、プレビューの
+    /// タップでも詳細へ遷移できるようにする（NavigationLink は使わず path に積む）。
+    /// それ以外のプラットフォームは従来どおり NavigationLink + .contextMenu。
+    @ViewBuilder
+    private func sheetListRow(_ sheet: ExpenseSheet) -> some View {
+        #if canImport(UIKit) && !os(watchOS)
+        SheetRowView(record: sheet, showsDisclosure: true)
+            // コンテキストメニュー表示中はこの行を隠し、閉じたら戻す。
+            .opacity(menuActiveSheetID == sheet.objectID ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: menuActiveSheetID)
+            .contentShape(Rectangle())
+            .overlay {
+                SheetRowInteraction(
+                    onOpen: { openSheet(sheet) },
+                    makeMenu: { makeRowMenu(for: sheet) },
+                    preview: rowPreview(for: sheet),
+                    onMenuActiveChange: { active in
+                        menuActiveSheetID = active ? sheet.objectID : nil
+                    }
+                )
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { openSheet(sheet) }
+        #else
+        NavigationLink(value: sheet.objectID) {
+            SheetRowView(record: sheet)
+        }
+        .contextMenu {
+            sheetContextMenu(for: sheet)
+        }
+        #endif
+    }
+
+    /// 行のタップ／プレビュータップで詳細へ遷移（path に積む = 復元ロジックと整合）。
+    /// 既に遷移済み（path が非空）なら二重 push しない（遷移直前の誤タップ対策）。
+    private func openSheet(_ sheet: ExpenseSheet) {
+        guard path.isEmpty else { return }
+        path.append(sheet.objectID)
+    }
+
+    #if canImport(UIKit) && !os(watchOS)
+    /// UIKit の長押しメニュー。SwiftUI 版 sheetContextMenu と同じ構成。
+    private func makeRowMenu(for sheet: ExpenseSheet) -> UIMenu {
+        var top: [UIMenuElement] = []
+        if lockManager.isUnlocked(sheet) {
+            top.append(UIAction(title: "精算",
+                                image: UIImage(systemName: "arrow.left.arrow.right.circle")) { _ in
+                subScreen = .settlement(sheet)
+            })
+            top.append(UIAction(title: "統計",
+                                image: UIImage(systemName: "chart.pie.fill")) { _ in
+                subScreen = .stats(sheet)
+            })
+            top.append(UIAction(title: "カテゴリを管理",
+                                image: UIImage(systemName: "tag.fill")) { _ in
+                subScreen = .categories(sheet)
+            })
+        }
+
+        var lock: [UIMenuElement] = []
+        if lockManager.hasPassword(for: sheet) {
+            if lockManager.isUnlocked(sheet) {
+                lock.append(UIAction(title: "今すぐロック",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    lockManager.lock(sheet)
+                    Haptics.warning()
+                })
+            }
+            if sheet.isOwnedByCurrentUser {
+                lock.append(UIAction(title: "ロック設定",
+                                     image: UIImage(systemName: "lock.fill")) { _ in
+                    presentLockSetup(sheet)
+                })
+            }
+        } else if sheet.isOwnedByCurrentUser {
+            lock.append(UIAction(title: "シートをロック",
+                                 image: UIImage(systemName: "lock")) { _ in
+                presentLockSetup(sheet)
+            })
+        }
+
+        var children = top
+        if !lock.isEmpty {
+            children.append(UIMenu(title: "", options: .displayInline, children: lock))
+        }
+        return UIMenu(title: "", children: children)
+    }
+
+    /// 長押し時のプレビュー。解錠済み（またはロック無し）は詳細画面
+    /// (SheetDetailView) をそのまま表示し、ロック中（未解錠）は中身を保護して
+    /// 「ロックされています」表示にする。
+    private func rowPreview(for sheet: ExpenseSheet) -> AnyView {
+        if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
+            return AnyView(
+                VStack(spacing: 16) {
+                    SheetIconView(record: sheet, size: 60)
+                    Text(sheet.displayName)
+                        .font(.headline)
+                    Label("このシートはロックされています", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 44)
+                .padding(.horizontal, 24)
+            )
+        }
+        // 詳細画面の中身をプレビュー表示。isPreview=true で検索バー・ツールバーを
+        // 描画しないので、本文（サマリ＋一覧）だけが出る。
+        return AnyView(
+            SheetDetailView(record: sheet, isPreview: true)
+                .environment(\.managedObjectContext, viewContext)
+        )
+    }
+    #endif
 
     @ViewBuilder
     private var searchResultsList: some View {
@@ -281,6 +567,7 @@ struct SheetListView: View {
                     expense: total.expense,
                     income: total.income,
                     currency: $searchTotalCurrency,
+                    period: $searchPeriod,
                     count: total.count,
                     query: trimmedQuery,
                     mixed: total.mixed
@@ -294,14 +581,24 @@ struct SheetListView: View {
                 Section {
                     HStack {
                         Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
+                        VStack(spacing: 8) {
+                            Image(systemName: searchPeriod.isFiltering ? "line.3.horizontal.decrease.circle" : "magnifyingglass")
                                 .font(.title2)
                                 .foregroundStyle(.secondary)
                             Text(trimmedQuery.isEmpty ? "検索ワードを入力してください" : "“\(trimmedQuery)” の検索結果なし")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
+                            if searchPeriod.isFiltering {
+                                Text("期間「\(searchPeriod.label)」で絞り込まれています。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button("フィルタをオフにする") {
+                                    searchPeriod = .all
+                                }
+                                .font(.subheadline.weight(.semibold))
+                            }
                         }
                         Spacer()
                     }
@@ -328,6 +625,38 @@ struct SheetListView: View {
                             tint: group.sheet.tint
                         )
                     }
+                }
+            }
+            // ロック中シートは中身を検索対象外にしている。解除導線を出す
+            // (マッチの有無は漏らさず、解除すれば検索に含まれる)。
+            if !lockedSheets.isEmpty {
+                Section {
+                    ForEach(lockedSheets, id: \.objectID) { sheet in
+                        Button {
+                            unlockingSheet = sheet
+                        } label: {
+                            HStack(spacing: 12) {
+                                SheetIconView(record: sheet, size: 38)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(sheet.displayName)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text("ロック中 · 解除して検索に含める")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "lock.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Label("ロック中のシート", systemImage: "lock.fill")
                 }
             }
         }
@@ -400,9 +729,16 @@ private struct SearchTotalCard: View {
     let income: Decimal
     /// 表示通貨。カード右上のメニューで変更できる。
     @Binding var currency: String
+    /// 期間フィルタ。カードのメニューで変更できる。
+    @Binding var period: SheetDetailView.Period
     let count: Int
     let query: String
     let mixed: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private func doubleValue(_ d: Decimal) -> Double {
+        NSDecimalNumber(decimal: d).doubleValue
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -423,7 +759,7 @@ private struct SearchTotalCard: View {
                 currencyMenu
             }
 
-            // 検索クエリ + 件数の pill (空クエリ = 全件表示)
+            // 検索クエリ件数 pill + 期間メニュー
             HStack(spacing: 8) {
                 Text(query.isEmpty ? "すべて · \(count)件" : "「\(query)」 · \(count)件")
                     .font(.subheadline.weight(.medium))
@@ -431,31 +767,37 @@ private struct SearchTotalCard: View {
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                     .foregroundStyle(Color.accentColor)
+                periodMenu
                 Spacer()
             }
 
-            // 大型の支出合計 (SummaryCard と同じ rounded font)
+            // 大型の支出合計 (SummaryCard と同じ rounded font + 数値トランジション)
             Text(CurrencyCatalog.format(expense, code: currency))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                .contentTransition(.numericText(value: doubleValue(expense)))
+                .animation(.snappy, value: expense)
 
-            // 「+収入 | -支出」行 (左寄せ)
-            HStack(spacing: 12) {
+            // 「+収入 | -支出」行 (SummaryCard と同じく AX サイズでは縦積み)
+            let ieLayout: AnyLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 12))
+            ieLayout {
                 Text("+ \(CurrencyCatalog.format(income, code: currency))")
-                Text("|").foregroundStyle(.tertiary)
+                    .contentTransition(.numericText(value: doubleValue(income)))
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text("|").foregroundStyle(.tertiary)
+                }
                 Text("- \(CurrencyCatalog.format(expense, code: currency))")
+                    .contentTransition(.numericText(value: doubleValue(expense)))
             }
             .font(.subheadline.monospacedDigit().weight(.medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if mixed {
-                Label("通貨が混在するため \(currency) に換算した概算です。", systemImage: "arrow.left.arrow.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            .animation(.snappy, value: income)
+            .animation(.snappy, value: expense)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -469,7 +811,7 @@ private struct SearchTotalCard: View {
     private var currencyMenu: some View {
         Menu {
             Picker("通貨", selection: $currency) {
-                ForEach(CurrencyCatalog.all) { opt in
+                ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                     Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
                 }
             }
@@ -483,6 +825,32 @@ private struct SearchTotalCard: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+            .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    /// 期間を切り替えるメニュー。絞り込み中 (全期間以外) は色付きで強調。
+    private var periodMenu: some View {
+        Menu {
+            Picker("期間", selection: $period) {
+                ForEach(SheetDetailView.Period.allCases) { p in
+                    Text(p.label).tag(p)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: period.isFiltering
+                      ? "line.3.horizontal.decrease.circle.fill"
+                      : "calendar")
+                    .font(.caption2)
+                Text(period.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.accentColor.opacity(period.isFiltering ? 0.28 : 0.15)))
             .foregroundStyle(Color.accentColor)
         }
     }
@@ -575,6 +943,9 @@ private struct SearchResultRow: View {
 
 private struct SheetRowView: View {
     @ObservedObject var record: ExpenseSheet
+    /// UIKit ブリッジ経由の行は NavigationLink が無いので、自前で
+    /// ディスクロージャ (>) を表示してタップ可能なことを示す。
+    var showsDisclosure: Bool = false
     @StateObject private var lockManager = SheetLockManager.shared
 
     var body: some View {
@@ -588,38 +959,27 @@ private struct SheetRowView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.vertical, 4)
     }
 }
 
-/// ロック対象シートの開封ゲート。未解錠なら SheetLockView を出し、
-/// 解錠後/最初からロック無しなら子コンテンツ (SheetDetailView) を表示。
-/// シートから離脱 (= NavigationStack で pop) すると再ロックする。
+/// ロック対象シートの開封ゲート。子コンテンツ (SheetDetailView) は常に描画し、
+/// ロック中は SheetLockView を全画面で重ねる (`sheetLockCover`)。
+/// content を差し替えず重ねるので、ここから push した精算/詳細などの子画面も
+/// 含め、バックグラウンド復帰時に画面を閉じずロックだけを重ねられる。
+/// シートから離脱 (= 一覧に戻る) した時の再ロックは SheetListView 側で
+/// `path` の変化を見て行う。
 private struct LockedSheetGate<Content: View>: View {
     @ObservedObject var record: ExpenseSheet
     let content: () -> Content
 
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var lockManager = SheetLockManager.shared
-
     var body: some View {
-        Group {
-            if lockManager.isUnlocked(record) {
-                content()
-            } else {
-                SheetLockView(
-                    record: record,
-                    onUnlock: { /* state 更新で自動で content に切替 */ },
-                    onCancel: { dismiss() }
-                )
-            }
-        }
-        .onDisappear {
-            // シート画面から離れたら次回入る時にパスワード再要求
-            if lockManager.hasPassword(for: record) {
-                lockManager.lock(record)
-            }
-        }
+        content().sheetLockCover(record)
     }
 }

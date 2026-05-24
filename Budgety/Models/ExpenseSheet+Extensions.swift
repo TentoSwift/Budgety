@@ -137,6 +137,31 @@ extension ExpenseSheet {
         return result
     }
 
+    /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
+    /// CKShare ロード済ならそれで判定、未ロードなら ParticipantProfile で判定。
+    /// オーナーも「自分でなければ他メンバー」として数える（参加者デバイスで
+    /// オーナーを除外してソロ扱いにしないため）。
+    @MainActor
+    func hasAcceptedOtherMembers() -> Bool {
+        #if !os(watchOS)
+        if let share = ShareCoordinator.shared.existingShare(for: self) {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
+            return share.participants.contains { p in
+                guard p.acceptanceStatus == .accepted else { return false }
+                let rn = p.userIdentity.userRecordID?.recordName ?? ""
+                guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
+                return !selfIDs.contains(rn)
+            }
+        }
+        #endif
+        guard let profiles = participantProfiles as? Set<ParticipantProfile> else { return false }
+        let myRN = UserProfileStore.shared.userRecordName ?? ""
+        return profiles.contains { p in
+            let rn = p.recordName ?? ""
+            return !rn.isEmpty && rn != myRN
+        }
+    }
+
     /// profileID を表示用情報に解決する。
     /// 1. 自分 → UserProfileStore (カスタム設定が最優先)
     /// 2. **Public DB の UserProfile (カスタムプロフィール)** ← 他人もここを最優先

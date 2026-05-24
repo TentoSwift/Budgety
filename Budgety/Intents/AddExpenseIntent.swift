@@ -20,11 +20,8 @@ struct AddExpenseIntent: AppIntent {
     /// - openAppWhenRun = false → アプリは前面に出ない (= 完全バックグラウンド実行)
     static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "シート", description: "支出を記録するシート (未指定の場合は一番古いシートに記録)")
-    var sheet: ExpenseSheetEntity?
-
-    @Parameter(title: "タイトル", description: "支出の内容 (例: ランチ)")
-    var title: String
+    @Parameter(title: "シート", description: "支出を記録するシート")
+    var sheet: ExpenseSheetEntity
 
     @Parameter(
         title: "金額",
@@ -34,10 +31,16 @@ struct AddExpenseIntent: AppIntent {
     var amount: Double
 
     @Parameter(
-        title: "カテゴリ (任意)",
-        description: "未指定の場合、FoundationModels がタイトルから推測します。"
+        title: "カテゴリ",
+        description: "支出のカテゴリ。「AI 提案」を選ぶとタイトルから自動推測、「未分類」を選ぶとカテゴリなしで保存します。"
     )
-    var category: ExpenseCategoryEntity?
+    var category: ExpenseCategoryEntity
+
+    @Parameter(
+        title: "タイトル (任意)",
+        description: "支出の内容 (例: ランチ)。未入力ならカテゴリ名が表示名になります。"
+    )
+    var title: String?
 
     @Parameter(title: "メモ (任意)", default: "")
     var note: String
@@ -60,11 +63,11 @@ struct AddExpenseIntent: AppIntent {
     )
     var sheetName: String?
 
-    // Summary のメイン行には日時を出さない (= Shortcuts.app で日時を聞かない)。
-    // 日時は「詳細を表示」配下に隠し、必要な時 (自動化など) だけ任意指定。
+    // タイトルは入力させない (= 任意・詳細配下)。必須は シート → 金額 → カテゴリ の
+    // 順に尋ね、カテゴリを最後に選ばせる。
     static var parameterSummary: some ParameterSummary {
-        Summary("\(\.$sheet) に \(\.$title) (\(\.$amount)) を追加") {
-            \.$category
+        Summary("\(\.$sheet) に \(\.$amount) を \(\.$category) で追加") {
+            \.$title
             \.$note
             \.$date
             \.$dateText
@@ -102,8 +105,7 @@ struct AddExpenseIntent: AppIntent {
                     available: availableNames.isEmpty ? "(empty)" : availableNames
                 )
             }
-        } else if let entity = sheet,
-                  let url = URL(string: entity.id),
+        } else if let url = URL(string: sheet.id),
                   let oid = pc.container.persistentStoreCoordinator
                     .managedObjectID(forURIRepresentation: url),
                   let resolved = try? ctx.existingObject(with: oid) as? ExpenseSheet {
@@ -118,10 +120,8 @@ struct AddExpenseIntent: AppIntent {
             coreSheet = fallback
         }
 
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            throw AppIntentError.emptyTitle
-        }
+        // タイトルは任意。未入力なら表示名はカテゴリ名にフォールバックする (nil で保存)。
+        let trimmedTitle = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard amount > 0 else {
             throw AppIntentError.invalidAmount
         }
@@ -132,7 +132,7 @@ struct AddExpenseIntent: AppIntent {
             ctx.assign(expense, to: store)
         }
 
-        expense.title = trimmedTitle
+        expense.title = trimmedTitle.isEmpty ? nil : trimmedTitle
         expense.amount = NSDecimalNumber(decimal: Decimal(amount))
         expense.kindRaw = TransactionKind.expense.rawValue
         expense.currencyCode = coreSheet.resolvedDefaultCurrencyCode
@@ -140,13 +140,12 @@ struct AddExpenseIntent: AppIntent {
         expense.note = note
         expense.createdAt = .now
 
-        // カテゴリ解決: ユーザー指定 → シート内のカテゴリへマップ → AI 推測 → 確認ダイアログ
-        let resolvedCategory = try await resolveCategory(
+        // カテゴリ解決: 選択値 (AI 提案 / 未分類 / 実カテゴリ) をシート内へマップ
+        let resolvedCategory = await resolveCategory(
             chosen: category,
             sheet: coreSheet,
             title: trimmedTitle,
-            ctx: ctx,
-            sheetStore: sheetStore
+            ctx: ctx
         )
         if let cat = resolvedCategory {
             expense.categoryRaw = cat.name
@@ -177,144 +176,63 @@ struct AddExpenseIntent: AppIntent {
             Decimal(amount),
             code: coreSheet.resolvedDefaultCurrencyCode
         )
-        let categoryNote = resolvedCategory.map { " /  \($0.displayName)" } ?? ""
+        let categoryNote = resolvedCategory.map { " / \($0.displayName)" } ?? ""
+        // タイトル未入力時はタイトルの引用を出さない。
+        let body = trimmedTitle.isEmpty
+            ? "\(amountDisplay)\(categoryNote)"
+            : "「\(trimmedTitle)」(\(amountDisplay)\(categoryNote))"
         return .result(
             dialog: IntentDialog(
-                full: "「\(coreSheet.displayName)」に「\(trimmedTitle)」(\(amountDisplay)\(categoryNote)) を追加しました",
+                full: "「\(coreSheet.displayName)」に \(body) を追加しました",
                 supporting: "支出を追加しました"
             )
         )
     }
 
-    /// 入力カテゴリ → シート内の `ExpenseCategory` を返す。
-    /// 1. ユーザーが指定 → そのシート内で同名 (+ 支出 kind) を探してマッチ
-    /// 2. 未指定 → FoundationModels で推測 → ユーザーに確認ダイアログを出す
-    /// 3. 拒否・利用不可 → nil (= 未分類で保存)
+    /// 選択されたカテゴリ entity → シート内の `ExpenseCategory` を返す。
+    /// - 「未分類」sentinel → nil (カテゴリなしで保存)
+    /// - 「AI 提案」sentinel → FoundationModels でタイトルから推測
+    /// - 実カテゴリ → objectID 一致 (同シート) / 名前一致でマップ
     @MainActor
     private func resolveCategory(
-        chosen: ExpenseCategoryEntity?,
+        chosen: ExpenseCategoryEntity,
         sheet: ExpenseSheet,
         title: String,
-        ctx: NSManagedObjectContext,
-        sheetStore: NSPersistentStore?
-    ) async throws -> ExpenseCategory? {
+        ctx: NSManagedObjectContext
+    ) async -> ExpenseCategory? {
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
         let kindCats = cats.filter { c in
             let raw = c.kindRaw ?? ""
-            return raw == TransactionKind.expense.rawValue ||
-                   raw.isEmpty
+            return raw == TransactionKind.expense.rawValue || raw.isEmpty
         }
-        let names = kindCats.map { $0.displayName }
 
-        // AI 提案を求める helper
-        @MainActor
-        func runAISuggestion() async -> ExpenseCategory? {
+        // 「未分類」→ カテゴリなし
+        if chosen.id == Self.skipCategoryID { return nil }
+
+        // 「AI 提案」→ FoundationModels で推測
+        if chosen.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
+            let names = kindCats.map { $0.displayName }
             guard !names.isEmpty,
                   CategoryAISuggestor.isAvailable,
                   let suggestedName = await CategoryAISuggestor.suggest(
-                    title: title,
-                    kind: .expense,
-                    categories: names
+                    title: title, kind: .expense, categories: names
                   )
             else { return nil }
             return kindCats.first(where: { $0.displayName == suggestedName })
         }
 
-        // 1a) ユーザーが「AI 提案」sentinel を選択 → 即 AI 自動採用
-        if let chosen, chosen.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
-            return await runAISuggestion()
+        // 実カテゴリ: objectID 一致 (同シート) → 名前一致
+        if let url = URL(string: chosen.id),
+           let oid = ctx.persistentStoreCoordinator?
+            .managedObjectID(forURIRepresentation: url),
+           let exact = try? ctx.existingObject(with: oid) as? ExpenseCategory,
+           exact.sheet?.objectID == sheet.objectID {
+            return exact
         }
-        // 1b) 通常のカテゴリ指定 → そのシート内で同名のカテゴリを探す
-        if let chosen {
-            if let url = URL(string: chosen.id),
-               let oid = ctx.persistentStoreCoordinator?
-                .managedObjectID(forURIRepresentation: url),
-               let exact = try? ctx.existingObject(with: oid) as? ExpenseCategory,
-               exact.sheet?.objectID == sheet.objectID {
-                return exact
-            }
-            if let match = kindCats.first(where: { $0.displayName == chosen.name }) {
-                return match
-            }
-        }
-
-        // 2) カテゴリ未指定 → AI 推測 + 3 択 (AI 提案 / 自分で選ぶ / 未分類のまま) ダイアログ
-        guard !names.isEmpty else { return nil }
-        let suggestedCat = await runAISuggestion()
-
-        // 選択肢を組み立て:
-        //   - AI 提案 (subtitle "AI 提案") ※あれば先頭
-        //   - シート内のその他カテゴリ (sortOrder 順)
-        //   - "未分類のまま" sentinel (id = skipCategoryID)
-        var options: [ExpenseCategoryEntity] = []
-        if let suggestedCat {
-            // 推奨はカテゴリ symbol (色付き) + apple.intelligence を横並びにした composite アイコン。
-            // subtitle は "提案" のみ (シート名は出さない)。
-            options.append(ExpenseCategoryEntity(
-                id: suggestedCat.objectID.uriRepresentation().absoluteString,
-                name: suggestedCat.displayName,
-                sheetName: "提案",
-                kindRaw: suggestedCat.kindRaw ?? TransactionKind.expense.rawValue,
-                symbol: suggestedCat.displaySymbol,
-                colorHex: suggestedCat.displayColorHex,
-                iconData: ExpenseCategoryEntity.renderAISuggestionSymbol(
-                    suggestedCat.displaySymbol,
-                    colorHex: suggestedCat.displayColorHex
-                )
-            ))
-        }
-        let sortedOthers = kindCats
-            .filter { $0.objectID != suggestedCat?.objectID }
-            .sorted { $0.sortOrder < $1.sortOrder }
-        for cat in sortedOthers {
-            options.append(ExpenseCategoryEntity.from(cat))
-        }
-        let unfiledColor = "#8E8E93"
-        options.append(ExpenseCategoryEntity(
-            id: Self.skipCategoryID,
-            name: "未分類のまま",
-            sheetName: "(カテゴリなしで保存)",
-            kindRaw: "",
-            symbol: "list.bullet",
-            colorHex: unfiledColor,
-            iconData: ExpenseCategoryEntity.renderColoredSymbol(
-                "list.bullet",
-                colorHex: unfiledColor
-            )
-        ))
-
-        let dialog: IntentDialog = {
-            if let suggestedCat {
-                return IntentDialog(
-                    "「\(title)」のカテゴリを選んでください。提案: 「\(suggestedCat.displayName)」"
-                )
-            }
-            return IntentDialog("「\(title)」のカテゴリを選んでください。")
-        }()
-
-        do {
-            let chosen = try await $category.requestDisambiguation(
-                among: options,
-                dialog: dialog
-            )
-            // Skip sentinel → 未分類
-            if chosen.id == Self.skipCategoryID { return nil }
-            // 選ばれた entity の objectID から ExpenseCategory を解決
-            if let url = URL(string: chosen.id),
-               let oid = ctx.persistentStoreCoordinator?
-                .managedObjectID(forURIRepresentation: url),
-               let cat = try? ctx.existingObject(with: oid) as? ExpenseCategory {
-                return cat
-            }
-            // フォールバック: 名前一致でシート内検索
-            return kindCats.first(where: { $0.displayName == chosen.name })
-        } catch {
-            // ユーザーがキャンセル / エラー → 未分類で保存
-            return nil
-        }
+        return kindCats.first(where: { $0.displayName == chosen.name })
     }
 
-    /// 「未分類のまま」を表す sentinel id
+    /// 「未分類」を表す sentinel id
     static let skipCategoryID = "__expenso_skip_category__"
 
     /// `dateText` が ISO8601 で解釈できればそれを優先、なければ `date`、それも未指定なら `.now`。

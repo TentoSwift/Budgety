@@ -78,6 +78,21 @@ extension Color {
         #endif
     }
 
+    /// コンテンツ (セル) の上に置くチップ/ピル等の塗り。半透明グレーなので、
+    /// ライト/ダークどちらでもセル背景と区別が付く (`*SystemBackground` は
+    /// セルと同色になり見えなくなる場合がある)。
+    static var platformSecondarySystemFill: Color {
+        #if os(watchOS)
+        return Color.gray.opacity(0.24)
+        #elseif canImport(UIKit)
+        return Color(.secondarySystemFill)
+        #elseif canImport(AppKit)
+        return Color.gray.opacity(0.2)
+        #else
+        return Color.gray.opacity(0.2)
+        #endif
+    }
+
     /// 画像データからドミナント色 (= CIAreaAverage で計算した平均色) を返す。
     /// プロフィール写真からタイル背景の色味を抽出するために使う。
     /// 結果はサイズ・回数あたりのコストがあるので呼び出し側でキャッシュすること。

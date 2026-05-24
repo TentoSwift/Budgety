@@ -85,7 +85,6 @@ struct MemberPickerView: View {
 
     var body: some View {
         List {
-            if BuildInfo.isInternalBuild { debugHeaderSection }
             unspecifiedSection
             // Member の有無に依存せず、UserProfileStore のプロフィールから直接「自分」を表示。
             // 選択時に Member を ensure する。
@@ -105,114 +104,6 @@ struct MemberPickerView: View {
         }
     }
 
-
-    /// DEBUG: 現在のシートに紐付く ParticipantProfile を 1 行にエンコードして返す。
-    /// recordName / displayName / photoData 有無 / colorHex / updatedAt を含む。
-    private var sheetParticipantProfilesDebug: [String] {
-        guard let record else { return ["(no sheet)"] }
-        let profiles = ((record.participantProfiles as? Set<ParticipantProfile>) ?? [])
-            .sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
-        if profiles.isEmpty { return ["(no participant profiles)"] }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return profiles.map { p in
-            let rn = (p.recordName ?? "").isEmpty ? "(empty)" : String((p.recordName ?? "").prefix(20))
-            let dn = (p.displayName ?? "").isEmpty ? "(empty)" : (p.displayName ?? "")
-            let hasPhoto = (p.photoData?.count ?? 0) > 0
-            let color = p.colorHex ?? "(empty)"
-            let ts = p.updatedAt.map { f.string(from: $0) } ?? "(nil)"
-            return "  rn:\(rn)  name:\(dn)  photo:\(hasPhoto ? "✓" : "✗")  color:\(color)  upd:\(ts)"
-        }
-    }
-    /// DEBUG セクション: 現在の Expense の payer 識別情報 + selected の id を表示
-    @ViewBuilder
-    private var debugHeaderSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("DEBUG").font(.system(size: 9, weight: .bold)).foregroundStyle(.orange)
-                Group {
-                    if let pid = fallbackProfileID, !pid.isEmpty {
-                        Text("Expense.payerProfileID: \(pid)")
-                    } else {
-                        Text("Expense.payerProfileID: (empty)")
-                    }
-                    if let name = fallbackPaidBy, !name.isEmpty {
-                        Text("Expense.paidBy: \(name)")
-                    } else {
-                        Text("Expense.paidBy: (empty)")
-                    }
-                    if let rn = profile.userRecordName, !rn.isEmpty {
-                        Text("self userRecordName: \(rn)")
-                    } else {
-                        Text("self userRecordName: (empty)")
-                    }
-                    // CKShare 経由で見た「自分」の userRecordID。
-                    if let share = share {
-                        if let rn = share.currentUserParticipant?.userIdentity.userRecordID?.recordName, !rn.isEmpty {
-                            Text("self via CKShare: \(rn)")
-                        } else {
-                            Text("self via CKShare: (no currentUserParticipant)")
-                        }
-                        if let oRN = share.owner.userIdentity.userRecordID?.recordName, !oRN.isEmpty {
-                            Text("share.owner: \(oRN)")
-                        } else {
-                            Text("share.owner: (no recordID)")
-                        }
-                        Text("--- share.participants (\(share.participants.count)) ---")
-                        ForEach(Array(share.participants.enumerated()), id: \.offset) { _, p in
-                            let rn = p.userIdentity.userRecordID?.recordName ?? "(nil)"
-                            let role: String = {
-                                switch p.role {
-                                case .owner: return "owner"
-                                case .privateUser: return "private"
-                                case .publicUser: return "public"
-                                case .unknown: return "unknown"
-                                @unknown default: return "?"
-                                }
-                            }()
-                            let email = p.userIdentity.lookupInfo?.emailAddress ?? "-"
-                            Text("  rn:\(rn)  role:\(role)  email:\(email)")
-                        }
-                    } else {
-                        Text("self via CKShare: (no share loaded)")
-                    }
-                    // 自分の photoData がローカルにあるか確認 (= UserProfileStore.photoData)
-                    if let bytes = profile.photoData?.count, bytes > 0 {
-                        Text("self photoData: ✓ \(bytes) bytes")
-                    } else {
-                        Text("self photoData: ✗ (nil or 0 bytes)")
-                    }
-                    Text("self displayName: \(profile.resolvedDisplayName)")
-                    Text("self avatarBgColorHex: \(profile.avatarBgColorHex ?? "(empty)")")
-                    Text("self profileUpdatedAt: \(profile.profileUpdatedAt.map { ISO8601DateFormatter().string(from: $0) } ?? "(nil)")")
-                    if let s = selected {
-                        Text("selected: \(s.name ?? "(nil)")  rec: \(s.recordName ?? "(empty)")")
-                    } else {
-                        Text("selected: (nil)")
-                    }
-                    Text("--- candidates ---")
-                    // 自分
-                    Text("  self  \(profile.userRecordName ?? "(empty)")")
-                    // CKShare 参加者
-                    ForEach(otherParticipants, id: \.userIdentity.userRecordID) { p in
-                        let info = participantDisplayInfo(p)
-                        Text("  \(info.name)  \(info.recordName ?? "(empty)")")
-                    }
-                    // legacy
-                    ForEach(legacyPayers) { lp in
-                        Text("  [legacy] \(lp.name)  \(lp.profileID ?? "(empty)")")
-                    }
-                    Text("--- sheet PPs ---")
-                    ForEach(sheetParticipantProfilesDebug, id: \.self) { line in
-                        Text(line)
-                    }
-                }
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            }
-        }
-    }
 
     private var unspecifiedSection: some View {
         Section {
@@ -313,18 +204,6 @@ struct MemberPickerView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                // このシート用の canonical self ID を優先表示する (Member.recordName は
-                // 旧 userRecordName が残っていることがあるため)。
-                if let rn = (profile.canonicalSelfID(forShare: share)
-                                ?? selfMember?.recordName
-                                ?? profile.userRecordName), !rn.isEmpty {
-                    Text("ID: \(rn)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
             }
             Spacer()
             if isSelected {
@@ -406,14 +285,6 @@ struct MemberPickerView: View {
                             Text("過去の記録")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
-                            if let rn = info.profileID, !rn.isEmpty {
-                                Text("ID: \(rn)")
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .textSelection(.enabled)
-                            }
                         }
                         Spacer()
                         if legacyRowIsSelected(info) {
@@ -608,15 +479,6 @@ struct MemberPickerView: View {
                     Text(p.role == .owner ? "オーナー" : (p.acceptanceStatus == .pending ? "招待中" : "参加者"))
                         .font(.caption2)
                         .foregroundStyle(p.acceptanceStatus == .pending ? .orange : .secondary)
-                    // participantID を常時表示 (= 全ビルドで見える)
-                    if let rn = info.recordName, !rn.isEmpty {
-                        Text("ID: \(rn)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
                 }
                 Spacer()
                 if isSelected {
@@ -725,36 +587,5 @@ struct MemberPickerView: View {
         }
         share = ShareCoordinator.shared.existingShare(for: record)
         // ParticipantProfile は CloudKit Sharing 経由で自動同期されるためここでは何もしない
-    }
-}
-
-// MARK: - DEBUG ID badges
-
-private struct DebugIDBadge: View {
-    let memberID: UUID?
-    let recordName: String?
-    let extra: String?
-
-    init(memberID: UUID? = nil, recordName: String? = nil, extra: String? = nil) {
-        self.memberID = memberID
-        self.recordName = recordName
-        self.extra = extra
-    }
-
-    var body: some View {
-        if BuildInfo.isInternalBuild {
-            HStack(spacing: 6) {
-                if let id = memberID {
-                    Text("id:\(id.uuidString.prefix(8))")
-                }
-                if let rn = recordName, !rn.isEmpty {
-                    Text("rec:\(rn.prefix(10))")
-                }
-                if let extra { Text(extra) }
-            }
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
     }
 }

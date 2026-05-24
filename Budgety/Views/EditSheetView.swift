@@ -190,7 +190,8 @@ struct EditSheetView: View {
             }
             // その他カテゴリは別画面で選択
             NavigationLink {
-                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint)
+                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint,
+                                    premiumUnlocked: PurchaseManager.hasPremiumAccess(to: record))
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -220,7 +221,7 @@ struct EditSheetView: View {
         let isSelected = selectedSymbol == sym
         // 既に保存済みの symbol は救済 (= 後で Premium が切れても再選択できる)
         let isLocked = SheetSymbols.isPremiumSymbol(sym)
-            && !PurchaseManager.shared.isPremium
+            && !PurchaseManager.hasPremiumAccess(to: record)
             && sym != origSymbol
         Button {
             if isLocked {
@@ -260,7 +261,7 @@ struct EditSheetView: View {
 
     private var currencyPicker: some View {
         Picker("通貨", selection: $defaultCurrencyCode) {
-            ForEach(CurrencyCatalog.all) { opt in
+            ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                 Text(opt.symbol + "  " + opt.code + " — " + opt.displayName).tag(opt.code)
             }
         }

@@ -96,10 +96,16 @@ struct CategoryPayerIconView: View {
         guard let sheet = expense.sheet else { return true }
         #if !os(watchOS)
         if let share = ShareCoordinator.shared.existingShare(for: sheet) {
+            // 「自分」以外で受諾済みの参加者が居るか。オーナーも自分でなければ
+            // 他メンバーとして数える（参加者デバイスでオーナーを除外しないため）。
+            // 自分の participant は recordName が __defaultOwner__ に匿名化される
+            // か、URN (canonicalSelfIDs) と一致するので、それで除外する。
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
             let hasAcceptedOthers = share.participants.contains { p in
-                guard p.acceptanceStatus == .accepted, p.role != .owner else { return false }
+                guard p.acceptanceStatus == .accepted else { return false }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
-                return !rn.isEmpty && !UserProfileStore.isSelfPlaceholderRecordName(rn)
+                guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
+                return !selfIDs.contains(rn)
             }
             return !hasAcceptedOthers
         }

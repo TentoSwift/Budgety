@@ -887,7 +887,7 @@ struct AddExpenseView: View {
                             }
                     }
                     Picker("通貨", selection: $currencyCode) {
-                        ForEach(CurrencyCatalog.all) { opt in
+                        ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                             Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
                         }
                     }
@@ -998,6 +998,8 @@ struct AddExpenseView: View {
                     .tint(sheetTint)
                 }
             }
+            // ロック中はロック画面を overlay で重ねる (再ホストしないので入力を保持)。
+            .lockOverlay(contextSheet)
             .confirmationDialog(
                 "変更の適用範囲",
                 isPresented: $showRecurringSaveChoice,
@@ -1059,6 +1061,10 @@ struct AddExpenseView: View {
             onAttempt: { showDiscardConfirm = true }
         )
         .ignoresSafeArea()
+        // 注意: ここに sheetLockCover (fullScreenCover) を付けると、
+        // DismissAwareHostingController を使うこのシートが再ホストされ、
+        // @State がリセットされて編集中の入力が消える。編集画面のロック保護は
+        // 行わない (詳細/精算など push 画面のみ sheetLockCover で保護)。
     }
 
     /// AX で縦 (VStack)、通常で横 (HStack) に切り替える `AnyLayout`。
@@ -1133,43 +1139,6 @@ struct AddExpenseView: View {
                     payerPreview
                 }
             }
-            if BuildInfo.isInternalBuild {
-                payerDebugIDRow
-            }
-        }
-    }
-
-    /// DEBUG ビルドのみ表示: 現在の selectedPayer / Expense.payerProfileID / payerMemberID を
-    /// 識別 ID と共に表示してデバッグできるようにする。
-    @ViewBuilder
-    private var payerDebugIDRow: some View {
-        let memberID = selectedPayer?.id
-        let memberRN = selectedPayer?.recordName
-        let memberName = selectedPayer?.name ?? "(nil)"
-        let storedProfileID: String? = {
-            if case .edit(let e) = mode { return e.payerProfileID?.isEmpty == false ? e.payerProfileID : nil }
-            return nil
-        }()
-        let storedMemberID: UUID? = {
-            if case .edit(let e) = mode { return e.payerMemberID }
-            return nil
-        }()
-        VStack(alignment: .leading, spacing: 4) {
-            Text("DEBUG").font(.system(size: 9, weight: .bold)).foregroundStyle(.orange)
-            Group {
-                Text("name: \(memberName)")
-                Text("Member.id: \(memberID?.uuidString ?? "(nil)")")
-                Text("Member.recordName: \(memberRN ?? "(empty)")")
-                if let storedMemberID {
-                    Text("Expense.payerMemberID: \(storedMemberID.uuidString)")
-                }
-                if let storedProfileID {
-                    Text("Expense.payerProfileID: \(storedProfileID)")
-                }
-            }
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .textSelection(.enabled)
         }
     }
 

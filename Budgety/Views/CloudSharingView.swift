@@ -95,7 +95,6 @@ struct CloudSharingView: View {
             groupHeader
             if let share = existingShare {
                 participantsSection(share: share)
-                shareIDSection(share: share)
             }
             inviteSection
             shareLinkSection
@@ -125,7 +124,6 @@ struct CloudSharingView: View {
             // premiumForm (オーナー画面) と同じ条件・同じレンダラで参加者を表示する。
             if let share = existingShare {
                 participantsSection(share: share)
-                shareIDSection(share: share)
             }
 
             Section {
@@ -272,46 +270,6 @@ struct CloudSharingView: View {
         // 明示的なプロフェッチは不要 (互換のため空実装で残す)。
     }
 
-    @ViewBuilder
-    private func shareIDSection(share: CKShare) -> some View {
-        let recordName = share.recordID.recordName
-        let zoneName = share.recordID.zoneID.zoneName
-        let ownerName = share.recordID.zoneID.ownerName
-        Section {
-            VStack(alignment: .leading, spacing: 6) {
-                row(label: "Record", value: recordName)
-                row(label: "Zone", value: zoneName)
-                row(label: "Owner", value: ownerName)
-            }
-            Button {
-                UIPasteboard.general.string = recordName
-                withAnimation { showCopiedToast = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                    withAnimation { showCopiedToast = false }
-                }
-            } label: {
-                Label("Record ID をコピー", systemImage: "doc.on.doc")
-                    .font(.caption)
-            }
-        } header: {
-            Text("CKShare ID")
-        }
-    }
-
-    private func row(label: String, value: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .leading)
-            Text(value)
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .foregroundStyle(.primary)
-        }
-    }
 
     private var inviteSection: some View {
         Section {
@@ -339,7 +297,7 @@ struct CloudSharingView: View {
         } header: {
             Text("人を招待")
         } footer: {
-            Text("招待先の Apple ID に登録済みメールアドレスを入力してください。参加者はシートを編集できます (閲覧のみは廃止)。")
+            Text("招待相手の Apple ID（メールアドレス）を入力します。")
         }
     }
 
@@ -362,12 +320,6 @@ struct CloudSharingView: View {
                 } label: {
                     Label("リンクをコピー", systemImage: "doc.on.doc")
                 }
-                Text(url.absoluteString)
-                    .font(.caption.monospaced())
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .foregroundStyle(.secondary)
             } else {
                 Button {
                     Task { await prepareLinkOnly() }
@@ -388,9 +340,9 @@ struct CloudSharingView: View {
             Text("リンクで共有")
         } footer: {
             if resolvedURL == nil {
-                Text("リンクを生成して、上で招待した相手に AirDrop / メッセージ等で送れます。招待されていない人がリンクをタップしても参加できません。")
+                Text("リンクを作成して招待相手に送れます。")
             } else {
-                Text("このリンクは上で招待した相手だけが使えます (Apple ID 必須)。招待されていない人がタップしても参加できません。")
+                Text("招待した相手だけがこのリンクで参加できます。")
             }
         }
     }
@@ -689,14 +641,6 @@ private struct ParticipantRow: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    if let rn = displayedRecordName {
-                        Text(rn)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
                 }
                 Spacer()
             }

@@ -4,8 +4,8 @@
 //
 //  watchOS 版 Budgety のメインフロー。
 //
-//  ・ホームは TabView (ページ式): 横スワイプ / Crown でシート切替
-//  ・各タブは WatchSheetPage = 今日の合計 + 月予算プログレス + 「追加」+ 直近
+//  ・ホームはシート一覧 (List): タップでそのシートへ push 遷移
+//  ・遷移先は WatchSheetPage = 今日の合計 + 月予算プログレス + 「追加」+ 直近
 //  ・追加は Digital Crown で金額調整 (= WatchAddExpenseView)
 //
 
@@ -14,7 +14,7 @@ import CoreData
 
 struct WatchHomeView: View {
     @Environment(\.managedObjectContext) private var ctx
-    @StateObject private var persistence = PersistenceController.shared
+    @StateObject private var lockManager = SheetLockManager.shared
 
     @FetchRequest(
         sortDescriptors: [
@@ -24,13 +24,10 @@ struct WatchHomeView: View {
     )
     private var sheets: FetchedResults<ExpenseSheet>
 
-    /// 直近で開いたシートを記憶 (= 次回起動時に直接そのシートを表示)。
-    @AppStorage("watchSelectedSheetID") private var selectedSheetIDString: String = ""
-
-    @State private var selectedSheetID: NSManagedObjectID?
+    @State private var path: [NSManagedObjectID] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if sheets.isEmpty {
                     ContentUnavailableView(
@@ -39,72 +36,85 @@ struct WatchHomeView: View {
                         description: Text("iPhone でシートを作成すると同期されます。")
                     )
                 } else {
-                    TabView(selection: $selectedSheetID) {
+                    List {
                         ForEach(sheets, id: \.objectID) { sheet in
-                            WatchLockedSheetGate(sheet: sheet) {
-                                WatchSheetPage(sheet: sheet)
+                            NavigationLink(value: sheet.objectID) {
+                                sheetRow(sheet)
                             }
-                            .tag(Optional(sheet.objectID))
-                        }
-                    }
-                    .tabViewStyle(.verticalPage)
-                    .onChange(of: selectedSheetID) { _, new in
-                        if let new {
-                            selectedSheetIDString = new.uriRepresentation().absoluteString
                         }
                     }
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("シート")
+            .navigationDestination(for: NSManagedObjectID.self) { id in
+                if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
+                    WatchLockedSheetGate(sheet: sheet) {
+                        WatchSheetPage(sheet: sheet)
+                    }
+                }
+            }
         }
-        .task {
-            ensureDefaultSheetIfNeeded()
-            restoreSelectedSheet()
-        }
-        // CloudKit 初回同期完了時に再判定 (= 実機で「同期完了したらシート 0 件 → seed」用)
-        .onChange(of: persistence.initialSyncComplete) { _, _ in
-            ensureDefaultSheetIfNeeded()
-            restoreSelectedSheet()
+        .onChange(of: path) { oldPath, newPath in
+            // 一覧に戻った (= path から外れた) シートを再ロックする。
+            // pop アニメ完了後に行い、その間に開き直していたらスキップ
+            // (表示中のシートを誤ってロックしないため)。
+            let removed = Set(oldPath).subtracting(newPath)
+            for id in removed {
+                guard let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet,
+                      lockManager.hasPassword(for: sheet) else { continue }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    guard !path.contains(id) else { return }
+                    lockManager.lock(sheet)
+                }
+            }
         }
     }
 
-    /// 起動時に前回開いていたシートを復元。無ければ最初のシート。
-    private func restoreSelectedSheet() {
-        guard !sheets.isEmpty else { return }
-        if !selectedSheetIDString.isEmpty,
-           let url = URL(string: selectedSheetIDString),
-           let id = ctx.persistentStoreCoordinator?.managedObjectID(forURIRepresentation: url),
-           sheets.contains(where: { $0.objectID == id }) {
-            selectedSheetID = id
-        } else {
-            selectedSheetID = sheets.first?.objectID
+    /// シート一覧の 1 行 (アイコン + 名前 + 今月合計 + ロック表示)。
+    private func sheetRow(_ sheet: ExpenseSheet) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(sheet.tint.gradient)
+                    .frame(width: 32, height: 32)
+                Image(systemName: sheet.displaySymbol)
+                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(sheet.displayName)
+                    .font(.body)
+                    .lineLimit(1)
+                // ロック中 (パスワードあり & 未解錠) のシートは合計を出さない。
+                Text(lockManager.isUnlocked(sheet) ? monthlyLabel(for: sheet) : "ロック中")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if lockManager.hasPassword(for: sheet) {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 2)
     }
 
-    /// シート / カテゴリが 1 つも無ければデフォルトを作る。
-    /// 実機では CloudKit 初回同期完了を待ってから判定 (= iPhone のデータが
-    /// 降ってくる前に seed して重複作成するのを防ぐ)。
-    /// シミュレータでは CloudKit に繋がらないため即時 seed する。
-    private func ensureDefaultSheetIfNeeded() {
-        #if !targetEnvironment(simulator)
-        // 実機: CloudKit 同期完了を待つ (= iPhone のシートが降りてくる)
-        guard PersistenceController.shared.initialSyncComplete else { return }
-        #endif
-
-        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        req.fetchLimit = 1
-        let existing = (try? ctx.fetch(req)) ?? []
-        guard existing.isEmpty else { return }
-
-        let sheet = ExpenseSheet(context: ctx)
-        sheet.name = "家計簿"
-        sheet.symbol = "yensign.circle.fill"
-        sheet.colorHex = "#5B8DEF"
-        sheet.defaultCurrencyCode = CurrencyCatalog.defaultCode
-        sheet.createdAt = .now
-        PersistenceController.seedDefaultCategories(for: sheet, in: ctx)
-        try? ctx.save()
+    /// 今月の支出合計を短く表示。
+    private func monthlyLabel(for sheet: ExpenseSheet) -> String {
+        let cal = Calendar.current
+        let comps = cal.dateComponents([.year, .month], from: Date())
+        let total = ((sheet.expenses as? Set<Expense>) ?? [])
+            .filter { e in
+                guard let d = e.date, e.kind == .expense else { return false }
+                let c = cal.dateComponents([.year, .month], from: d)
+                return c.year == comps.year && c.month == comps.month
+            }
+            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        return "今月 " + CurrencyCatalog.format(total, code: sheet.resolvedDefaultCurrencyCode)
     }
+
 }
 
 // MARK: - Single Sheet Page (= TabView の 1 ページ)
@@ -202,7 +212,7 @@ private struct WatchSheetPage: View {
             }
         }
         .listStyle(.plain)
-        .containerBackground(sheet.tint.gradient, for: .tabView)
+        .containerBackground(sheet.tint.gradient, for: .navigation)
         .navigationTitle {
             (Text(Image(systemName: sheet.displaySymbol)) + Text(" \(sheet.displayName)"))
                 .foregroundStyle(sheet.tint)

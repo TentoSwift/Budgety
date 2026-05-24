@@ -48,20 +48,37 @@ struct ExpenseCategoryEntity: AppEntity {
 }
 
 struct ExpenseCategoryEntityQuery: EntityQuery {
+    /// AddExpenseIntent で選択中のシートに依存する。シートが選ばれていれば、その
+    /// シートのカテゴリだけを候補にする (シート間で同名カテゴリが重複しないように)。
+    @IntentParameterDependency<AddExpenseIntent>(\.$sheet)
+    var addExpense
+
     @MainActor
     func suggestedEntities() async throws -> [ExpenseCategoryEntity] {
-        let ctx = PersistenceController.shared.container.viewContext
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
         let req = NSFetchRequest<ExpenseCategory>(entityName: "ExpenseCategory")
         req.sortDescriptors = [
             NSSortDescriptor(keyPath: \ExpenseCategory.sortOrder, ascending: true),
             NSSortDescriptor(keyPath: \ExpenseCategory.createdAt, ascending: true)
         ]
         // 支出カテゴリのみを候補として表示 (= AddExpenseIntent は支出専用)
-        req.predicate = NSPredicate(format: "kindRaw == %@ OR kindRaw == nil OR kindRaw == ''",
-                                    TransactionKind.expense.rawValue)
+        var predicates = [NSPredicate(format: "kindRaw == %@ OR kindRaw == nil OR kindRaw == ''",
+                                      TransactionKind.expense.rawValue)]
+        // シートが選択済みなら、そのシートのカテゴリだけに絞る。
+        if let sheetEntity = addExpense?.sheet,
+           let url = URL(string: sheetEntity.id),
+           let oid = pc.container.persistentStoreCoordinator
+            .managedObjectID(forURIRepresentation: url),
+           let sheet = try? ctx.existingObject(with: oid) as? ExpenseSheet {
+            predicates.append(NSPredicate(format: "sheet == %@", sheet))
+        }
+        req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         let cats = (try? ctx.fetch(req)) ?? []
-        // 先頭に「AI 提案」sentinel を追加 (Shortcut 編集時にユーザーが選べる)
-        return [ExpenseCategoryEntity.aiSuggestionEntity()] + cats.map { ExpenseCategoryEntity.from($0) }
+        // 先頭に「AI 提案」、末尾に「未分類」sentinel を追加 (どちらも選択肢として出す)
+        return [ExpenseCategoryEntity.aiSuggestionEntity()]
+            + cats.map { ExpenseCategoryEntity.from($0) }
+            + [ExpenseCategoryEntity.skipEntity()]
     }
 
     @MainActor
@@ -73,6 +90,11 @@ struct ExpenseCategoryEntityQuery: EntityQuery {
             // AI 提案 sentinel: そのまま返す
             if idStr == ExpenseCategoryEntity.aiSuggestionSentinelID {
                 result.append(ExpenseCategoryEntity.aiSuggestionEntity())
+                continue
+            }
+            // 未分類 sentinel: そのまま返す
+            if idStr == AddExpenseIntent.skipCategoryID {
+                result.append(ExpenseCategoryEntity.skipEntity())
                 continue
             }
             guard let url = URL(string: idStr),
@@ -102,6 +124,21 @@ extension ExpenseCategoryEntity {
             symbol: "apple.intelligence",
             colorHex: purple,
             iconData: renderColoredSymbol("apple.intelligence", colorHex: purple)
+        )
+    }
+
+    /// Shortcut のカテゴリ選択肢に並べる「未分類」項目 (= カテゴリなしで保存)。
+    @MainActor
+    static func skipEntity() -> ExpenseCategoryEntity {
+        let gray = "#8E8E93"
+        return ExpenseCategoryEntity(
+            id: AddExpenseIntent.skipCategoryID,
+            name: "未分類",
+            sheetName: "カテゴリなしで保存",
+            kindRaw: "",
+            symbol: "list.bullet",
+            colorHex: gray,
+            iconData: renderColoredSymbol("list.bullet", colorHex: gray)
         )
     }
 

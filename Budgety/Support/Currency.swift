@@ -38,8 +38,33 @@ enum CurrencyCatalog {
         .init(code: "INR", displayName: "インドルピー", symbol: "₹"),
         .init(code: "PHP", displayName: "フィリピンペソ", symbol: "₱"),
         .init(code: "MXN", displayName: "メキシコペソ", symbol: "$"),
-        .init(code: "BRL", displayName: "ブラジルレアル", symbol: "R$")
+        .init(code: "BRL", displayName: "ブラジルレアル", symbol: "R$"),
+        .init(code: "MYR", displayName: "マレーシアリンギット", symbol: "RM"),
+        .init(code: "SEK", displayName: "スウェーデンクローナ", symbol: "kr"),
+        .init(code: "NOK", displayName: "ノルウェークローネ", symbol: "kr"),
+        .init(code: "DKK", displayName: "デンマーククローネ", symbol: "kr"),
+        .init(code: "PLN", displayName: "ポーランドズウォティ", symbol: "zł"),
+        .init(code: "CZK", displayName: "チェココルナ",   symbol: "Kč"),
+        .init(code: "HUF", displayName: "ハンガリーフォリント", symbol: "Ft"),
+        .init(code: "RON", displayName: "ルーマニアレウ", symbol: "lei"),
+        .init(code: "BGN", displayName: "ブルガリアレフ", symbol: "лв"),
+        .init(code: "ISK", displayName: "アイスランドクローナ", symbol: "kr"),
+        .init(code: "TRY", displayName: "トルコリラ",     symbol: "₺"),
+        .init(code: "ILS", displayName: "イスラエルシェケル", symbol: "₪"),
+        .init(code: "ZAR", displayName: "南アフリカランド", symbol: "R")
     ]
+
+    /// ピッカー表示用の並び。システムの地域の通貨を先頭に出す。
+    /// (地域の通貨が対応一覧に無ければ既定の並び = JPY 先頭のまま)
+    static var allOrderedByLocale: [CurrencyOption] {
+        guard let code = Locale.current.currency?.identifier,
+              let idx = all.firstIndex(where: { $0.code == code }) else {
+            return all
+        }
+        var list = all
+        list.insert(list.remove(at: idx), at: 0)
+        return list
+    }
 
     /// 設定で明示選択された既定通貨を保存する UserDefaults キー。
     /// 空文字 / 未設定なら "自動 (システムの地域)" を意味する。
@@ -74,6 +99,15 @@ enum CurrencyCatalog {
 
     static func format(_ amount: Decimal, code: String) -> String {
         amount.formatted(.currency(code: code).locale(Locale.current))
+    }
+
+    /// 通貨の小数桁数 (JPY / KRW = 0、USD / EUR 等 = 2)。
+    /// watchOS の金額入力ステップや表示桁数の判定に使う。
+    static func fractionDigits(for code: String) -> Int {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = code
+        return f.maximumFractionDigits
     }
 
     static func formatPlain(_ amount: Decimal, code: String) -> String {
