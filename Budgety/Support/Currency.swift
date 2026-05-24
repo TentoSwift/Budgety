@@ -38,7 +38,20 @@ enum CurrencyCatalog {
         .init(code: "INR", displayName: "インドルピー", symbol: "₹"),
         .init(code: "PHP", displayName: "フィリピンペソ", symbol: "₱"),
         .init(code: "MXN", displayName: "メキシコペソ", symbol: "$"),
-        .init(code: "BRL", displayName: "ブラジルレアル", symbol: "R$")
+        .init(code: "BRL", displayName: "ブラジルレアル", symbol: "R$"),
+        .init(code: "MYR", displayName: "マレーシアリンギット", symbol: "RM"),
+        .init(code: "SEK", displayName: "スウェーデンクローナ", symbol: "kr"),
+        .init(code: "NOK", displayName: "ノルウェークローネ", symbol: "kr"),
+        .init(code: "DKK", displayName: "デンマーククローネ", symbol: "kr"),
+        .init(code: "PLN", displayName: "ポーランドズウォティ", symbol: "zł"),
+        .init(code: "CZK", displayName: "チェココルナ",   symbol: "Kč"),
+        .init(code: "HUF", displayName: "ハンガリーフォリント", symbol: "Ft"),
+        .init(code: "RON", displayName: "ルーマニアレウ", symbol: "lei"),
+        .init(code: "BGN", displayName: "ブルガリアレフ", symbol: "лв"),
+        .init(code: "ISK", displayName: "アイスランドクローナ", symbol: "kr"),
+        .init(code: "TRY", displayName: "トルコリラ",     symbol: "₺"),
+        .init(code: "ILS", displayName: "イスラエルシェケル", symbol: "₪"),
+        .init(code: "ZAR", displayName: "南アフリカランド", symbol: "R")
     ]
 
     /// 設定で明示選択された既定通貨を保存する UserDefaults キー。
