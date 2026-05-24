@@ -669,7 +669,10 @@ struct SheetDetailView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory == nil ? record.tint : Color.platformTertiarySystemBackground)
+                            Capsule()
+                                .fill(selectedCategory == nil ? record.tint : Color.platformTertiarySystemBackground)
+                                // 選択中の塗りに少し明るさを足してフィルタが映えるようにする。
+                                .brightness(selectedCategory == nil ? 0.2 : 0)
                         )
                         // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
                         .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
@@ -688,7 +691,10 @@ struct SheetDetailView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformTertiarySystemBackground)
+                            Capsule()
+                                .fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformTertiarySystemBackground)
+                                // 選択中の塗りに少し明るさを足してフィルタが映えるようにする。
+                                .brightness(selectedCategory?.objectID == cat.objectID ? 0.2 : 0)
                         )
                         // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
                         .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
