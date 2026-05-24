@@ -219,12 +219,22 @@ struct SheetListView: View {
             .onChange(of: sheets.count) { _, _ in
                 restoreLastOpenedSheetIfNeeded()
             }
-            .onChange(of: path) { _, newPath in
+            .onChange(of: path) { oldPath, newPath in
                 // 末尾のシート URI を覚えておき、次回起動時に復元する
                 if let last = newPath.last {
                     lastOpenedSheetURI = last.uriRepresentation().absoluteString
                 } else {
                     lastOpenedSheetURI = ""
+                }
+                // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
+                // 精算/詳細などの子画面 push は label ベースで path を変えないため、
+                // ここは「シートそのものを離脱した時」だけ発火する。
+                let removed = Set(oldPath).subtracting(newPath)
+                for id in removed {
+                    if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
+                       lockManager.hasPassword(for: sheet) {
+                        lockManager.lock(sheet)
+                    }
                 }
             }
         }
@@ -944,7 +954,9 @@ private struct SheetRowView: View {
 
 /// ロック対象シートの開封ゲート。未解錠なら SheetLockView を出し、
 /// 解錠後/最初からロック無しなら子コンテンツ (SheetDetailView) を表示。
-/// シートから離脱 (= NavigationStack で pop) すると再ロックする。
+/// シートから離脱 (= 一覧に戻る) した時の再ロックは SheetListView 側で
+/// `path` の変化を見て行う（ここで `.onDisappear` を使うと、精算/詳細など
+/// 子画面を push した時にも発火して即再ロックされてしまうため）。
 private struct LockedSheetGate<Content: View>: View {
     @ObservedObject var record: ExpenseSheet
     let content: () -> Content
@@ -962,12 +974,6 @@ private struct LockedSheetGate<Content: View>: View {
                     onUnlock: { /* state 更新で自動で content に切替 */ },
                     onCancel: { dismiss() }
                 )
-            }
-        }
-        .onDisappear {
-            // シート画面から離れたら次回入る時にパスワード再要求
-            if lockManager.hasPassword(for: record) {
-                lockManager.lock(record)
             }
         }
     }
