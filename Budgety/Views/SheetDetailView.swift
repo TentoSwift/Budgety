@@ -681,7 +681,8 @@ struct SheetDetailView: View {
                         .background(
                             Capsule().fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformTertiarySystemBackground)
                         )
-                        .foregroundStyle(.primary)
+                        // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
+                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
                     }
                     .buttonStyle(.plain)
                 }
