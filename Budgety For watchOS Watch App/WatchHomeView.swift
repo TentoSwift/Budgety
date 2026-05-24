@@ -332,7 +332,8 @@ private struct WatchSheetPage: View {
                 .font(.body.weight(.semibold))
                 .frame(width: 32, height: 32)
                 .background(
-                    Circle().fill(Color(hex: e.category?.colorHex ?? "#FFFFFF") ?? .white)
+                    // 未分類は灰色。カテゴリ背景はグラデーションに。
+                    Circle().fill((Color(hex: e.category?.colorHex ?? "#8E8E93") ?? .gray).gradient)
                 )
             Text(displayTitle(e))
                 .font(.caption2)
@@ -343,6 +344,7 @@ private struct WatchSheetPage: View {
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.white)
         }
+        .padding(.horizontal, 8)
     }
 
     private func displayTitle(_ e: Expense) -> String {
