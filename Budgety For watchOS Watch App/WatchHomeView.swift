@@ -85,7 +85,8 @@ struct WatchHomeView: View {
                 Text(sheet.displayName)
                     .font(.body)
                     .lineLimit(1)
-                Text(monthlyLabel(for: sheet))
+                // ロック中 (パスワードあり & 未解錠) のシートは合計を出さない。
+                Text(lockManager.isUnlocked(sheet) ? monthlyLabel(for: sheet) : "ロック中")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
