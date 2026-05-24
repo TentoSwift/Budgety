@@ -673,7 +673,7 @@ struct SheetDetailView: View {
                                 // 選択中はシート色のグラデーションで塗る。
                                 .fill(selectedCategory == nil
                                       ? AnyShapeStyle(record.tint.gradient)
-                                      : AnyShapeStyle(Color.platformTertiarySystemBackground))
+                                      : AnyShapeStyle(Color.platformSecondarySystemFill))
                         )
                         // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
                         .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
@@ -696,7 +696,7 @@ struct SheetDetailView: View {
                                 // 選択中はカテゴリ色のグラデーションで塗る。
                                 .fill(selectedCategory?.objectID == cat.objectID
                                       ? AnyShapeStyle(cat.tint.gradient)
-                                      : AnyShapeStyle(Color.platformTertiarySystemBackground))
+                                      : AnyShapeStyle(Color.platformSecondarySystemFill))
                         )
                         // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
                         .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
