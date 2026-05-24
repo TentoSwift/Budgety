@@ -598,10 +598,13 @@ struct SheetDetailView: View {
     /// CKShare 未ロード時は PP の存在で判定。
     private var hasAcceptedOtherMembers: Bool {
         if let share = ShareCoordinator.shared.existingShare(for: record) {
+            // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
             return share.participants.contains { p in
-                guard p.acceptanceStatus == .accepted, p.role != .owner else { return false }
+                guard p.acceptanceStatus == .accepted else { return false }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
-                return !rn.isEmpty && !UserProfileStore.isSelfPlaceholderRecordName(rn)
+                guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
+                return !selfIDs.contains(rn)
             }
         }
         guard let profiles = record.participantProfiles as? Set<ParticipantProfile> else { return false }
@@ -1457,10 +1460,13 @@ private struct ExpenseRowView: View {
     private var isSoloSheet: Bool {
         guard let sheet = expense.sheet else { return true }
         if let share = ShareCoordinator.shared.existingShare(for: sheet) {
+            // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
             let hasAcceptedOthers = share.participants.contains { p in
-                guard p.acceptanceStatus == .accepted, p.role != .owner else { return false }
+                guard p.acceptanceStatus == .accepted else { return false }
                 let rn = p.userIdentity.userRecordID?.recordName ?? ""
-                return !rn.isEmpty && !UserProfileStore.isSelfPlaceholderRecordName(rn)
+                guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
+                return !selfIDs.contains(rn)
             }
             return !hasAcceptedOthers
         }
