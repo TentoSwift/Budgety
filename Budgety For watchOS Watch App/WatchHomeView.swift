@@ -25,6 +25,9 @@ struct WatchHomeView: View {
     private var sheets: FetchedResults<ExpenseSheet>
 
     @State private var path: [NSManagedObjectID] = []
+    /// 前回開いていたシート (= 次回起動時にそこへ自動遷移)。
+    @AppStorage("watchLastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
+    @State private var didRestorePath = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -54,7 +57,11 @@ struct WatchHomeView: View {
                 }
             }
         }
+        .onAppear { restoreLastOpenedSheetIfNeeded() }
+        .onChange(of: sheets.count) { _, _ in restoreLastOpenedSheetIfNeeded() }
         .onChange(of: path) { oldPath, newPath in
+            // 末尾のシート URI を覚えておき、次回起動時に復元する。
+            lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
             // 一覧に戻った (= path から外れた) シートを再ロックする。
             // pop アニメ完了後に行い、その間に開き直していたらスキップ
             // (表示中のシートを誤ってロックしないため)。
@@ -68,6 +75,24 @@ struct WatchHomeView: View {
                 }
             }
         }
+    }
+
+    /// 前回開いていたシートへ起動時に 1 度だけ自動遷移する (iOS と同じ挙動)。
+    /// シートがまだ同期されていなければ sheets.count の変化で再試行する。
+    private func restoreLastOpenedSheetIfNeeded() {
+        guard !didRestorePath else { return }
+        guard !lastOpenedSheetURI.isEmpty, sheets.first != nil else { return }
+        guard let coord = ctx.persistentStoreCoordinator,
+              let url = URL(string: lastOpenedSheetURI),
+              let objectID = coord.managedObjectID(forURIRepresentation: url),
+              let _ = try? ctx.existingObject(with: objectID) as? ExpenseSheet
+        else {
+            // URI 不正 / 削除済 → 以後再試行しない
+            didRestorePath = true
+            return
+        }
+        path = [objectID]
+        didRestorePath = true
     }
 
     /// シート一覧の 1 行 (アイコン + 名前 + 今月合計 + ロック表示)。
