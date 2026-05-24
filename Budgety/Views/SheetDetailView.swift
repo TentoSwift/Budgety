@@ -1376,10 +1376,12 @@ private struct ExpenseRowContainer: View {
     }
 
     var body: some View {
-        Button(action: onEdit) {
+        // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
+        NavigationLink {
+            ExpenseDetailView(expense: expense)
+        } label: {
             ExpenseRowView(expense: expense)
         }
-        .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // role: .destructive にすると確認前に行削除アニメが走るので付けない。
             // 見た目の赤は .tint(.red) で維持。
