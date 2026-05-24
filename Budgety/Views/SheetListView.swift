@@ -121,7 +121,7 @@ struct SheetListView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Budgety")
+            .navigationTitle("シート")
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet {
                     LockedSheetGate(record: sheet) {

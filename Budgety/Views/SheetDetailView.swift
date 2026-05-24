@@ -288,24 +288,29 @@ struct SheetDetailView: View {
                 }
                 .tint(record.tint)
             }
+            // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
+            if lockManager.hasPassword(for: record) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Haptics.warning()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "lock.open.fill")
+                    }
+                    .tint(record.tint)
+                    .accessibilityLabel("今すぐロック")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingShare = true
+                } label: {
+                    Image(systemName: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
+                }
+                .accessibilityLabel(record.isOwnedByCurrentUser ? "シートを共有" : "共有メンバー")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        showingShare = true
-                    } label: {
-                        Label(record.isOwnedByCurrentUser ? "シートを共有" : "共有メンバー",
-                              systemImage: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
-                    }
-                    // パスワード設定済みなら「今すぐロック」(= 一覧へ戻り再ロック)。
-                    if lockManager.hasPassword(for: record) {
-                        Button {
-                            Haptics.warning()
-                            dismiss()
-                        } label: {
-                            Label("今すぐロック", systemImage: "lock.fill")
-                        }
-                    }
-                    Divider()
                     NavigationLink {
                         SettlementView(record: record)
                             .sheetLockCover(record)
