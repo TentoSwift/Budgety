@@ -89,7 +89,9 @@ struct SheetRowInteraction: UIViewRepresentable {
         private func makePreviewController() -> UIViewController? {
             guard let preview else { return nil }
             let host = UIHostingController(rootView: preview)
-            host.view.backgroundColor = .clear
+            // ロック表示など中身が小さいプレビューでも透けないよう、不透明な
+            // システム背景を敷く（システムが角丸にクリップするのでカード状になる）。
+            host.view.backgroundColor = .systemBackground
             let targetWidth = bounds.width > 1 ? bounds.width : 320
             var size = host.sizeThatFits(
                 in: CGSize(width: targetWidth, height: .greatestFiniteMagnitude)
