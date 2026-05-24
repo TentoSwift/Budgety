@@ -27,6 +27,8 @@ final class PublicProfileSync: ObservableObject {
     static let recordType = "UserProfile"
     private static let fieldDisplayName = "displayName"
     private static let fieldPhoto = "profilePhoto"
+    /// 自分が作成したシート数 (Int64)。本番スキーマにも deploy が必要。
+    private static let fieldSheetCount = "sheetCount"
     // updatedAt は CKRecord.modificationDate を使うので独自フィールド廃止
 
     private let containerID = "iCloud.com.tento.budgety"
@@ -184,9 +186,10 @@ final class PublicProfileSync: ObservableObject {
 
     // MARK: - Upload own
 
-    /// 自分の URN + プロフィール (displayName / photoData) を Public DB にupsert する。
+    /// 自分の URN + プロフィール (displayName / photoData / sheetCount) を Public DB にupsert する。
     /// 色は保存しない (表示時に名前から決定的に生成する方針)。
-    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?) async {
+    /// `sheetCount` は nil なら触れない (= 既存値を保持)。
+    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?, sheetCount: Int? = nil) async {
         let trimmedURN = urn.trimmingCharacters(in: .whitespaces)
         guard !trimmedURN.isEmpty else { return }
         let recordID = profileRecordID(forURN: trimmedURN)
@@ -201,6 +204,9 @@ final class PublicProfileSync: ObservableObject {
                 record = CKRecord(recordType: Self.recordType, recordID: recordID)
             }
             record[Self.fieldDisplayName] = displayName as CKRecordValue
+            if let sheetCount {
+                record[Self.fieldSheetCount] = NSNumber(value: sheetCount)
+            }
 
             if let data = photoData, !data.isEmpty {
                 let tmpURL = FileManager.default.temporaryDirectory
@@ -211,7 +217,17 @@ final class PublicProfileSync: ObservableObject {
                 record[Self.fieldPhoto] = nil
             }
 
-            _ = try await publicDB.save(record)
+            do {
+                _ = try await publicDB.save(record)
+            } catch let err as CKError where sheetCount != nil &&
+                (err.code == .invalidArguments || err.code == .serverRejectedRequest) {
+                // sheetCount フィールドが本番スキーマに未 deploy の可能性。
+                // フィールドを外して再試行し、名前/写真の同期は維持する
+                // (件数は schema を Production へ deploy 後に保存される)。
+                Self.log.error("upload with sheetCount rejected (code \(err.code.rawValue)); retrying without it")
+                record[Self.fieldSheetCount] = nil
+                _ = try await publicDB.save(record)
+            }
 
             let now = Date()
             cache[trimmedURN] = CachedProfile(
@@ -228,9 +244,9 @@ final class PublicProfileSync: ObservableObject {
         }
     }
 
-    /// 旧 API 互換 (colorHex 引数を受けても無視) — 既存呼び出しのため残置。
-    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?, colorHex: String?) async {
-        await uploadOwnProfile(urn: urn, displayName: displayName, photoData: photoData)
+    /// 旧 API 互換 (colorHex 引数は無視) — 既存呼び出しのため残置。sheetCount は任意で受ける。
+    func uploadOwnProfile(urn: String, displayName: String, photoData: Data?, colorHex: String?, sheetCount: Int? = nil) async {
+        await uploadOwnProfile(urn: urn, displayName: displayName, photoData: photoData, sheetCount: sheetCount)
     }
 
     // MARK: - Convenience

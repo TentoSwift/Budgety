@@ -218,20 +218,11 @@ struct ProfileEditView: View {
         let name = draftName.trimmingCharacters(in: .whitespaces)
         saveError = nil
 
-        // ローカル更新 (即時、色は保存しない)
+        // ローカル更新 + Public DB upload (updateProfile が背景で upload。
+        // シート数も含めて publish される)。
         profile.updateProfile(displayName: name, photoData: draftPhoto, avatarBgColorHex: nil)
         profile.applyDeviceLocalProfileEdit(in: viewContext)
 
-        // CloudKit Public DB upload はバックグラウンドで実行 (UI を block しない)
-        if let urn = profile.userRecordName, !urn.isEmpty {
-            Task.detached {
-                await PublicProfileSync.shared.uploadOwnProfile(
-                    urn: urn,
-                    displayName: name,
-                    photoData: draftPhoto
-                )
-            }
-        }
         Haptics.success()
         dismiss()
     }
