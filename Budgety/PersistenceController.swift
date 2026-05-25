@@ -677,6 +677,28 @@ final class PersistenceController: ObservableObject {
         CKContainer(identifier: Self.cloudKitContainerIdentifier)
     }
 
+    #if DEBUG
+    /// CloudKit Development スキーマをモデル定義から一括生成する (Production デプロイ準備用)。
+    ///
+    /// NSPersistentCloudKitContainer は通常レコード同期時にフィールドを遅延生成するため、
+    /// まだ一度も同期されていない新規属性 (例: `settledBeneficiaryProfileIDs`) は Development
+    /// スキーマに現れず、CloudKit Console の Deploy Schema Changes にも出てこない。
+    /// このメソッドを一度実行すると、モデルの全 Record Type / フィールド / インデックスが
+    /// Development に作られ、その後 Console から Production へデプロイできるようになる。
+    ///
+    /// 実行方法: iCloud サインイン済みの DEBUG ビルドで環境変数 `EXPENSO_INIT_CK_SCHEMA=1`
+    /// を付けて一度だけ起動する。スキーマ生成にはネットワークと数十秒かかることがある。
+    /// 注意: DEBUG 限定。Production ビルドには絶対に含めない。
+    func initializeCloudKitSchemaForDeploy() {
+        do {
+            try container.initializeCloudKitSchema(options: [])
+            print("✅ initializeCloudKitSchema: Development スキーマを生成しました")
+        } catch {
+            print("⚠️ initializeCloudKitSchema 失敗: \(error)")
+        }
+    }
+    #endif
+
     /// バックグラウンド context で書き込みを行うヘルパー。クロージャ内では渡されたコンテキスト上で
     /// Core Data オブジェクトを生成・操作し、終了時に save する。
     /// `viewContext.automaticallyMergesChangesFromParent` が立っているため、保存後に viewContext に
