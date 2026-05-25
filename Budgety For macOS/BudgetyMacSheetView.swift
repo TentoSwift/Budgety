@@ -608,8 +608,10 @@ struct BudgetyMacSheetView: View {
                 Text(e.categoryDisplayName).font(.body)
                 // サブタイトル: 入力タイトル · 支払者
                 // (支払者アバターはアイコン右下に重ねるのでここでは出さない)
+                // 参加者が自分だけ (他メンバー未参加) のシートでは支払者は常に
+                // 自分なので冗長。表示しない。
                 let title = e.displayTitle
-                let payer = e.displayPaidBy
+                let payer = hasAcceptedOtherParticipants ? e.displayPaidBy : ""
                 if !title.isEmpty || !payer.isEmpty {
                     HStack(spacing: 4) {
                         if !title.isEmpty {
