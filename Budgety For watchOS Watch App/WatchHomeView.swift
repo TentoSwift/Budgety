@@ -11,6 +11,9 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WatchHomeView: View {
     @Environment(\.managedObjectContext) private var ctx
@@ -49,6 +52,11 @@ struct WatchHomeView: View {
                 }
             }
             .navigationTitle("シート")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WatchProfileAvatar()
+                }
+            }
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
                     WatchLockedSheetGate(sheet: sheet) {
@@ -380,5 +388,42 @@ private struct WatchSheetPage: View {
 
     private func formatYen(_ d: Decimal) -> String {
         CurrencyCatalog.format(d, code: sheet.resolvedDefaultCurrencyCode)
+    }
+}
+
+// MARK: - Profile Avatar
+
+/// 自分のプロフィールアバター。写真があれば写真、無ければ配色 + 頭文字。
+/// 写真は Public DB から取得した photoData を使う (起動時に refreshOwnPublicProfile)。
+private struct WatchProfileAvatar: View {
+    @ObservedObject private var profile = UserProfileStore.shared
+    var size: CGFloat = 28
+
+    var body: some View {
+        let name = profile.resolvedDisplayName
+        let color = Color(hex: profile.avatarBgColorHex ?? "#5B8DEF") ?? .blue
+        #if canImport(UIKit)
+        if let data = profile.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            initialAvatar(name: name, color: color)
+        }
+        #else
+        initialAvatar(name: name, color: color)
+        #endif
+    }
+
+    private func initialAvatar(name: String, color: Color) -> some View {
+        ZStack {
+            Circle().fill(color.gradient)
+            Text(String(name.prefix(1)))
+                .font(.system(size: size * 0.45, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
     }
 }
