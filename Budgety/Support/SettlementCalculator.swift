@@ -226,6 +226,15 @@ enum SettlementCalculator {
             }
         }
 
+        // アーカイブ済み (削除された) バーチャルメンバーの正規化 ID 集合。
+        // 残高が 0 (精算済み) のときだけ残高表示から除外するために使う。
+        let archivedMemberIDs: Set<String> = Set(
+            ((sheet.participantProfiles as? Set<ParticipantProfile>) ?? [])
+                .filter { $0.archived }
+                .compactMap { $0.recordName }
+                .map(normalize)
+        )
+
         var balances: [String: Decimal] = [:]
         for m in memberOrder { balances[m] = 0 }
 
@@ -390,8 +399,12 @@ enum SettlementCalculator {
             balances[to,   default: 0] -= rounded
         }
 
-        let memberBalances: [MemberBalance] = memberOrder.map { id in
-            MemberBalance(profileID: id, amount: balances[id] ?? 0)
+        let memberBalances: [MemberBalance] = memberOrder.compactMap { id in
+            let amount = balances[id] ?? 0
+            // アーカイブ済みメンバーは精算済み (残高 0) なら残高に表示しない。
+            // 残高が残っている場合は表示し続ける (まだ精算が必要なため)。
+            if amount == 0, archivedMemberIDs.contains(id) { return nil }
+            return MemberBalance(profileID: id, amount: amount)
         }
 
         let nonZero = memberBalances.filter { !$0.isSettled }
