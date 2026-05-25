@@ -25,8 +25,8 @@ struct ExpenseDetailView: View {
             detailsSection
             if showsParticipants {
                 participantsSection
-                settlementSection
             }
+            settlementSection
             photoSection
             if let note = expense.note,
                !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
