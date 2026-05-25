@@ -45,6 +45,7 @@ struct SettlementView: View {
                         if result.balances.count > 1 {
                             balancesSection(result: result)
                             transfersSection(result: result)
+                            perExpenseSettleSection
                             settlementHistorySection
                         } else {
                             notSharedSection
@@ -147,6 +148,87 @@ struct SettlementView: View {
     @MainActor
     private func recompute() {
         result = SettlementCalculator.calculate(for: record, in: nil)
+    }
+
+    // MARK: - 支出ごとの精算 (相手ごと)
+
+    /// 割り勘した支出 (= 支払者以外の受益者がいる支出) を新しい順で。
+    private var splitExpenses: [Expense] {
+        ((record.expenses as? Set<Expense>) ?? [])
+            .filter { e in
+                guard e.kind == .expense else { return false }
+                let payer = e.payerProfileID ?? ""
+                return !e.resolvedBeneficiaryIDs().filter { $0 != payer }.isEmpty
+            }
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+    }
+
+    /// 支出ごとに、割り勘の相手単位で「精算済み」を切り替えるセクション。
+    @ViewBuilder
+    private var perExpenseSettleSection: some View {
+        let expenses = splitExpenses
+        if !expenses.isEmpty {
+            card(title: "支出ごとの精算",
+                 footer: "返してもらった相手をタップして精算済みに。精算済みのぶんは上の残高・送金プランから外れます。") {
+                VStack(spacing: 2) {
+                    ForEach(expenses, id: \.objectID) { e in
+                        expenseSettleDisclosure(e)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func expenseSettleDisclosure(_ e: Expense) -> some View {
+        let allIDs = e.resolvedBeneficiaryIDs()
+        let share = e.amountDecimal / Decimal(max(allIDs.count, 1))
+        let code = e.resolvedCurrencyCode
+        let payerID = e.payerProfileID ?? ""
+        let ids = allIDs.filter { $0 != payerID }
+        let settledCount = ids.filter { e.isBeneficiarySettled($0) }.count
+        DisclosureGroup {
+            ForEach(ids, id: \.self) { id in
+                expenseSettleRow(e: e, id: id, share: share, code: code)
+            }
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
+                        .foregroundStyle(.primary)
+                    Text(e.formattedSignedAmount)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(settledCount)/\(ids.count) 精算")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? .green : .secondary)
+            }
+        }
+    }
+
+    private func expenseSettleRow(e: Expense, id: String, share: Decimal, code: String) -> some View {
+        let info = record.memberDisplayInfo(for: id)
+        let settled = e.isBeneficiarySettled(id)
+        return Button {
+            e.setBeneficiarySettled(!settled, for: id)
+            PersistenceController.shared.save()
+            Haptics.success()
+            recompute()
+        } label: {
+            HStack(spacing: 10) {
+                AvatarView(photoData: info.photoData, displayName: info.name,
+                           colorHex: info.colorHex, size: 24)
+                Text(info.name).foregroundStyle(.primary)
+                Spacer()
+                Text(CurrencyCatalog.format(share, code: code))
+                    .font(.caption).foregroundStyle(.secondary)
+                Image(systemName: settled ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(settled ? .green : .secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 3)
     }
 
     private var emptySection: some View {
