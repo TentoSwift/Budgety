@@ -36,6 +36,8 @@ struct MacAddExpenseView: View {
     @State private var showAddMemberPrompt = false
     @State private var newMemberName = ""
     @State private var showMemberPaywall = false
+    /// 名前変更対象の recordName。nil = 新規追加。
+    @State private var editingMemberID: String?
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
@@ -270,16 +272,26 @@ struct MacAddExpenseView: View {
         .frame(width: 560, height: 720)
         .tint(sheet.tint)
         .sheet(isPresented: $showMemberPaywall) { PaywallView() }
-        .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
+        .alert(editingMemberID == nil ? "メンバーを追加" : "名前を変更",
+               isPresented: $showAddMemberPrompt) {
             TextField("名前", text: $newMemberName)
-            Button("追加") {
-                if let id = sheet.addVirtualMember(name: newMemberName) {
+            Button("保存") {
+                let trimmed = newMemberName.trimmingCharacters(in: .whitespaces)
+                if let rn = editingMemberID {
+                    if !trimmed.isEmpty,
+                       let pp = sheet.virtualMemberProfiles.first(where: { $0.recordName == rn }) {
+                        pp.displayName = trimmed
+                        pp.updatedAt = .now
+                        PersistenceController.shared.save()
+                    }
+                } else if let id = sheet.addVirtualMember(name: trimmed) {
                     splitEnabled = true
                     selectedBeneficiaries.insert(id)
                 }
                 newMemberName = ""
+                editingMemberID = nil
             }
-            Button("キャンセル", role: .cancel) { newMemberName = "" }
+            Button("キャンセル", role: .cancel) { newMemberName = ""; editingMemberID = nil }
         } message: {
             Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
         }
@@ -470,6 +482,19 @@ struct MacAddExpenseView: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if UserProfileStore.isVirtualRecordName(id) {
+                Button("名前を変更") {
+                    editingMemberID = id
+                    newMemberName = info.name
+                    showAddMemberPrompt = true
+                }
+                Button("削除", role: .destructive) {
+                    selectedBeneficiaries.remove(id)
+                    sheet.deleteVirtualMember(profileID: id)
+                }
+            }
+        }
     }
 
     private func selectAllBeneficiaries() {
