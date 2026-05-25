@@ -7,10 +7,15 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WatchExpenseDetailView: View {
     @ObservedObject var expense: Expense
     let sheet: ExpenseSheet
+    /// 他メンバーのプロフィール写真が Public DB からロードされたら再描画する。
+    @ObservedObject private var pub = PublicProfileSync.shared
 
     @Environment(\.managedObjectContext) private var ctx
     @Environment(\.dismiss) private var dismiss
@@ -45,7 +50,7 @@ struct WatchExpenseDetailView: View {
                 .foregroundStyle(sheet.tint)
         }
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { loadSplit() }
+        .onAppear { loadSplit(); prefetchMemberPhotos() }
         .sheet(isPresented: $showingSplitPicker, onDismiss: applySplit) {
             WatchSplitPicker(
                 sheet: sheet,
@@ -86,11 +91,11 @@ struct WatchExpenseDetailView: View {
                 .foregroundStyle(.white)
 
                 // 支払者
+                let payerInfo = sheet.memberDisplayInfo(for: payer)
                 HStack(spacing: 6) {
                     Text("支払").font(.caption2).foregroundStyle(.white.opacity(0.6))
-                    avatar(name: sheet.memberDisplayInfo(for: payer).name,
-                           colorHex: sheet.memberDisplayInfo(for: payer).colorHex)
-                    Text(sheet.memberDisplayInfo(for: payer).name)
+                    avatar(payerInfo)
+                    Text(payerInfo.name)
                         .font(.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1)
                 }
 
@@ -100,7 +105,7 @@ struct WatchExpenseDetailView: View {
                     ForEach(beneficiaries, id: \.self) { id in
                         let info = sheet.memberDisplayInfo(for: id)
                         HStack(spacing: 6) {
-                            avatar(name: info.name, colorHex: info.colorHex)
+                            avatar(info)
                             Text(info.name).font(.caption2).foregroundStyle(.white).lineLimit(1)
                             Spacer()
                             Text(shareText)
@@ -119,10 +124,27 @@ struct WatchExpenseDetailView: View {
         }
     }
 
-    /// 配色 + 頭文字の簡易アバター (watchOS には AvatarView / UIImage を持ち込まない)。
-    private func avatar(name: String, colorHex: String) -> some View {
-        let color = Color(hex: colorHex) ?? .blue
-        return Circle()
+    /// メンバーアバター。写真があれば写真、無ければ配色 + 頭文字。
+    @ViewBuilder
+    private func avatar(_ info: (name: String, colorHex: String, photoData: Data?)) -> some View {
+        let color = Color(hex: info.colorHex) ?? .blue
+        #if canImport(UIKit)
+        if let data = info.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 20, height: 20)
+                .clipShape(Circle())
+        } else {
+            initialAvatar(name: info.name, color: color)
+        }
+        #else
+        initialAvatar(name: info.name, color: color)
+        #endif
+    }
+
+    private func initialAvatar(name: String, color: Color) -> some View {
+        Circle()
             .fill(color.gradient)
             .frame(width: 20, height: 20)
             .overlay(
@@ -130,6 +152,21 @@ struct WatchExpenseDetailView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
             )
+    }
+
+    /// 支払者・受益者のプロフィール写真を Public DB からまとめて取得する。
+    /// (email:/phone:/virtual: は Public DB のキーにならないので除外)
+    private func prefetchMemberPhotos() {
+        var ids = Set(expense.resolvedBeneficiaryIDs())
+        if let p = expense.payerProfileID, !p.isEmpty { ids.insert(p) }
+        let urns = ids.filter {
+            !$0.isEmpty
+            && !$0.hasPrefix("email:")
+            && !$0.hasPrefix("phone:")
+            && !UserProfileStore.isVirtualRecordName($0)
+        }
+        guard !urns.isEmpty else { return }
+        Task { await PublicProfileSync.shared.fetchProfiles(forURNs: Array(urns)) }
     }
 
     /// 現在の expense から割り勘 state を 1 度だけ読み込む。

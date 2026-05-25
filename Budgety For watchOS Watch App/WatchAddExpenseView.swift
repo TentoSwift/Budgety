@@ -10,6 +10,9 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WatchAddExpenseView: View {
     let sheet: ExpenseSheet
@@ -359,6 +362,8 @@ struct WatchSplitPicker: View {
     @Binding var selected: Set<String>
 
     @Environment(\.dismiss) private var dismiss
+    /// 他メンバーのプロフィール写真がロードされたら再描画する。
+    @ObservedObject private var pub = PublicProfileSync.shared
 
     private var members: [String] { sheet.acceptedMemberProfileIDs() }
 
@@ -389,6 +394,7 @@ struct WatchSplitPicker: View {
                     Button("完了") { dismiss() }
                 }
             }
+            .onAppear { prefetchMemberPhotos() }
             .onChange(of: splitEnabled) { _, on in
                 // 初めてオンにした時は全員を選択 (= 全員均等)。
                 if on && selected.isEmpty {
@@ -407,7 +413,7 @@ struct WatchSplitPicker: View {
             WKInterfaceDevice.current().play(.click)
         } label: {
             HStack(spacing: 10) {
-                avatar(name: info.name, colorHex: info.colorHex)
+                avatar(info)
                 Text(info.name)
                     .font(.body)
                     .lineLimit(1)
@@ -420,10 +426,27 @@ struct WatchSplitPicker: View {
         .buttonStyle(.plain)
     }
 
-    /// 写真は使わず、配色 + 頭文字の簡易アバター (watchOS には AvatarView / UIImage を持ち込まない)。
-    private func avatar(name: String, colorHex: String) -> some View {
-        let color = Color(hex: colorHex) ?? .blue
-        return Circle()
+    /// メンバーアバター。写真があれば写真、無ければ配色 + 頭文字。
+    @ViewBuilder
+    private func avatar(_ info: (name: String, colorHex: String, photoData: Data?)) -> some View {
+        let color = Color(hex: info.colorHex) ?? .blue
+        #if canImport(UIKit)
+        if let data = info.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+        } else {
+            initialAvatar(name: info.name, color: color)
+        }
+        #else
+        initialAvatar(name: info.name, color: color)
+        #endif
+    }
+
+    private func initialAvatar(name: String, color: Color) -> some View {
+        Circle()
             .fill(color.gradient)
             .frame(width: 28, height: 28)
             .overlay(
@@ -431,5 +454,17 @@ struct WatchSplitPicker: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
             )
+    }
+
+    /// メンバーのプロフィール写真を Public DB からまとめて取得する。
+    private func prefetchMemberPhotos() {
+        let urns = members.filter {
+            !$0.isEmpty
+            && !$0.hasPrefix("email:")
+            && !$0.hasPrefix("phone:")
+            && !UserProfileStore.isVirtualRecordName($0)
+        }
+        guard !urns.isEmpty else { return }
+        Task { await PublicProfileSync.shared.fetchProfiles(forURNs: urns) }
     }
 }

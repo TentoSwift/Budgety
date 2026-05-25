@@ -23,6 +23,9 @@ struct BudgetyWatchApp: App {
                     // 支出追加時に payerProfileID / payerMemberID として書き込むため。
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     _ = UserProfileStore.shared.ensureSelfMemberID()
+                    // 自分のプロフィール (名前・写真) を Public DB から取得。
+                    // 写真はディスク保存でデバイスローカルのため、watch では取得が必要。
+                    await UserProfileStore.shared.refreshOwnPublicProfile()
                 }
         }
     }
