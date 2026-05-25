@@ -108,6 +108,9 @@ struct ExpensoApp: App {
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
                     SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
+                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)
+                    await SplitNotificationManager.shared.requestAuthorizationIfNeeded()
+                    SplitNotificationManager.shared.processChanges(in: ctx)
                 }
                 // CloudKit が新しいデータを取り込んだら ParticipantProfile から再 hydrate。
                 // 通知は viewContext へのマージ完了より早く飛ぶことがあるため、
@@ -125,6 +128,8 @@ struct ExpensoApp: App {
                         // 旧 canonical (email:...) → URN 移行も remote change で再実行
                         // (CKShare メタデータが遅延ロードされた後に走らせる)
                         UserProfileStore.shared.migrateLegacyPayerProfileIDs(in: ctx)
+                        // 他メンバーが追加した「自分への割り勘」を検出して通知
+                        SplitNotificationManager.shared.processChanges(in: ctx)
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
