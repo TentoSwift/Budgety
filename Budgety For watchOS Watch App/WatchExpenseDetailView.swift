@@ -16,12 +16,22 @@ struct WatchExpenseDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirm: Bool = false
 
+    // 割り勘 (受益者) の表示・編集用。
+    @State private var splitEnabled: Bool = false
+    @State private var selectedBeneficiaries: Set<String> = []
+    @State private var showingSplitPicker: Bool = false
+    @State private var didLoadSplit: Bool = false
+
+    /// 共有シート (他メンバーあり) か。割り勘 UI はこの時だけ出す。
+    private var isShared: Bool { sheet.hasAcceptedOtherMembers() }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
                 categoryBadge
                 amountText
                 metaRow
+                splitSection
                 if let note = expense.note, !note.isEmpty {
                     noteCard(note)
                 }
@@ -35,11 +45,125 @@ struct WatchExpenseDetailView: View {
                 .foregroundStyle(sheet.tint)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { loadSplit() }
+        .sheet(isPresented: $showingSplitPicker, onDismiss: applySplit) {
+            WatchSplitPicker(
+                sheet: sheet,
+                splitEnabled: $splitEnabled,
+                selected: $selectedBeneficiaries
+            )
+        }
         .alert("削除しますか?", isPresented: $showDeleteConfirm) {
             Button("削除", role: .destructive) { delete() }
             Button("キャンセル", role: .cancel) {}
         } message: {
             Text("この支出を削除します。元に戻せません。")
+        }
+    }
+
+    // MARK: - 割り勘 (受益者) 表示・編集
+
+    @ViewBuilder
+    private var splitSection: some View {
+        if isShared {
+            let payer = expense.payerProfileID ?? ""
+            let beneficiaries = expense.resolvedBeneficiaryIDs()
+            // 受益者が「支払者ただ1人」= 割り勘なし (支払者のみの負担)。
+            let isSplit = !(!payer.isEmpty && Set(expense.beneficiaryIDList) == Set([payer]))
+            let share = expense.amountDecimal / Decimal(max(beneficiaries.count, 1))
+            let shareText = CurrencyCatalog.format(share, code: expense.resolvedCurrencyCode)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("割り勘", systemImage: isSplit ? "person.2.fill" : "person.fill")
+                        .font(.caption2.weight(.semibold))
+                    Spacer()
+                    Button { showingSplitPicker = true } label: {
+                        Text("編集").font(.caption2.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .foregroundStyle(.white)
+
+                // 支払者
+                HStack(spacing: 6) {
+                    Text("支払").font(.caption2).foregroundStyle(.white.opacity(0.6))
+                    avatar(name: sheet.memberDisplayInfo(for: payer).name,
+                           colorHex: sheet.memberDisplayInfo(for: payer).colorHex)
+                    Text(sheet.memberDisplayInfo(for: payer).name)
+                        .font(.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1)
+                }
+
+                if isSplit {
+                    Text("1人あたり \(shareText)")
+                        .font(.caption2).foregroundStyle(.white.opacity(0.85))
+                    ForEach(beneficiaries, id: \.self) { id in
+                        let info = sheet.memberDisplayInfo(for: id)
+                        HStack(spacing: 6) {
+                            avatar(name: info.name, colorHex: info.colorHex)
+                            Text(info.name).font(.caption2).foregroundStyle(.white).lineLimit(1)
+                            Spacer()
+                            Text(shareText)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                    }
+                } else {
+                    Text("割り勘なし（全額の負担）")
+                        .font(.caption2).foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(0.12)))
+        }
+    }
+
+    /// 配色 + 頭文字の簡易アバター (watchOS には AvatarView / UIImage を持ち込まない)。
+    private func avatar(name: String, colorHex: String) -> some View {
+        let color = Color(hex: colorHex) ?? .blue
+        return Circle()
+            .fill(color.gradient)
+            .frame(width: 20, height: 20)
+            .overlay(
+                Text(String(name.prefix(1)))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            )
+    }
+
+    /// 現在の expense から割り勘 state を 1 度だけ読み込む。
+    private func loadSplit() {
+        guard !didLoadSplit else { return }
+        didLoadSplit = true
+        let list = expense.beneficiaryIDList
+        let payer = expense.payerProfileID ?? ""
+        if !payer.isEmpty, Set(list) == Set([payer]) {
+            splitEnabled = false
+            selectedBeneficiaries = []
+        } else {
+            splitEnabled = true
+            // 空 (= 全員) の時は全メンバーを選択状態にして UI に反映。
+            selectedBeneficiaries = list.isEmpty ? Set(sheet.acceptedMemberProfileIDs()) : Set(list)
+        }
+    }
+
+    /// ピッカーを閉じた時に割り勘の変更を expense へ保存する。
+    private func applySplit() {
+        let csv: String
+        if splitEnabled {
+            csv = selectedBeneficiaries.sorted().joined(separator: ",")
+        } else {
+            // 自分のみ負担 = 支払者を受益者にする。
+            csv = expense.payerProfileID ?? (UserProfileStore.shared.userRecordName ?? "")
+        }
+        guard expense.beneficiaryProfileIDs != csv else { return }
+        expense.beneficiaryProfileIDs = csv
+        do {
+            try ctx.save()
+            WKInterfaceDevice.current().play(.success)
+        } catch {
+            WKInterfaceDevice.current().play(.failure)
         }
     }
 
