@@ -7,6 +7,7 @@ import UIKit
 import CloudKit
 import CoreData
 import BackgroundTasks
+import UserNotifications
 import os
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
@@ -25,7 +26,42 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             Self.handleAppRefresh(task: task as! BGAppRefreshTask)
         }
         Self.scheduleAppRefresh()
+
+        // フォアグラウンドでも割り勘通知のバナーを出すため delegate を設定。
+        UNUserNotificationCenter.current().delegate = self
+        // CloudKit のサイレントプッシュでバックグラウンド起動 → import → 割り勘検出ができるよう登録。
+        application.registerForRemoteNotifications()
         return true
+    }
+
+    /// CloudKit のサイレントプッシュ受信。NSPersistentCloudKitContainer がバックグラウンドで
+    /// import を行うので、その結果が viewContext にマージされたら (= remote change) 割り勘を
+    /// 検出して通知する。最大 ~25 秒でタイムアウト。
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        let nc = NotificationCenter.default
+        var finished = false
+        var observer: NSObjectProtocol?
+        let finish: (UIBackgroundFetchResult) -> Void = { result in
+            guard !finished else { return }
+            finished = true
+            if let observer { nc.removeObserver(observer) }
+            completionHandler(result)
+        }
+        observer = nc.addObserver(
+            forName: .NSPersistentStoreRemoteChange, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                // import の viewContext へのマージ完了を少し待ってから検出。
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                SplitNotificationManager.shared.processChanges(
+                    in: PersistenceController.shared.container.viewContext)
+                finish(.newData)
+            }
+        }
+        // import が来なかった場合のフォールバック。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { finish(.noData) }
     }
 
     func application(_ application: UIApplication,
@@ -70,6 +106,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             work.cancel()
             task.setTaskCompleted(success: false)
         }
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// アプリ前面でも割り勘通知をバナー表示する。
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async
+    -> UNNotificationPresentationOptions {
+        return [.banner, .list, .sound]
     }
 }
 
