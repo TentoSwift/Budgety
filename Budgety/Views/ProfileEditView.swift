@@ -38,6 +38,8 @@ struct ProfileEditView: View {
     #if canImport(PhotosUI)
     @State private var pickerItem: PhotosPickerItem? = nil
     @State private var isLoadingPhoto: Bool = false
+    /// アバターのメニューから「写真を選択」した時に PhotosPicker を開く。
+    @State private var showPhotoPicker: Bool = false
     #endif
 
     #if canImport(MemojiView)
@@ -74,6 +76,7 @@ struct ProfileEditView: View {
             }
             .onAppear { loadIfNeeded() }
             #if canImport(PhotosUI)
+            .photosPicker(isPresented: $showPhotoPicker, selection: $pickerItem, matching: .images)
             .onChange(of: pickerItem) { _, _ in loadPhotoFromPicker() }
             #endif
             #if canImport(MemojiView)
@@ -95,52 +98,73 @@ struct ProfileEditView: View {
         Section {
             HStack {
                 Spacer()
-                VStack(spacing: 12) {
-                    avatarPreview
-                    #if canImport(PhotosUI)
-                    if isLoadingPhoto {
+                #if canImport(PhotosUI)
+                if isLoadingPhoto {
+                    VStack(spacing: 12) {
+                        avatarPreview
                         ProgressView().controlSize(.small)
-                    } else {
-                        VStack(spacing: 10) {
-                            HStack(spacing: 16) {
-                                PhotosPicker(selection: $pickerItem, matching: .images) {
-                                    Label("写真を選択", systemImage: "photo")
-                                        .font(.callout)
-                                }
-                                #if canImport(MemojiView)
-                                Button {
-                                    showingMemojiEditor = true
-                                } label: {
-                                    Label("Memoji・絵文字", systemImage: "face.smiling")
-                                        .font(.callout)
-                                }
-                                // Form の同一行で PhotosPicker とタップ領域が競合しないよう
-                                // 各ボタンに明示スタイルを付ける (= 写真選択が効かなくなる不具合の修正)。
-                                .buttonStyle(.borderless)
-                                #endif
-                            }
-                            if draftPhoto != nil {
-                                Button(role: .destructive) {
-                                    draftPhoto = nil
-                                    draftBgHex = nil
-                                    pickerItem = nil
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                        .font(.callout)
-                                }
-                                .buttonStyle(.borderless)
-                                #if os(macOS)
-                                .tint(.red)
-                                #endif
-                            }
-                        }
                     }
-                    #endif
+                } else {
+                    // アバターをタップすると写真選択 / Memoji / 削除を選べるメニューを開く。
+                    Menu {
+                        avatarMenuContent
+                    } label: {
+                        avatarPreviewWithBadge
+                    }
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
                 }
+                #else
+                avatarPreview
+                #endif
                 Spacer()
             }
             .padding(.vertical, 8)
         }
+    }
+
+    /// アバターのメニュー項目 (写真を選択 / Memoji・絵文字 / 削除)。
+    @ViewBuilder
+    private var avatarMenuContent: some View {
+        #if canImport(PhotosUI)
+        Button {
+            showPhotoPicker = true
+        } label: {
+            Label("写真を選択", systemImage: "photo")
+        }
+        #endif
+        #if canImport(MemojiView)
+        Button {
+            showingMemojiEditor = true
+        } label: {
+            Label("Memoji・絵文字", systemImage: "face.smiling")
+        }
+        #endif
+        if draftPhoto != nil {
+            Divider()
+            Button(role: .destructive) {
+                draftPhoto = nil
+                draftBgHex = nil
+                #if canImport(PhotosUI)
+                pickerItem = nil
+                #endif
+            } label: {
+                Label("削除", systemImage: "trash")
+            }
+        }
+    }
+
+    /// プレビュー + 右下に編集を示すカメラバッジ。
+    private var avatarPreviewWithBadge: some View {
+        avatarPreview
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(Circle().fill(Color.accentColor))
+                    .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 2))
+            }
     }
 
     @ViewBuilder
