@@ -252,7 +252,7 @@ struct ExpenseDetailView: View {
                 if settled {
                     Label("精算済み", systemImage: "checkmark.seal.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(sheet.tint)
                 } else {
                     Image(systemName: "circle").foregroundStyle(.secondary)
                 }
