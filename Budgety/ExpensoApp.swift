@@ -25,6 +25,7 @@ struct ExpensoApp: App {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
+                .appUpdateGate()
                 .sheet(isPresented: Binding(
                     get: { !hasShownOnboarding },
                     set: { if !$0 { hasShownOnboarding = true } }

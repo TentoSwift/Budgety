@@ -144,6 +144,7 @@
 				PersistenceController.swift,
 				PurchaseManager.swift,
 				ShareCoordinator.swift,
+				Support/AppUpdateChecker.swift,
 				Support/BuildInfo.swift,
 				"Support/Calendar+Month.swift",
 				Support/CategoryAISuggestor.swift,
@@ -183,7 +184,6 @@
 				Views/OnboardingView.swift,
 				Views/PaywallView.swift,
 				Views/ProfileEditView.swift,
-				Views/VirtualMemberEditView.swift,
 				Views/RecurringListView.swift,
 				Views/RecurringSettingsView.swift,
 				Views/SetSheetPasswordView.swift,
@@ -194,6 +194,7 @@
 				Views/SheetIconView.swift,
 				Views/SheetLockView.swift,
 				Views/StatsView.swift,
+				Views/VirtualMemberEditView.swift,
 			);
 			target = 4D18B4C12FB31605006F2C30 /* Budgety For macOS */;
 		};
