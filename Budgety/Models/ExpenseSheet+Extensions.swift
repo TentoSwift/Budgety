@@ -137,6 +137,111 @@ extension ExpenseSheet {
         return result
     }
 
+    /// 割り勘・支払者の候補とする「現在のメンバー」の profileID。
+    /// = 自分 + CKShare の **受諾済み** 参加者 + バーチャルメンバー。
+    /// CKShare 未ロード時は受諾判定できないので非バーチャル PP で代替する。
+    /// `allMemberProfileIDs()` と違い、招待中 (.pending)・解除済みの参加者は含めない。
+    @MainActor
+    func acceptedMemberProfileIDs() -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        #if !os(watchOS)
+        let share = ShareCoordinator.shared.existingShare(for: self)
+        #else
+        let share: CKShare? = nil
+        #endif
+        // 自分
+        let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+        if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
+            result.append(me)
+        }
+        if let urn = UserProfileStore.shared.userRecordName, !urn.isEmpty {
+            seen.insert(urn)
+        }
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        let sorted = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+        #if !os(watchOS)
+        if let share {
+            for p in share.participants {
+                guard p.acceptanceStatus == .accepted,
+                      let rn = p.userIdentity.userRecordID?.recordName, !rn.isEmpty,
+                      !UserProfileStore.isSelfPlaceholderRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
+        } else {
+            for pp in sorted {
+                guard let rn = pp.recordName, !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+                      !UserProfileStore.isVirtualRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
+        }
+        #else
+        for pp in sorted {
+            guard let rn = pp.recordName, !rn.isEmpty,
+                  rn != "_defaultOwner_", rn != "__defaultOwner__",
+                  !UserProfileStore.isVirtualRecordName(rn),
+                  seen.insert(rn).inserted else { continue }
+            result.append(rn)
+        }
+        #endif
+        // バーチャルメンバーは CKShare に出ないので常に PP から追加する。
+        for pp in sorted {
+            guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn),
+                  seen.insert(rn).inserted else { continue }
+            result.append(rn)
+        }
+        return result
+    }
+
+    /// このシートのバーチャルメンバー (ParticipantProfile) を名前順で返す。
+    var virtualMemberProfiles: [ParticipantProfile] {
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        return profiles
+            .filter { UserProfileStore.isVirtualRecordName($0.recordName ?? "") }
+            .sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+    }
+
+    /// バーチャルメンバーのアバター配色パレット。
+    static let virtualMemberPalette: [String] = [
+        "#FF9500", "#34C759", "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00", "#A2845E"
+    ]
+
+    /// バーチャルメンバーを追加し、その profileID (recordName) を返す。
+    @MainActor
+    @discardableResult
+    func addVirtualMember(name: String, colorHex: String? = nil) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let ctx = managedObjectContext,
+              let store = objectID.persistentStore else { return nil }
+        let rn = UserProfileStore.virtualRecordPrefix + UUID().uuidString
+        let pp = ParticipantProfile(context: ctx)
+        ctx.assign(pp, to: store)
+        pp.recordName = rn
+        pp.sheet = self
+        pp.displayName = trimmed
+        let palette = Self.virtualMemberPalette
+        pp.colorHex = colorHex ?? palette[virtualMemberProfiles.count % palette.count]
+        pp.updatedAt = .now
+        PersistenceController.shared.save()
+        return rn
+    }
+
+    /// バーチャルメンバーを削除する (バーチャル以外は無視)。
+    @MainActor
+    func deleteVirtualMember(profileID: String) {
+        guard UserProfileStore.isVirtualRecordName(profileID),
+              let ctx = managedObjectContext else { return }
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        guard let pp = profiles.first(where: { $0.recordName == profileID }) else { return }
+        ctx.delete(pp)
+        PersistenceController.shared.save()
+    }
+
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
     /// CKShare ロード済ならそれで判定、未ロードなら ParticipantProfile で判定。
     /// オーナーも「自分でなければ他メンバー」として数える（参加者デバイスで

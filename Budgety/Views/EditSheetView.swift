@@ -23,6 +23,11 @@ struct EditSheetView: View {
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
     @State private var showingPaywall: Bool = false
+    // バーチャルメンバー管理 (Premium)
+    @State private var showMemberPrompt = false
+    @State private var newMemberName = ""
+    /// 名前変更対象の recordName。nil = 新規追加。
+    @State private var editingMemberID: String?
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
     private var selfParticipantProfile: ParticipantProfile? {
@@ -128,6 +133,8 @@ struct EditSheetView: View {
                         .lineLimit(2...4)
                 }
 
+                memberSection
+
                 Section {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
@@ -173,6 +180,26 @@ struct EditSheetView: View {
                 Text(record.isOwnedByCurrentUser
                      ? "このシートとすべての支出が削除されます。元には戻せません。"
                      : "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。")
+            }
+            .alert(editingMemberID == nil ? "バーチャルメンバーを追加" : "名前を変更",
+                   isPresented: $showMemberPrompt) {
+                TextField("名前", text: $newMemberName)
+                Button("保存") {
+                    let trimmed = newMemberName.trimmingCharacters(in: .whitespaces)
+                    if let rn = editingMemberID {
+                        if !trimmed.isEmpty,
+                           let pp = record.virtualMemberProfiles.first(where: { $0.recordName == rn }) {
+                            pp.displayName = trimmed
+                            pp.updatedAt = .now
+                            PersistenceController.shared.save()
+                        }
+                    } else {
+                        record.addVirtualMember(name: trimmed)
+                    }
+                    newMemberName = ""
+                    editingMemberID = nil
+                }
+                Button("キャンセル", role: .cancel) { newMemberName = ""; editingMemberID = nil }
             }
         }
     }
@@ -270,6 +297,51 @@ struct EditSheetView: View {
         #else
         .pickerStyle(.navigationLink)
         #endif
+    }
+
+    /// バーチャルメンバー (アプリ未使用の相手を割り勘・支払者に含める) の管理セクション。
+    @ViewBuilder
+    private var memberSection: some View {
+        Section {
+            ForEach(record.virtualMemberProfiles, id: \.objectID) { pp in
+                Button {
+                    editingMemberID = pp.recordName
+                    newMemberName = pp.displayName ?? ""
+                    showMemberPrompt = true
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarView(photoData: pp.photoData,
+                                   displayName: pp.displayNameOrEmpty,
+                                   colorHex: pp.displayColorHex, size: 28)
+                        Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "pencil").font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        if let rn = pp.recordName { record.deleteVirtualMember(profileID: rn) }
+                    } label: { Label("削除", systemImage: "trash") }
+                }
+            }
+            Button {
+                if PurchaseManager.hasPremiumAccess(to: record) {
+                    editingMemberID = nil
+                    newMemberName = ""
+                    showMemberPrompt = true
+                } else {
+                    showingPaywall = true
+                }
+            } label: {
+                Label("バーチャルメンバーを追加", systemImage: "person.badge.plus")
+            }
+        } header: {
+            Text("バーチャルメンバー")
+        } footer: {
+            Text("アプリを使っていない相手を割り勘・支払者に追加できます。行をタップで名前変更、スワイプで削除。")
+        }
     }
 
     private var deleteButtonTitle: String {
