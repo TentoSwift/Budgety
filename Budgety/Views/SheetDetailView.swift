@@ -199,9 +199,9 @@ struct SheetDetailView: View {
     }
 
     /// 一覧に表示する支出/収入。
-    /// 通常時は期間フィルタを適用しない (= 期間ピッカーは SummaryCard の合計にのみ影響)。
-    /// 検索中は検索専用の期間 (初期=全期間) で「その期間のみ」に絞り込む。
-    /// カテゴリピル・検索・並び順はここで適用する。
+    /// 期間ピッカーで選んだ期間に一覧も合計も揃える。通常時は `period` (既定=今月)、
+    /// 検索中は検索専用の `searchPeriod` (既定=全期間) で「その期間のみ」に絞り込む。
+    /// カテゴリピル・支払い者・検索・並び順もここで適用する。
     private var filteredExpenses: [Expense] {
         var list = Array(allExpenses)
         if let cat = selectedCategory {
@@ -212,9 +212,12 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
-        // 検索中は検索専用の期間で絞り込む。
+        // 期間で絞り込む (一覧も合計と同じ期間に揃える)。
+        // 検索中は検索専用の searchPeriod、通常時は period (既定: 今月)。
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
+        } else {
+            list = list.filter { period.contains($0.date) }
         }
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !q.isEmpty {
@@ -550,14 +553,16 @@ struct SheetDetailView: View {
         )
     }
 
-    /// 期間 (検索中) またはカテゴリで絞り込み中か。
+    /// 期間・カテゴリ・支払い者で絞り込み中か。
     private var isFilterActive: Bool {
-        selectedCategory != nil || selectedPayerID != nil || (isSearchActive && searchPeriod.isFiltering)
+        selectedCategory != nil || selectedPayerID != nil
+            || (isSearchActive ? searchPeriod.isFiltering : period.isFiltering)
     }
 
     private var filterDescription: String {
         var parts: [String] = []
-        if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
+        let activePeriod = isSearchActive ? searchPeriod : period
+        if activePeriod.isFiltering { parts.append("期間「\(activePeriod.label)」") }
         if selectedCategory != nil { parts.append("カテゴリ") }
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
@@ -581,6 +586,7 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                     selectedPayerID = nil
                     searchPeriod = .all
+                    period = .all
                 }
             }
         } else {
