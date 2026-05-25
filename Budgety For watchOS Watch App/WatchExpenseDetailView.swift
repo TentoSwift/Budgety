@@ -189,7 +189,12 @@ struct WatchExpenseDetailView: View {
     private func applySplit() {
         let csv: String
         if splitEnabled {
-            csv = selectedBeneficiaries.sorted().joined(separator: ",")
+            // 空 = 全員均等は禁止 (後から追加した人が遡って含まれるため)。
+            // 未選択なら現メンバー全員を明示保存する。
+            let ids = selectedBeneficiaries.isEmpty
+                ? Set(sheet.acceptedMemberProfileIDs())
+                : selectedBeneficiaries
+            csv = ids.sorted().joined(separator: ",")
         } else {
             // 自分のみ負担 = 支払者を受益者にする。
             csv = expense.payerProfileID ?? (UserProfileStore.shared.userRecordName ?? "")

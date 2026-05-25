@@ -281,12 +281,16 @@ struct WatchAddExpenseView: View {
             expense.payerProfileID = pid
         }
         // 割り勘: 共有シートのみ反映。
-        // - オン: 選んだ相手 (空 = 全員均等)
+        // - オン: 選んだ相手 (空にはしない。未選択なら現メンバー全員を明示保存)
         // - オフ: 自分のみの負担 (= 精算で他者に割らない)
-        // 非共有シートは従来どおり未設定 (= 全員 = 自分のみ) にする。
+        // 空 = 全員均等にすると、あとで追加したメンバーが過去の支出に遡って
+        // 含まれてしまうため、必ず明示的な ID リストを保存する。
         if isShared {
             if splitEnabled {
-                expense.beneficiaryProfileIDs = selectedBeneficiaries.sorted().joined(separator: ",")
+                let ids = selectedBeneficiaries.isEmpty
+                    ? Set(sheet.acceptedMemberProfileIDs())
+                    : selectedBeneficiaries
+                expense.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
             } else if let pid = profile.userRecordName, !pid.isEmpty {
                 expense.beneficiaryProfileIDs = pid
             }
