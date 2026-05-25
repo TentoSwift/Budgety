@@ -3,7 +3,7 @@
 //  Budgety
 //
 //  MCP / Shortcuts 経由で定期項目 (RecurringRule) を追加するためのロジック。
-//  QuickBudgetIntent (= 「クイック家計簿」shortcut) の op="recurring" から呼ばれる。
+//  QuickBudgetIntent (= 「Budgety MCP」shortcut) の op="recurring" から呼ばれる。
 //
 
 import CoreData
