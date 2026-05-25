@@ -90,6 +90,7 @@ struct MemberPickerView: View {
             // 選択時に Member を ensure する。
             selfFromProfileSection
             if !otherParticipants.isEmpty { otherParticipantsSection }
+            virtualMembersSection
             if !legacyPayers.isEmpty { legacyPayersSection }
         }
         .listStyle(.plain)
@@ -446,8 +447,40 @@ struct MemberPickerView: View {
         } header: {
             Text("シートのメンバー")
         } footer: {
-            Text("\(kind.partyLabel)として記録できるのはこのシートのオーナーと参加者のみです。")
+            Text("\(kind.partyLabel)として記録できるのはこのシートのオーナー・参加者・バーチャルメンバーです。")
                 .font(.caption2)
+        }
+    }
+
+    /// バーチャルメンバー (アプリ未使用の相手) を支払者候補として選べるセクション。
+    @ViewBuilder
+    private var virtualMembersSection: some View {
+        if let record, !record.virtualMemberProfiles.isEmpty {
+            Section {
+                ForEach(record.virtualMemberProfiles, id: \.objectID) { pp in
+                    let name = pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty
+                    let isSelected = (selected?.recordName ?? "") == (pp.recordName ?? "")
+                        || (selected == nil && (fallbackProfileID ?? "") == (pp.recordName ?? ""))
+                    Button {
+                        selectFromParticipant(ParticipantInfo(
+                            name: name,
+                            colorHex: pp.displayColorHex,
+                            photoData: pp.photoData,
+                            recordName: pp.recordName
+                        ))
+                    } label: {
+                        HStack(spacing: 12) {
+                            AvatarView(name: name, colorHex: pp.displayColorHex, photoData: pp.photoData, size: 36)
+                            Text(name).foregroundStyle(.primary)
+                            Spacer()
+                            if isSelected { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("バーチャルメンバー")
+            }
         }
     }
 
