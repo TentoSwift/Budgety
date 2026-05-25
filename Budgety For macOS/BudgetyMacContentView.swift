@@ -200,7 +200,8 @@ struct BudgetyMacContentView: View {
             Spacer()
             HStack(spacing: 4) {
                 if lockManager.hasPassword(for: sheet) {
-                    Image(systemName: "lock.fill")
+                    // 解錠中 (このセッションでパスワード入力済み) は開いた鍵を表示。
+                    Image(systemName: lockManager.isUnlocked(sheet) ? "lock.open.fill" : "lock.fill")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
