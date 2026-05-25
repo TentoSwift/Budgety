@@ -193,7 +193,7 @@ struct MemojiEditorView: View {
                 Circle()
                     .fill(base)
                     .overlay(
-                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 2.5)
+                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 1.5)
                     )
                     .frame(width: size, height: size)
                 // 選択中: 塗りは縮めず、少し余白を空けて同色の外側リングを出す。
@@ -208,14 +208,14 @@ struct MemojiEditorView: View {
         .buttonStyle(.plain)
     }
 
-    /// スウォッチの色を brightness 最大 (1.0) にして枠線用の色にする (最も明るい縁取り)。
+    /// スウォッチの色を brightness ×3.0 (上限1.0) にして枠線用の色にする (明るい縁取り)。
     private func swatchBorderColor(_ hex: String) -> Color {
         guard let base = Color(hex: hex) else { return .secondary }
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
             return Color(UIColor(base))
         }
-        return Color(UIColor(hue: h, saturation: s, brightness: 1.0, alpha: a))
+        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b * 3.0), alpha: a))
     }
 
     // MARK: - 書き出し
