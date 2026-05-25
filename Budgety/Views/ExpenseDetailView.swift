@@ -257,6 +257,7 @@ struct ExpenseDetailView: View {
                     Image(systemName: "circle").foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
     }
