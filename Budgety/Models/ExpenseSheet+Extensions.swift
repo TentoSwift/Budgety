@@ -326,11 +326,12 @@ extension ExpenseSheet {
         #endif
 
         // 4) PP フォールバック
+        // バーチャルメンバーは Public DB に居ないので、PP に保存した photoData を優先で使う。
         if let pp = ppMatch {
             return (
                 name: pp.displayName?.isEmpty == false ? pp.displayName! : "メンバー",
                 colorHex: fallbackColor,
-                photoData: photoFromCache
+                photoData: pp.photoData ?? photoFromCache
             )
         }
         // ローカル Member へのフォールバック (recordName / UUID)
