@@ -164,16 +164,50 @@ struct SettlementView: View {
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
+    /// 支出が全員精算済みか (支払者を除く受益者が全員精算済み)。
+    /// 受益者がいない (= 割り勘でない) 支出は対象外なので false。
+    private func isExpenseFullySettled(_ e: Expense) -> Bool {
+        let payerID = e.payerProfileID ?? ""
+        let ids = e.resolvedBeneficiaryIDs().filter { $0 != payerID }
+        guard !ids.isEmpty else { return false }
+        return ids.allSatisfy { e.isBeneficiarySettled($0) }
+    }
+
     /// 支出ごとに、割り勘の相手単位で「精算済み」を切り替えるセクション。
+    /// 全員精算済みの支出は「精算済み」グループとして下にまとめる。
     @ViewBuilder
     private var perExpenseSettleSection: some View {
         let expenses = splitExpenses
         if !expenses.isEmpty {
+            let pending = expenses.filter { !isExpenseFullySettled($0) }
+            let settled = expenses.filter { isExpenseFullySettled($0) }
             card(title: "支出ごとの精算",
                  footer: "返してもらった相手をタップして精算済みに。精算済みのぶんは上の残高・送金プランから外れます。") {
                 VStack(spacing: 2) {
-                    ForEach(expenses, id: \.objectID) { e in
+                    ForEach(pending, id: \.objectID) { e in
                         expenseSettleDisclosure(e)
+                    }
+                    if !settled.isEmpty {
+                        if !pending.isEmpty {
+                            Divider().padding(.vertical, 6)
+                        }
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.green)
+                            Text("精算済み")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(settled.count) 件")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 2)
+                        ForEach(settled, id: \.objectID) { e in
+                            expenseSettleDisclosure(e)
+                        }
                     }
                 }
             }
