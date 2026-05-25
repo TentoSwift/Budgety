@@ -138,7 +138,6 @@ struct BudgetyMacContentView: View {
                 }
             }
         }
-        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         .searchable(text: $searchText, placement: .sidebar, prompt: Text("シート・支出を検索"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             profileFooter
@@ -156,6 +155,9 @@ struct BudgetyMacContentView: View {
                 .help("シートを追加")
             }
         }
+        // 列幅の制約は列ルートの最外で適用しないと max が効かず、
+        // サイドバーを無限に広げられてしまう (.searchable などより後に置く)。
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
     }
 
     /// Free 上限・同期状態を確認してから新規シート作成ダイアログを出す (iOS と同じゲート)。
