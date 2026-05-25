@@ -208,14 +208,14 @@ struct MemojiEditorView: View {
         .buttonStyle(.plain)
     }
 
-    /// スウォッチの色を brightness ×3.0 (上限1.0) にして枠線用の色にする (明るい縁取り)。
+    /// スウォッチの色を brightness ×7.0 (上限1.0) にして枠線用の色にする (明るい縁取り)。
     private func swatchBorderColor(_ hex: String) -> Color {
         guard let base = Color(hex: hex) else { return .secondary }
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
             return Color(UIColor(base))
         }
-        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b * 3.0), alpha: a))
+        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b * 7.0), alpha: a))
     }
 
     // MARK: - 書き出し
