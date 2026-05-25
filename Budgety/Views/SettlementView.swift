@@ -292,12 +292,19 @@ struct SettlementView: View {
 
     /// 連絡先ウィジェット風の縦長タイル: アバター + 名前 + 残高。
     /// 背景はプロフィール写真の平均色 (なければ colorHex) を薄く敷く。
+    /// このシートで削除 (アーカイブ) 済みのメンバーか。残高に残っている時に表示する。
+    private func isArchivedMember(_ profileID: String) -> Bool {
+        let pps = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+        return pps.contains { ($0.recordName == profileID) && $0.archived }
+    }
+
     @ViewBuilder
     private func balanceTile(bal: MemberBalance, currencyCode: String) -> some View {
         let info = record.memberDisplayInfo(for: bal.profileID)
         let share = ShareCoordinator.shared.existingShare(for: record)
         let selfIDs = profile.canonicalSelfIDs(forShare: share)
         let isMe = selfIDs.contains(bal.profileID)
+        let isArchived = isArchivedMember(bal.profileID)
         // 写真からドミナント色を抽出 (キャッシュ済)。未設定なら colorHex フォールバック。
         let tileTint: Color = AverageColorCache.color(for: info.photoData)
             ?? Color(hex: info.colorHex)
@@ -314,9 +321,12 @@ struct SettlementView: View {
                 Text(info.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                Text(isMe ? "自分" : " ")
+                Text(isArchived ? "このシートにいないメンバー" : (isMe ? "自分" : " "))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isArchived ? Color.orange : Color.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .multilineTextAlignment(.center)
             }
             balanceLabel(amount: bal.amount, currencyCode: currencyCode)
                 .monospacedDigit()
