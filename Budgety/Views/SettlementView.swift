@@ -209,6 +209,7 @@ struct SettlementView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? .green : .secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -239,6 +240,7 @@ struct SettlementView: View {
                         .foregroundStyle(settled ? .green : .secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
         .padding(.vertical, 3)
@@ -706,6 +708,7 @@ private struct TransferExpenseSettleView: View {
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
     }
