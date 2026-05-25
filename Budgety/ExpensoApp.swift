@@ -70,6 +70,13 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
+                    #if DEBUG
+                    // CloudKit Production デプロイ準備: Development スキーマを一括生成する。
+                    // `EXPENSO_INIT_CK_SCHEMA=1` を付けて iCloud サインイン済みで一度だけ起動。
+                    if ProcessInfo.processInfo.environment["EXPENSO_INIT_CK_SCHEMA"] == "1" {
+                        persistenceController.initializeCloudKitSchemaForDeploy()
+                    }
+                    #endif
                     await PurchaseManager.shared.refreshEntitlements()
                     #if DEBUG
                     if ProcessInfo.processInfo.environment["EXPENSO_DEBUG_REVOKE"] == "1" {
