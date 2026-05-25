@@ -26,6 +26,7 @@ struct EditCategoryView: View {
     @State private var kind: TransactionKind = .expense
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
+    @State private var showingMoreIcons: Bool = false
 
     @State private var origName: String = ""
     @State private var origColor: String = ""
@@ -238,14 +239,11 @@ struct EditCategoryView: View {
                     iconButton(sym)
                 }
             }
-            // その他カテゴリは別画面で選択
-            NavigationLink {
-                CategoryIconPickerView(
-                    selectedSymbol: $selectedSymbol,
-                    tint: previewColor,
-                    origSymbol: origSymbol,
-                    premiumUnlocked: premiumUnlocked
-                )
+            // その他カテゴリは別画面で選択。Form 内の NavigationLink は行に
+            // 自動でシェブロンが付き、カード内の手動シェブロンと二重になるため、
+            // Button + navigationDestination でカスタムカードのまま遷移する。
+            Button {
+                showingMoreIcons = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -265,6 +263,14 @@ struct EditCategoryView: View {
                 )
             }
             .buttonStyle(.plain)
+            .navigationDestination(isPresented: $showingMoreIcons) {
+                CategoryIconPickerView(
+                    selectedSymbol: $selectedSymbol,
+                    tint: previewColor,
+                    origSymbol: origSymbol,
+                    premiumUnlocked: premiumUnlocked
+                )
+            }
         }
         .padding(16)
         .background(Color.platformSecondarySystemGroupedBackground, in: RoundedRectangle(cornerRadius: 18))

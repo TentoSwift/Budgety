@@ -31,6 +31,7 @@ struct EditSheetView: View {
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
     @State private var showingPaywall: Bool = false
+    @State private var showingMoreIcons: Bool = false
     // バーチャルメンバー管理 (Premium)
     @State private var showMemberPrompt = false
     @State private var newMemberName = ""
@@ -233,10 +234,11 @@ struct EditSheetView: View {
                     sheetIconButton(sym, tint: tint)
                 }
             }
-            // その他カテゴリは別画面で選択
-            NavigationLink {
-                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint,
-                                    premiumUnlocked: PurchaseManager.hasPremiumAccess(to: record))
+            // その他カテゴリは別画面で選択。Form 内の NavigationLink は行に
+            // 自動でシェブロンが付き、カード内の手動シェブロンと二重になるため、
+            // Button + navigationDestination でカスタムカードのまま遷移する。
+            Button {
+                showingMoreIcons = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -256,6 +258,10 @@ struct EditSheetView: View {
                 )
             }
             .buttonStyle(.plain)
+            .navigationDestination(isPresented: $showingMoreIcons) {
+                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint,
+                                    premiumUnlocked: PurchaseManager.hasPremiumAccess(to: record))
+            }
         }
         .padding(.vertical, 4)
         .sheet(isPresented: $showingPaywall) { PaywallView() }
