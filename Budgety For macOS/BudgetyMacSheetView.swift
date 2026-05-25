@@ -51,15 +51,46 @@ struct BudgetyMacSheetView: View {
     @State private var searchText: String = ""
     @State private var selectedCategory: ExpenseCategory?
     @State private var selectedPayerID: String?
+    @State private var period: Period = .thisMonth
+
+    /// 集計・一覧の対象期間 (iOS の SheetDetailView.Period 相当)。
+    enum Period: String, CaseIterable, Identifiable {
+        case thisMonth, lastMonth, thisYear, all
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .thisMonth: "今月"
+            case .lastMonth: "先月"
+            case .thisYear:  "今年"
+            case .all:       "全期間"
+            }
+        }
+        /// 指定日がこの期間に含まれるか。`.all` は常に true。
+        func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> Bool {
+            guard self != .all else { return true }
+            guard let d = date else { return false }
+            switch self {
+            case .thisMonth:
+                return calendar.isDate(d, equalTo: now, toGranularity: .month)
+            case .lastMonth:
+                guard let lm = calendar.date(byAdding: .month, value: -1, to: now) else { return false }
+                return calendar.isDate(d, equalTo: lm, toGranularity: .month)
+            case .thisYear:
+                return calendar.isDate(d, equalTo: now, toGranularity: .year)
+            case .all:
+                return true
+            }
+        }
+    }
 
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
-    /// 検索クエリ・カテゴリ・支払い者フィルタを適用した支出。
+    /// 期間・検索クエリ・カテゴリ・支払い者フィルタを適用した支出。
     private var filteredExpenses: [Expense] {
-        var list = allExpenses
+        var list = allExpenses.filter { period.contains($0.date) }
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         }
@@ -302,9 +333,31 @@ struct BudgetyMacSheetView: View {
         selectedPayerID = nil
     }
 
+    /// 期間ピッカー (今月 / 先月 / 今年 / 全期間)。サマリーと一覧の両方に反映。
+    private var periodMenu: some View {
+        Menu {
+            Picker("期間", selection: $period) {
+                ForEach(Period.allCases) { p in
+                    Text(p.label).tag(p)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(period.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+            }
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+    }
+
     private var summaryHero: some View {
         let filtering = isFiltering
-        let t = filtering ? filteredTotals : monthlyTotals
+        // 期間 + 検索/カテゴリ/支払い者の絞り込みを反映した合計。
+        let t = filteredTotals
         let code = sheet.resolvedDefaultCurrencyCode
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -336,9 +389,7 @@ struct BudgetyMacSheetView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text(filtering ? "絞り込み結果" : "今月")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            periodMenu
             Text(CurrencyCatalog.format(t.expense, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
@@ -355,8 +406,8 @@ struct BudgetyMacSheetView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 残予算 (予算設定時 + 非フィルタ時のみ)
-            if !filtering, let remaining = monthlyRemainingBudget {
+            // 残予算 (今月 + 予算設定時 + 非フィルタ時のみ)
+            if period == .thisMonth, !filtering, let remaining = monthlyRemainingBudget {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(remaining < 0 ? Color.red : Color.primary)
@@ -466,6 +517,13 @@ struct BudgetyMacSheetView: View {
                         Text("検索条件やフィルタを変更してください。")
                     } actions: {
                         Button("フィルタをクリア") { clearFilters() }
+                    }
+                    .padding(.vertical, 40)
+                } else if period != .all {
+                    ContentUnavailableView {
+                        Label("\(period.label)の支出がありません", systemImage: "calendar")
+                    } actions: {
+                        Button("全期間を表示") { period = .all }
                     }
                     .padding(.vertical, 40)
                 } else {
