@@ -184,9 +184,10 @@ struct MemojiEditorView: View {
             bgColorHex = hex
         } label: {
             ZStack {
-                // 塗りは常に通常サイズ。枠線はその色を明るくした色 (白系でも縁が見える)。
+                // 塗りは常に通常サイズ。グラデーションは付けずフラットな色。
+                // 枠線はその色を明るくした色 (白系でも縁が見える)。
                 Circle()
-                    .fill(base.gradient)
+                    .fill(base)
                     .overlay(
                         Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 1.5)
                     )
