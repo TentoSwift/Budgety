@@ -88,9 +88,10 @@ struct BudgetyMacSheetView: View {
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
-    /// 期間・検索クエリ・カテゴリ・支払い者フィルタを適用した支出。
-    private var filteredExpenses: [Expense] {
-        var list = allExpenses.filter { period.contains($0.date) }
+    /// カテゴリ・支払い者・検索クエリで絞り込む (期間は含めない)。
+    /// 期間ピッカーは合計にのみ反映する仕様なので、期間の適用は呼び出し側で行う。
+    private func applyNonPeriodFilters(_ input: [Expense]) -> [Expense] {
+        var list = input
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         }
@@ -109,6 +110,20 @@ struct BudgetyMacSheetView: View {
             }
         }
         return list
+    }
+
+    /// サマリー合計用の支出。期間ピッカーで選んだ期間 + カテゴリ・支払い者・検索を適用。
+    /// 期間は「合計のみ」に反映するため、こちらは常に period で絞り込む。
+    private var summaryExpenses: [Expense] {
+        applyNonPeriodFilters(allExpenses.filter { period.contains($0.date) })
+    }
+
+    /// 一覧表示用の支出。通常時は期間を適用せず全期間を表示する
+    /// (期間ピッカーは合計のみに反映)。検索中のみ期間も適用する (iOS の挙動に合わせる)。
+    private var listExpenses: [Expense] {
+        let base = applyNonPeriodFilters(allExpenses)
+        let isSearching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        return isSearching ? base.filter { period.contains($0.date) } : base
     }
 
     /// 絞り込みが有効か。
@@ -132,7 +147,7 @@ struct BudgetyMacSheetView: View {
 
     private var groupedByDate: [(date: Date, items: [Expense])] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
+        let dict = Dictionary(grouping: listExpenses) { exp -> Date in
             cal.startOfDay(for: exp.date ?? .now)
         }
         return dict.map { (date: $0.key, items: $0.value) }
@@ -176,14 +191,14 @@ struct BudgetyMacSheetView: View {
         return budget - monthlyTotal
     }
 
-    /// 絞り込み中の合計 (filteredExpenses を全期間でシート既定通貨に FX 換算)。
-    /// 検索/フィルタ時にサマリーへ反映する。
+    /// サマリー合計 (summaryExpenses をシート既定通貨に FX 換算)。
+    /// 期間ピッカー + 検索/カテゴリ/支払い者を反映する (一覧とは別に期間を適用)。
     private var filteredTotals: (expense: Decimal, income: Decimal) {
         let target = sheet.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
         var expense: Decimal = 0
         var income: Decimal = 0
-        for e in filteredExpenses {
+        for e in summaryExpenses {
             let from = e.resolvedCurrencyCode
             let converted = (from == target) ? e.amountDecimal : fx.convert(e.amountDecimal, from: from, to: target)
             guard let amount = converted else { continue }
@@ -336,7 +351,8 @@ struct BudgetyMacSheetView: View {
         selectedPayerID = nil
     }
 
-    /// 期間ピッカー (今月 / 先月 / 今年 / 全期間)。サマリーと一覧の両方に反映。
+    /// 期間ピッカー (今月 / 先月 / 今年 / 全期間)。合計 (サマリー) のみに反映し、
+    /// 一覧は通常時は全期間を表示する (検索中のみ一覧にも反映)。
     private var periodMenu: some View {
         Menu {
             Picker("期間", selection: $period) {
@@ -387,7 +403,7 @@ struct BudgetyMacSheetView: View {
                 Text(sheet.displayName).font(.title3.weight(.semibold))
                 Spacer()
                 if filtering {
-                    Text("\(filteredExpenses.count)件")
+                    Text("\(listExpenses.count)件")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -548,13 +564,6 @@ struct BudgetyMacSheetView: View {
                         Text("検索条件やフィルタを変更してください。")
                     } actions: {
                         Button("フィルタをクリア") { clearFilters() }
-                    }
-                    .padding(.vertical, 40)
-                } else if period != .all {
-                    ContentUnavailableView {
-                        Label("\(period.label)の支出がありません", systemImage: "calendar")
-                    } actions: {
-                        Button("全期間を表示") { period = .all }
                     }
                     .padding(.vertical, 40)
                 } else {
