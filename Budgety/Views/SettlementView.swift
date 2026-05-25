@@ -194,7 +194,7 @@ struct SettlementView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(record.tint)
                             Text("精算済み")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -241,7 +241,7 @@ struct SettlementView: View {
                 if !isAX { Spacer() }
                 Text("\(settledCount)/\(ids.count) 精算")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? .green : .secondary)
+                    .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? record.tint : Color.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -271,7 +271,7 @@ struct SettlementView: View {
                     Text(CurrencyCatalog.format(share, code: code))
                         .font(.caption).foregroundStyle(.secondary)
                     Image(systemName: settled ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(settled ? .green : .secondary)
+                        .foregroundStyle(settled ? record.tint : Color.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
