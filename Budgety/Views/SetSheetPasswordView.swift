@@ -78,6 +78,9 @@ struct SetSheetPasswordView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("シートロック")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -173,6 +176,9 @@ struct SetSheetPasswordView: View {
                 }
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle(hasExistingPassword ? "シートロック" : "シートロックを設定")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
