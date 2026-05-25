@@ -13,6 +13,7 @@ struct SettlementView: View {
     @ObservedObject var record: ExpenseSheet
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var profile = UserProfileStore.shared
     @State private var result: SettlementResult?
 
@@ -192,14 +193,18 @@ struct SettlementView: View {
                 expenseSettleRow(e: e, id: id, share: share, code: code)
             }
         } label: {
-            HStack {
+            let isAX = dynamicTypeSize.isAccessibilitySize
+            let layout: AnyLayout = isAX
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 8))
+            layout {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
                         .foregroundStyle(.primary)
                     Text(e.formattedSignedAmount)
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Spacer()
+                if !isAX { Spacer() }
                 Text("\(settledCount)/\(ids.count) 精算")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? .green : .secondary)
@@ -216,15 +221,23 @@ struct SettlementView: View {
             Haptics.success()
             recompute()
         } label: {
-            HStack(spacing: 10) {
-                AvatarView(photoData: info.photoData, displayName: info.name,
-                           colorHex: info.colorHex, size: 24)
-                Text(info.name).foregroundStyle(.primary)
-                Spacer()
-                Text(CurrencyCatalog.format(share, code: code))
-                    .font(.caption).foregroundStyle(.secondary)
-                Image(systemName: settled ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(settled ? .green : .secondary)
+            let isAX = dynamicTypeSize.isAccessibilitySize
+            let layout: AnyLayout = isAX
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                : AnyLayout(HStackLayout(spacing: 10))
+            layout {
+                HStack(spacing: 10) {
+                    AvatarView(photoData: info.photoData, displayName: info.name,
+                               colorHex: info.colorHex, size: 24)
+                    Text(info.name).foregroundStyle(.primary)
+                }
+                if !isAX { Spacer() }
+                HStack(spacing: 8) {
+                    Text(CurrencyCatalog.format(share, code: code))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: settled ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(settled ? .green : .secondary)
+                }
             }
         }
         .buttonStyle(.plain)
