@@ -319,9 +319,13 @@ enum SettlementCalculator {
             let count = Decimal(normalizedBeneficiaries.count)
             let perShare = roundToCurrency(converted / count, code: target)
             perShareOpt = perShare
-            let allocatedTotal = perShare * count
+            // 相手ごとの精算: 精算済みの受益者は負担を消し、payer もそのぶんは
+            // 受け取らない (= 返済済みとして残高から除外)。perShare 自体は元の頭割り。
+            let settledSet = Set(e.settledBeneficiaryIDList.map { normalize($0) })
+            let unsettledBeneficiaries = normalizedBeneficiaries.filter { !settledSet.contains($0) }
+            let allocatedTotal = perShare * Decimal(unsettledBeneficiaries.count)
             balances[payer, default: 0] += allocatedTotal
-            for b in normalizedBeneficiaries {
+            for b in unsettledBeneficiaries {
                 balances[b, default: 0] -= perShare
             }
             included = true

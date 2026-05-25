@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V17">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V18">
     <entity name="ExpenseCategory" representedClassName="ExpenseCategory" syncable="YES" codeGenerationType="class">
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#888888"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -84,6 +84,7 @@
         <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="generatedFromRuleID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="settledBeneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="payerMemberID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
