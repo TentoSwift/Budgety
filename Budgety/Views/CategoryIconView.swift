@@ -85,7 +85,13 @@ struct CategoryPayerIconView: View {
                     fallbackPhoto: expense.payerPhotoData,
                     size: avatarSize
                 )
-                .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 2))
+                // カテゴリアイコンと重なる部分を分けるため、アバターの背後に
+                // 背景色で塗った Circle を一回り大きく敷いて「枠」にする。
+                .background(
+                    Circle()
+                        .fill(Color.platformSystemBackground)
+                        .padding(-2)
+                )
                 .offset(x: 5, y: 5)
             }
         }
