@@ -129,7 +129,8 @@ extension ExpenseSheet {
         let sortedProfiles = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
         for pp in sortedProfiles {
             guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+                  rn != "_defaultOwner_", rn != "__defaultOwner__",
+                  !pp.archived else { continue }
             if seen.insert(rn).inserted {
                 result.append(rn)
             }
@@ -189,8 +190,10 @@ extension ExpenseSheet {
         }
         #endif
         // バーチャルメンバーは CKShare に出ないので常に PP から追加する。
+        // アーカイブ済みは新規の割り勘候補に出さない。
         for pp in sorted {
             guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn),
+                  !pp.archived,
                   seen.insert(rn).inserted else { continue }
             result.append(rn)
         }
@@ -198,10 +201,11 @@ extension ExpenseSheet {
     }
 
     /// このシートのバーチャルメンバー (ParticipantProfile) を名前順で返す。
+    /// アーカイブ済み (削除されたが過去の支出で使われている) は除外する。
     var virtualMemberProfiles: [ParticipantProfile] {
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
         return profiles
-            .filter { UserProfileStore.isVirtualRecordName($0.recordName ?? "") }
+            .filter { UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived }
             .sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
     }
 
@@ -232,13 +236,24 @@ extension ExpenseSheet {
     }
 
     /// バーチャルメンバーを削除する (バーチャル以外は無視)。
+    /// 支出 (受益者 or 支払者) で使われている場合は、過去の精算を壊さないよう
+    /// アーカイブ (= 新規候補・メンバー一覧から隠すが履歴・精算には残す)。
+    /// どの支出でも使われていなければ完全削除する。
     @MainActor
     func deleteVirtualMember(profileID: String) {
         guard UserProfileStore.isVirtualRecordName(profileID),
               let ctx = managedObjectContext else { return }
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
         guard let pp = profiles.first(where: { $0.recordName == profileID }) else { return }
-        ctx.delete(pp)
+        let used = ((expenses as? Set<Expense>) ?? []).contains { e in
+            (e.payerProfileID == profileID) || e.beneficiaryIDList.contains(profileID)
+        }
+        if used {
+            pp.archived = true
+            pp.updatedAt = .now
+        } else {
+            ctx.delete(pp)
+        }
         PersistenceController.shared.save()
     }
 
@@ -248,9 +263,12 @@ extension ExpenseSheet {
     /// オーナーを除外してソロ扱いにしないため）。
     @MainActor
     func hasAcceptedOtherMembers() -> Bool {
-        // バーチャルメンバーは CKShare に出ないので、居れば常に「他メンバーあり」。
+        // バーチャルメンバーは CKShare に出ないので、(アーカイブ済みを除き) 居れば
+        // 常に「他メンバーあり」。
         let profilesAll = (participantProfiles as? Set<ParticipantProfile>) ?? []
-        if profilesAll.contains(where: { UserProfileStore.isVirtualRecordName($0.recordName ?? "") }) {
+        if profilesAll.contains(where: {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }) {
             return true
         }
         #if !os(watchOS)
