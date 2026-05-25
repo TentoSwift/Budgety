@@ -197,7 +197,10 @@ struct BudgetyMacSheetView: View {
         ScrollView {
             VStack(spacing: 20) {
                 summaryHero
-                membersStrip
+                // 参加者が自分だけ (solo) のときはメンバー表示を出さない。
+                if currentMemberIDs.count > 1 {
+                    membersStrip
+                }
                 if !usedCategories.isEmpty {
                     categoryPills
                 }
