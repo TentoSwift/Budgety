@@ -37,7 +37,10 @@ struct EditSheetView: View {
     /// 名前変更対象の recordName。nil = 新規追加。
     @State private var editingMemberID: String?
     /// 写真を設定する対象のバーチャルメンバー (recordName)。
+    /// dismiss では消さず、適用完了後に applyMemberPhoto でクリアする。
     @State private var photoTargetID: String?
+    /// 写真ピッカーの表示状態 (photoTargetID とは独立。dismiss で対象を消さないため)。
+    @State private var showMemberPhotoPicker: Bool = false
     #if canImport(PhotosUI)
     @State private var memberPhotoItem: PhotosPickerItem?
     #endif
@@ -216,10 +219,7 @@ struct EditSheetView: View {
             }
             #if canImport(PhotosUI)
             .photosPicker(
-                isPresented: Binding(
-                    get: { photoTargetID != nil },
-                    set: { if !$0 { photoTargetID = nil } }
-                ),
+                isPresented: $showMemberPhotoPicker,
                 selection: $memberPhotoItem,
                 matching: .images
             )
@@ -379,6 +379,7 @@ struct EditSheetView: View {
                     // アバターをタップで写真を選択。
                     Button {
                         photoTargetID = pp.recordName
+                        showMemberPhotoPicker = true
                     } label: {
                         AvatarView(photoData: pp.photoData,
                                    displayName: pp.displayNameOrEmpty,
