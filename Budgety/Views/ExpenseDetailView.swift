@@ -67,7 +67,7 @@ struct ExpenseDetailView: View {
                 Text(expense.formattedSignedAmount)
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(expense.kind == .income ? Color.green : Color.primary)
+                    .foregroundStyle(Color.primary)
                 let title = expense.displayTitle.isEmpty
                     ? expense.categoryDisplayName : expense.displayTitle
                 Text(title)
