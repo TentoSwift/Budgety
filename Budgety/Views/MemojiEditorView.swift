@@ -141,18 +141,28 @@ struct MemojiEditorView: View {
             Button {
                 withAnimation(.snappy) { colorsExpanded.toggle() }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("背景色").font(.title3.weight(.bold))
                     Image(systemName: "chevron.down")
                         .font(.headline.weight(.semibold))
                         .rotationEffect(.degrees(colorsExpanded ? 0 : -90))
                     Spacer()
+                    // 折りたたみ時はメインの色 (選択中) のみ表示。
+                    if !colorsExpanded {
+                        Circle()
+                            .fill(Color(hex: bgColorHex) ?? .gray)
+                            .frame(width: 34, height: 34)
+                            .overlay(
+                                Circle().strokeBorder(swatchBorderColor(bgColorHex), lineWidth: 1.5)
+                            )
+                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
 
+            // 展開時のみグリッド表示。上端から下へ広がるアニメーション。
             if colorsExpanded {
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
@@ -162,17 +172,10 @@ struct MemojiEditorView: View {
                         swatch(hex, size: 52)
                     }
                 }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(Self.palette, id: \.self) { hex in
-                            swatch(hex, size: 60)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .clipped()
     }
 
     private func swatch(_ hex: String, size: CGFloat) -> some View {
@@ -204,14 +207,14 @@ struct MemojiEditorView: View {
         .buttonStyle(.plain)
     }
 
-    /// スウォッチの色を brightness を上げて枠線用の色にする (明るい縁取り)。
+    /// スウォッチの色を brightness 最大 (1.0) にして枠線用の色にする (最も明るい縁取り)。
     private func swatchBorderColor(_ hex: String) -> Color {
         guard let base = Color(hex: hex) else { return .secondary }
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
             return Color(UIColor(base))
         }
-        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b + 0.5), alpha: a))
+        return Color(UIColor(hue: h, saturation: s, brightness: 1.0, alpha: a))
     }
 
     // MARK: - 書き出し
