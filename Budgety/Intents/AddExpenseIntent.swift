@@ -160,6 +160,8 @@ struct AddExpenseIntent: AppIntent {
         let share = ShareCoordinator.shared.existingShare(for: coreSheet)
         if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
             expense.payerProfileID = pid
+            // ショートカットからの追加は割り勘にしない (支払者=自分のみの負担)。
+            expense.beneficiaryProfileIDs = pid
         }
         if let memberID = profile.selfMemberID {
             expense.payerMemberID = memberID

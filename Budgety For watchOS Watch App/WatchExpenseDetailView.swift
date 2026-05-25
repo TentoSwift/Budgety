@@ -201,6 +201,8 @@ struct WatchExpenseDetailView: View {
         }
         guard expense.beneficiaryProfileIDs != csv else { return }
         expense.beneficiaryProfileIDs = csv
+        // 受益者から外した人の精算済みフラグを掃除する。
+        expense.pruneSettledBeneficiaries()
         do {
             try ctx.save()
             WKInterfaceDevice.current().play(.success)
