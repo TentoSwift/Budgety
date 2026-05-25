@@ -347,7 +347,9 @@ struct SettlementView: View {
                 .monospacedDigit()
         }
         // 全タイルが同じ高さになるよう minHeight を固定。
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .top)
+        // maxHeight: .infinity で同じ行のタイルを最も高いタイルに合わせて伸ばす
+        // (AX サイズで残高ラベルの行数が違っても高さが揃う)。
+        .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 14)
         .padding(.horizontal, 8)
         .background(
