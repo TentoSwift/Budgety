@@ -175,7 +175,13 @@ struct AddExpenseView: View {
     }
 
     private var canSave: Bool {
-        amountDecimal != nil
+        guard amountDecimal != nil else { return false }
+        // 割り勘オンのときは必ず 1 人以上選ぶ。空 (= 全員均等) を許すと、
+        // あとで追加したメンバーが過去の支出に遡って含まれてしまうため。
+        if kind == .expense, shouldShowSharingFields, splitEnabled, selectedBeneficiaries.isEmpty {
+            return false
+        }
+        return true
     }
 
     /// 編集モードで Member 解決ができなかった場合に表示する名前 (保存済みの paidBy)。
@@ -948,10 +954,11 @@ struct AddExpenseView: View {
                             get: { splitEnabled },
                             set: { on in
                                 splitEnabled = on
-                                // オンにした直後、支払者だけが入っている状態なら
-                                // 既定の「全員均等」(空) から選ばせる。
-                                if on, selectedBeneficiaries == Set([selectedPayerProfileID ?? ""]) {
-                                    selectedBeneficiaries = []
+                                // オンにした直後は全員を選択する (空 = 全員にはしない)。
+                                // 後から相手を絞れる。空のまま保存させないため。
+                                if on, selectedBeneficiaries.isEmpty
+                                    || selectedBeneficiaries == Set([selectedPayerProfileID ?? ""]) {
+                                    selectAllBeneficiaries(sheet: sheet)
                                 }
                             }
                         ))
@@ -987,8 +994,11 @@ struct AddExpenseView: View {
                         }
                     } footer: {
                         Text(splitEnabled
-                             ? "チェックした人で均等割り。全員未選択なら全員で均等割りです。"
+                             ? (selectedBeneficiaries.isEmpty
+                                ? "割る相手を 1 人以上選んでください。"
+                                : "チェックした人で均等割りします。")
                              : "オフのときはこの支出を支払者の負担として扱い、精算では割りません。")
+                            .foregroundStyle(splitEnabled && selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                     }
                 }
 
@@ -1447,6 +1457,11 @@ struct AddExpenseView: View {
             // 空 (=全員) や複数なら割り勘オン。
             let loadedPayerID = expense.payerProfileID ?? ""
             splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            // 旧「全員均等」(空) の支出を編集する場合は、現在のメンバーを明示選択に展開して
+            // 保存できるようにする (空のままだと保存不可のため)。
+            if splitEnabled, selectedBeneficiaries.isEmpty {
+                selectedBeneficiaries = Set(expense.sheet?.acceptedMemberProfileIDs() ?? [])
+            }
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
             if let rule = expense.relatedRule {

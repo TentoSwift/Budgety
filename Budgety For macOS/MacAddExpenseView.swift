@@ -67,7 +67,13 @@ struct MacAddExpenseView: View {
     }
 
     private var canSave: Bool {
-        Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
+        guard Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil else { return false }
+        // 割り勘オンのときは必ず 1 人以上選ぶ。空 (= 全員均等) を許すと、
+        // あとで追加したメンバーが過去の支出に遡って含まれてしまうため。
+        if hasOtherMembers, splitEnabled, selectedBeneficiaries.isEmpty {
+            return false
+        }
+        return true
     }
 
     // MARK: - Members
@@ -198,9 +204,10 @@ struct MacAddExpenseView: View {
                             get: { splitEnabled },
                             set: { on in
                                 splitEnabled = on
-                                // オンにした直後、支払者だけが入っていれば全員均等(空)から選ばせる。
-                                if on, selectedBeneficiaries == Set([payerProfileID]) {
-                                    selectedBeneficiaries = []
+                                // オンにした直後は全員を選択する (空 = 全員にはしない)。
+                                if on, selectedBeneficiaries.isEmpty
+                                    || selectedBeneficiaries == Set([payerProfileID]) {
+                                    selectAllBeneficiaries()
                                 }
                             }
                         ))
@@ -235,10 +242,12 @@ struct MacAddExpenseView: View {
                         }
                     } footer: {
                         Text(splitEnabled
-                             ? "選んだ人で均等割り。全員未選択の場合は「全員均等割り」として扱います。"
+                             ? (selectedBeneficiaries.isEmpty
+                                ? "割る相手を 1 人以上選んでください。"
+                                : "選んだ人で均等割りします。")
                              : "オフのときはこの支出を支払者の負担として扱い、精算では割りません。")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(splitEnabled && selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                     }
                 }
                 settlementSection
@@ -581,6 +590,10 @@ struct MacAddExpenseView: View {
             // 受益者が「支払者ただ 1 人」なら割り勘オフ。空(=全員)や複数ならオン。
             let loadedPayerID = e.payerProfileID ?? ""
             splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            // 旧「全員均等」(空) の支出は現在のメンバーを明示選択に展開して保存可能にする。
+            if splitEnabled, selectedBeneficiaries.isEmpty {
+                selectedBeneficiaries = Set(allMemberIDs)
+            }
 
             // CRDT 差分書き戻し用にスナップショット保存
             origTitle = title
