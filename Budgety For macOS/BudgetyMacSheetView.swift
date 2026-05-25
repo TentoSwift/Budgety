@@ -11,6 +11,7 @@
 import SwiftUI
 import CoreData
 import CloudKit
+import UniformTypeIdentifiers
 
 /// 支出の支払い者が指定 profileID と一致するか。「自分」(selfIDs のいずれか) を
 /// 選んだ場合は、payerProfileID が selfIDs に含まれれば一致とみなす (旧 ID 対応)。
@@ -46,6 +47,13 @@ struct BudgetyMacSheetView: View {
     @StateObject private var lockManager = SheetLockManager.shared
     @State private var showingSetPassword = false
     @State private var showingLockPaywall = false
+
+    // エクスポート (CSV / PDF)。Premium 機能。
+    @State private var showingExportPaywall = false
+    @State private var showingExporter = false
+    @State private var exportDocument: ExportFileDocument?
+    @State private var exportContentType: UTType = .commaSeparatedText
+    @State private var exportFilename = "Budgety"
 
     // フィルタ
     @State private var searchText: String = ""
@@ -270,6 +278,12 @@ struct BudgetyMacSheetView: View {
                     Button { showingShare = true } label: {
                         Label("シートを共有", systemImage: "person.crop.circle.badge.plus")
                     }
+                    Button { startExport(.csv) } label: {
+                        Label("CSV にエクスポート", systemImage: "doc.text")
+                    }
+                    Button { startExport(.pdf) } label: {
+                        Label("PDF レポート", systemImage: "doc.richtext")
+                    }
                     Button { showingCSVImport = true } label: {
                         Label("CSV インポート", systemImage: "tray.and.arrow.down")
                     }
@@ -333,6 +347,17 @@ struct BudgetyMacSheetView: View {
         .sheet(isPresented: $showingLockPaywall) {
             PaywallView()
         }
+        .sheet(isPresented: $showingExportPaywall) {
+            PaywallView()
+        }
+        .fileExporter(
+            isPresented: $showingExporter,
+            document: exportDocument,
+            contentType: exportContentType,
+            defaultFilename: exportFilename
+        ) { result in
+            if case .success = result { Haptics.success() }
+        }
     }
 
     /// Premium ならロック設定画面を、未加入なら Paywall を開く。
@@ -349,6 +374,38 @@ struct BudgetyMacSheetView: View {
         searchText = ""
         selectedCategory = nil
         selectedPayerID = nil
+    }
+
+    private enum ExportFormat { case csv, pdf }
+
+    /// CSV / PDF エクスポート。Premium (または共有シート参加) で gate し、
+    /// 通れば `.fileExporter` (保存パネル) を出す。
+    private func startExport(_ format: ExportFormat) {
+        guard PurchaseManager.hasPremiumAccess(to: sheet) else {
+            showingExportPaywall = true
+            Haptics.warning()
+            return
+        }
+        let safe = sheet.displayName
+            .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
+            .joined()
+        switch format {
+        case .csv:
+            exportDocument = ExportFileDocument(data: SheetExporter.makeCSV(for: sheet), type: .commaSeparatedText)
+            exportContentType = .commaSeparatedText
+            exportFilename = "Budgety-\(safe).csv"
+        case .pdf:
+            guard let url = SheetExporter.writePDF(for: sheet),
+                  let data = try? Data(contentsOf: url) else {
+                Haptics.warning()
+                return
+            }
+            exportDocument = ExportFileDocument(data: data, type: .pdf)
+            exportContentType = .pdf
+            exportFilename = "Budgety-\(safe).pdf"
+        }
+        showingExporter = true
+        Haptics.success()
     }
 
     /// 期間ピッカー (今月 / 先月 / 今年 / 全期間)。合計 (サマリー) のみに反映し、
@@ -704,6 +761,31 @@ struct BudgetyMacSheetView: View {
         }
         let sign = total >= 0 ? "+" : ""
         return sign + CurrencyCatalog.format(total, code: code)
+    }
+}
+
+// MARK: - エクスポート用 FileDocument
+
+/// CSV / PDF データを `.fileExporter` (保存パネル) で書き出すための簡易ドキュメント。
+struct ExportFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText, .pdf] }
+    static var writableContentTypes: [UTType] { [.commaSeparatedText, .pdf] }
+
+    var data: Data
+    var type: UTType
+
+    init(data: Data, type: UTType) {
+        self.data = data
+        self.type = type
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+        type = configuration.contentType
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
 
