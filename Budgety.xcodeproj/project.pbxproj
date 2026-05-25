@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2D18B4CC2FB31606006F2C29 /* Budgety For watchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2D31C36A2FC452E10011566C /* LicenseList in Frameworks */ = {isa = PBXBuildFile; productRef = 2D31C3692FC452E10011566C /* LicenseList */; };
 		2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
 		2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
@@ -253,6 +254,7 @@
 			files = (
 				A0010000A0010000A0010000 /* MemojiView in Frameworks */,
 				2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */,
+				2D31C36A2FC452E10011566C /* LicenseList in Frameworks */,
 				B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -345,6 +347,7 @@
 				A0030000A0030000A0030000 /* MemojiView */,
 				2D84845F2FADB766001AB1B6 /* CustomPicker */,
 				B0030000B0030000B0030000 /* CustomNavigationTitle */,
+				2D31C3692FC452E10011566C /* LicenseList */,
 			);
 			productName = Expenso;
 			productReference = 2DDCE11E2FA8974700A42F60 /* Budgety.app */;
@@ -432,6 +435,7 @@
 				A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */,
 				2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */,
 				B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationTitle" */,
+				2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2DDCE11F2FA8974700A42F60 /* Products */;
@@ -1018,6 +1022,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/cybozu/LicenseList.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.0;
+			};
+		};
 		2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/TentoSwift/CustomPicker.git";
@@ -1045,6 +1057,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2D31C3692FC452E10011566C /* LicenseList */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */;
+			productName = LicenseList;
+		};
 		2D84845F2FADB766001AB1B6 /* CustomPicker */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */;
