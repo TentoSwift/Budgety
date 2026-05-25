@@ -32,6 +32,10 @@ struct MacAddExpenseView: View {
     /// 割り勘トグル。オフ = 支払者のみの負担 (受益者 = 支払者)。
     /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
     @State private var splitEnabled: Bool = false
+    /// バーチャルメンバー追加 (Premium 機能)。
+    @State private var showAddMemberPrompt = false
+    @State private var newMemberName = ""
+    @State private var showMemberPaywall = false
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
@@ -120,6 +124,10 @@ struct MacAddExpenseView: View {
         var ids: [String] = []
         if !selfProfileID.isEmpty { ids.append(selfProfileID) }
         ids.append(contentsOf: otherProfileIDs)
+        // バーチャルメンバー (CKShare に出ない) を候補に追加。
+        for rn in sheet.virtualMemberProfiles.compactMap({ $0.recordName }) where !ids.contains(rn) {
+            ids.append(rn)
+        }
         return ids
     }
 
@@ -194,6 +202,16 @@ struct MacAddExpenseView: View {
                         ))
                         if splitEnabled {
                             beneficiariesList
+                            Button {
+                                if PurchaseManager.hasPremiumAccess(to: sheet) {
+                                    showAddMemberPrompt = true
+                                } else {
+                                    showMemberPaywall = true
+                                }
+                            } label: {
+                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                            }
+                            .buttonStyle(.borderless)
                         }
                     } header: {
                         if splitEnabled {
@@ -251,6 +269,20 @@ struct MacAddExpenseView: View {
         }
         .frame(width: 560, height: 720)
         .tint(sheet.tint)
+        .sheet(isPresented: $showMemberPaywall) { PaywallView() }
+        .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
+            TextField("名前", text: $newMemberName)
+            Button("追加") {
+                if let id = sheet.addVirtualMember(name: newMemberName) {
+                    splitEnabled = true
+                    selectedBeneficiaries.insert(id)
+                }
+                newMemberName = ""
+            }
+            Button("キャンセル", role: .cancel) { newMemberName = "" }
+        } message: {
+            Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
+        }
         .confirmationDialog(
             "この支出を削除しますか？",
             isPresented: $showingDeleteConfirm,

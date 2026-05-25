@@ -206,6 +206,13 @@ enum SettlementCalculator {
                       memberSet.insert(urn).inserted else { continue }
                 memberOrder.append(urn)
             }
+            // バーチャルメンバーは CKShare に出ないので PP から精算対象に追加する。
+            let virtualPPs = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in virtualPPs.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+                guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn) else { continue }
+                let nid = normalize(rn)
+                if memberSet.insert(nid).inserted { memberOrder.append(nid) }
+            }
         } else {
             // CKShare 未ロード時のみ PP フォールバック
             let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []

@@ -282,6 +282,16 @@ final class UserProfileStore: ObservableObject {
         recordName == "__defaultOwner__" || recordName == "_defaultOwner_"
     }
 
+    /// バーチャルメンバー (アプリ未使用の相手を割り勘・精算に含める仮想メンバー) の
+    /// recordName 接頭辞。実在の CloudKit ユーザーではないことを表す。
+    /// CloudKit スキーマは既存の ParticipantProfile をそのまま使い、recordName の
+    /// 接頭辞だけで区別する (スキーマ変更なし)。
+    static let virtualRecordPrefix = "virtual:"
+    /// recordName がバーチャルメンバーのものか。
+    static func isVirtualRecordName(_ recordName: String) -> Bool {
+        recordName.hasPrefix(virtualRecordPrefix)
+    }
+
     /// 共有シート内で「自分」を identify するための canonical な ID。
     /// オーナー側と参加者側で別々の userRecordID 空間に居る場合があるため、
     /// recordName を直接使うと不整合になる。次のルールで揃える:

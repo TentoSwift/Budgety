@@ -107,6 +107,10 @@ struct AddExpenseView: View {
     /// 割り勘トグル。オフ = この支出は支払者のみの負担 (受益者 = 支払者)。
     /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
     @State private var splitEnabled: Bool = false
+    /// バーチャルメンバー追加 (Premium 機能)。
+    @State private var showAddMemberPrompt = false
+    @State private var newMemberName = ""
+    @State private var memberPaywall = false
 
     // MARK: - Recurring (繰り返し)
 
@@ -669,7 +673,7 @@ struct AddExpenseView: View {
     /// 割り勘の「全員」ボタン: シートの全メンバーを受益者に追加。
     @MainActor
     private func selectAllBeneficiaries(sheet: ExpenseSheet) {
-        for id in sheet.allMemberProfileIDs() { selectedBeneficiaries.insert(id) }
+        for id in sheet.acceptedMemberProfileIDs() { selectedBeneficiaries.insert(id) }
     }
 
     /// 永続化用のソート済み CSV (順序非依存で同値判定するため)。
@@ -953,8 +957,18 @@ struct AddExpenseView: View {
                         ))
                         if splitEnabled {
                             // 別画面に遷移せず、この場でメンバーを選ぶ (インライン)。
-                            ForEach(sheet.allMemberProfileIDs(), id: \.self) { id in
+                            // 候補は参加中 (受諾済み) のメンバー + バーチャルメンバー。
+                            ForEach(sheet.acceptedMemberProfileIDs(), id: \.self) { id in
                                 beneficiaryInlineRow(id, sheet: sheet)
+                            }
+                            Button {
+                                if PurchaseManager.hasPremiumAccess(to: sheet) {
+                                    showAddMemberPrompt = true
+                                } else {
+                                    memberPaywall = true
+                                }
+                            } label: {
+                                Label("メンバーを追加", systemImage: "person.badge.plus")
                             }
                         }
                     } header: {
@@ -1111,6 +1125,20 @@ struct AddExpenseView: View {
                     },
                     onCancel: { showPhotoScanner = false }
                 )
+            }
+            .sheet(isPresented: $memberPaywall) { PaywallView() }
+            .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
+                TextField("名前", text: $newMemberName)
+                Button("追加") {
+                    if let sheet = contextSheet, let id = sheet.addVirtualMember(name: newMemberName) {
+                        splitEnabled = true
+                        selectedBeneficiaries.insert(id)
+                    }
+                    newMemberName = ""
+                }
+                Button("キャンセル", role: .cancel) { newMemberName = "" }
+            } message: {
+                Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
             }
         }
         // NavigationStack の外側 = シートのルートビューに適用すると、
