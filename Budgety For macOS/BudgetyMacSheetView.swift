@@ -433,8 +433,36 @@ struct BudgetyMacSheetView: View {
     /// シートの参加者一覧 (Apple ID 名 + アバター)。
     /// 名前が "メンバー" になっていれば PP/CKShare がまだ来ていない or
     /// エンタイトルメントの効果が及んでいない可能性あり。
+    /// 「今いるメンバー」= 自分 + CKShare で受諾済みの参加者のみ。
+    /// 招待中 (.pending) や解除済みの ParticipantProfile は除外する。
+    /// CKShare 未ロード時 (solo / 取得前) は allMemberProfileIDs にフォールバック。
+    private var currentMemberIDs: [String] {
+        guard let share = ShareCoordinator.shared.existingShare(for: sheet) else {
+            return sheet.allMemberProfileIDs()
+        }
+        var result: [String] = []
+        var seen = Set<String>()
+        // 自分は常に含める。
+        let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+        if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
+            result.append(me)
+        }
+        if let urn = UserProfileStore.shared.userRecordName, !urn.isEmpty {
+            seen.insert(urn)
+        }
+        // 受諾済みの参加者のみ (招待中・未参加は除外)。
+        for p in share.participants {
+            guard p.acceptanceStatus == .accepted,
+                  let rn = p.budgetyCanonicalID,
+                  seen.insert(rn).inserted else { continue }
+            result.append(rn)
+        }
+        return result
+    }
+
     private var membersStrip: some View {
-        let ids = sheet.allMemberProfileIDs()
+        let ids = currentMemberIDs
         return HStack(spacing: 12) {
             ForEach(ids, id: \.self) { id in
                 let info = sheet.memberDisplayInfo(for: id)
