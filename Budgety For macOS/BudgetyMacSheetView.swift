@@ -145,6 +145,23 @@ struct BudgetyMacSheetView: View {
         return budget - monthlyTotal
     }
 
+    /// 絞り込み中の合計 (filteredExpenses を全期間でシート既定通貨に FX 換算)。
+    /// 検索/フィルタ時にサマリーへ反映する。
+    private var filteredTotals: (expense: Decimal, income: Decimal) {
+        let target = sheet.resolvedDefaultCurrencyCode
+        let fx = FXRatesService.shared
+        var expense: Decimal = 0
+        var income: Decimal = 0
+        for e in filteredExpenses {
+            let from = e.resolvedCurrencyCode
+            let converted = (from == target) ? e.amountDecimal : fx.convert(e.amountDecimal, from: from, to: target)
+            guard let amount = converted else { continue }
+            if e.kind == .expense { expense += amount }
+            else if e.kind == .income { income += amount }
+        }
+        return (expense, income)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -286,27 +303,47 @@ struct BudgetyMacSheetView: View {
     }
 
     private var summaryHero: some View {
-        let t = monthlyTotals
+        let filtering = isFiltering
+        let t = filtering ? filteredTotals : monthlyTotals
         let code = sheet.resolvedDefaultCurrencyCode
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(sheet.tint.gradient)
-                    Image(systemName: sheet.symbol ?? "person.2.fill")
-                        .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
+                ZStack(alignment: .bottomTrailing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(sheet.tint.gradient)
+                        Image(systemName: sheet.symbol ?? "person.2.fill")
+                            .foregroundStyle(.white)
+                            .font(.callout.weight(.semibold))
+                    }
+                    .frame(width: 40, height: 40)
+                    // 検索/フィルタ中はアイコン右下に虫眼鏡バッジ (iOS の SummaryCard と同じ)
+                    if filtering {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color.platformSystemBackground)
+                            .padding(4)
+                            .background(Circle().fill(Color.primary))
+                            .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
+                            .offset(x: 4, y: 4)
+                    }
                 }
-                .frame(width: 40, height: 40)
                 Text(sheet.displayName).font(.title3.weight(.semibold))
                 Spacer()
+                if filtering {
+                    Text("\(filteredExpenses.count)件")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text("今月")
+            Text(filtering ? "絞り込み結果" : "今月")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text(CurrencyCatalog.format(t.expense, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .contentTransition(.numericText(value: NSDecimalNumber(decimal: t.expense).doubleValue))
+                .animation(.snappy, value: t.expense)
 
             // 合計の下に「+収入 | -支出」のサマリ行 (左寄せ)
             HStack(spacing: 12) {
@@ -318,8 +355,8 @@ struct BudgetyMacSheetView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 残予算 (予算設定時のみ)
-            if let remaining = monthlyRemainingBudget {
+            // 残予算 (予算設定時 + 非フィルタ時のみ)
+            if !filtering, let remaining = monthlyRemainingBudget {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(remaining < 0 ? Color.red : Color.primary)
