@@ -66,6 +66,7 @@ struct SettlementView: View {
             .padding(16)
         }
         .background(Color.platformSystemBackground.ignoresSafeArea())
+        .tint(record.tint)
         .navigationTitle("精算")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -425,8 +426,8 @@ struct SettlementView: View {
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-                        .foregroundStyle(Color.accentColor)
+                        .background(Capsule().fill(record.tint.opacity(0.18)))
+                        .foregroundStyle(record.tint)
                 }
                 .buttonStyle(.plain)
             }
@@ -439,7 +440,7 @@ struct SettlementView: View {
             .minimumScaleFactor(0.7)
             Text(CurrencyCatalog.format(transfer.amount, code: currencyCode))
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(record.tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -646,6 +647,7 @@ private struct TransferExpenseSettleView: View {
                 }
             }
         }
+        .tint(record.tint)
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 480)
         #endif
@@ -659,7 +661,7 @@ private struct TransferExpenseSettleView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isOn ? record.tint : Color.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
                         .foregroundStyle(.primary)
