@@ -7,7 +7,8 @@
 //  優先順位: カスタム > Apple ID 名 > "メンバー"。
 //
 //  ShareCalendarApp の UserProfileView を参考にしたミニマル版。
-//  Memoji 編集は iOS 専用 (MemojiView がパッケージ未リンク)。
+//  写真のほかに Memoji / 絵文字 + 背景色でアバターを作成できる
+//  (MemojiEditorView。MemojiView パッケージは iOS ターゲットのみリンク)。
 //
 
 import SwiftUI
@@ -29,12 +30,18 @@ struct ProfileEditView: View {
 
     @State private var draftName: String = ""
     @State private var draftPhoto: Data? = nil
+    /// アバター背景色 (Memoji 作成時に選んだ色)。写真未設定時のフォールバックにも使う。
+    @State private var draftBgHex: String? = nil
     @State private var didLoad: Bool = false
     @State private var saveError: String? = nil
 
     #if canImport(PhotosUI)
     @State private var pickerItem: PhotosPickerItem? = nil
     @State private var isLoadingPhoto: Bool = false
+    #endif
+
+    #if canImport(MemojiView)
+    @State private var showingMemojiEditor: Bool = false
     #endif
 
     var body: some View {
@@ -69,6 +76,15 @@ struct ProfileEditView: View {
             #if canImport(PhotosUI)
             .onChange(of: pickerItem) { _, _ in loadPhotoFromPicker() }
             #endif
+            #if canImport(MemojiView)
+            .sheet(isPresented: $showingMemojiEditor) {
+                MemojiEditorView { data, hex in
+                    draftPhoto = data
+                    draftBgHex = hex
+                    pickerItem = nil
+                }
+            }
+            #endif
         }
     }
 
@@ -85,14 +101,25 @@ struct ProfileEditView: View {
                     if isLoadingPhoto {
                         ProgressView().controlSize(.small)
                     } else {
-                        HStack(spacing: 16) {
-                            PhotosPicker(selection: $pickerItem, matching: .images) {
-                                Label("写真を選択", systemImage: "photo")
-                                    .font(.callout)
+                        VStack(spacing: 10) {
+                            HStack(spacing: 16) {
+                                PhotosPicker(selection: $pickerItem, matching: .images) {
+                                    Label("写真を選択", systemImage: "photo")
+                                        .font(.callout)
+                                }
+                                #if canImport(MemojiView)
+                                Button {
+                                    showingMemojiEditor = true
+                                } label: {
+                                    Label("Memoji・絵文字", systemImage: "face.smiling")
+                                        .font(.callout)
+                                }
+                                #endif
                             }
                             if draftPhoto != nil {
                                 Button(role: .destructive) {
                                     draftPhoto = nil
+                                    draftBgHex = nil
                                     pickerItem = nil
                                 } label: {
                                     Label("削除", systemImage: "trash")
@@ -165,6 +192,7 @@ struct ProfileEditView: View {
         didLoad = true
         draftName = profile.displayName
         draftPhoto = profile.photoData
+        draftBgHex = profile.avatarBgColorHex
     }
 
     #if canImport(PhotosUI)
@@ -220,7 +248,7 @@ struct ProfileEditView: View {
 
         // ローカル更新 + Public DB upload (updateProfile が背景で upload。
         // シート数も含めて publish される)。
-        profile.updateProfile(displayName: name, photoData: draftPhoto, avatarBgColorHex: nil)
+        profile.updateProfile(displayName: name, photoData: draftPhoto, avatarBgColorHex: draftBgHex)
         profile.applyDeviceLocalProfileEdit(in: viewContext)
 
         Haptics.success()
