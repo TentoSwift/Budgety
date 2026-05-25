@@ -248,6 +248,11 @@ extension ExpenseSheet {
     /// オーナーを除外してソロ扱いにしないため）。
     @MainActor
     func hasAcceptedOtherMembers() -> Bool {
+        // バーチャルメンバーは CKShare に出ないので、居れば常に「他メンバーあり」。
+        let profilesAll = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        if profilesAll.contains(where: { UserProfileStore.isVirtualRecordName($0.recordName ?? "") }) {
+            return true
+        }
         #if !os(watchOS)
         if let share = ShareCoordinator.shared.existingShare(for: self) {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)

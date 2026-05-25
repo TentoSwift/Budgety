@@ -513,28 +513,10 @@ struct BudgetyMacSheetView: View {
     /// 招待中 (.pending) や解除済みの ParticipantProfile は除外する。
     /// CKShare 未ロード時 (solo / 取得前) は allMemberProfileIDs にフォールバック。
     private var currentMemberIDs: [String] {
-        guard let share = ShareCoordinator.shared.existingShare(for: sheet) else {
-            return sheet.allMemberProfileIDs()
-        }
-        var result: [String] = []
-        var seen = Set<String>()
-        // 自分は常に含める。
-        let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
-            ?? UserProfileStore.shared.userRecordName
-        if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
-            result.append(me)
-        }
-        if let urn = UserProfileStore.shared.userRecordName, !urn.isEmpty {
-            seen.insert(urn)
-        }
-        // 受諾済みの参加者のみ (招待中・未参加は除外)。
-        for p in share.participants {
-            guard p.acceptanceStatus == .accepted,
-                  let rn = p.budgetyCanonicalID,
-                  seen.insert(rn).inserted else { continue }
-            result.append(rn)
-        }
-        return result
+        // 自分 + 受諾済み参加者 + バーチャルメンバー。
+        // acceptedMemberProfileIDs は CKShare 未ロード時は PP にフォールバックしつつ、
+        // CKShare に出ないバーチャルメンバーも含める。
+        sheet.acceptedMemberProfileIDs()
     }
 
     private var membersStrip: some View {
@@ -728,14 +710,9 @@ struct BudgetyMacSheetView: View {
         }
     }
 
-    /// このシートに参加済 (acceptanceStatus == .accepted) の他のメンバーが居るか。
+    /// このシートに自分以外のメンバー (受諾済み参加者 or バーチャルメンバー) が居るか。
     private var hasAcceptedOtherParticipants: Bool {
-        guard let share = ShareCoordinator.shared.existingShare(for: sheet) else { return false }
-        return share.participants.contains { p in
-            guard p.acceptanceStatus == .accepted, p.role != .owner else { return false }
-            let rn = p.userIdentity.userRecordID?.recordName ?? ""
-            return !rn.isEmpty && !UserProfileStore.isSelfPlaceholderRecordName(rn)
-        }
+        sheet.acceptedMemberProfileIDs().count > 1
     }
 
     private func dayHeader(_ d: Date) -> String {
