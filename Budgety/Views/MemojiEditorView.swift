@@ -180,7 +180,8 @@ struct MemojiEditorView: View {
     }
 
     private func swatch(_ hex: String, size: CGFloat) -> some View {
-        let base = Color(hex: hex) ?? .gray
+        // 塗りも少しだけ明度を上げる。枠線はさらに強く明るく。
+        let fill = brightened(hex, factor: 1.2)
         let isSelected = (bgColorHex == hex)
         // 選択リング + 余白ぶんの外周を常に確保してレイアウトのズレを防ぐ。
         let outer = size + 14
@@ -191,15 +192,15 @@ struct MemojiEditorView: View {
                 // 塗りは常に通常サイズ。グラデーションは付けずフラットな色。
                 // 枠線はその色を明るくした色 (白系でも縁が見える)。
                 Circle()
-                    .fill(base)
+                    .fill(fill)
                     .overlay(
-                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 1.5)
+                        Circle().strokeBorder(brightened(hex, factor: 7.0), lineWidth: 1.5)
                     )
                     .frame(width: size, height: size)
                 // 選択中: 塗りは縮めず、少し余白を空けて同色の外側リングを出す。
                 if isSelected {
                     Circle()
-                        .stroke(base, lineWidth: 3)
+                        .stroke(fill, lineWidth: 3)
                         .frame(width: size + 10, height: size + 10)
                 }
             }
@@ -208,14 +209,15 @@ struct MemojiEditorView: View {
         .buttonStyle(.plain)
     }
 
-    /// スウォッチの色を brightness ×7.0 (上限1.0) にして枠線用の色にする (明るい縁取り)。
-    private func swatchBorderColor(_ hex: String) -> Color {
+    /// hex の色の brightness に factor を掛けた色を返す (上限1.0)。
+    /// 枠線は強め (×7)、塗りは少しだけ (×1.2) など使い分ける。
+    private func brightened(_ hex: String, factor: CGFloat) -> Color {
         guard let base = Color(hex: hex) else { return .secondary }
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
             return Color(UIColor(base))
         }
-        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b * 7.0), alpha: a))
+        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b * factor), alpha: a))
     }
 
     // MARK: - 書き出し
