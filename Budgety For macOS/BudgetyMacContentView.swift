@@ -32,6 +32,8 @@ struct BudgetyMacContentView: View {
     @State private var searchText: String = ""
     /// 検索結果から解錠しようとしているロック中シート (インライン解錠モーダル)。
     @State private var unlockingSheet: ExpenseSheet?
+    /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
+    @State private var searchTotalCurrency: String = CurrencyCatalog.defaultCode
     @StateObject private var lockManager = SheetLockManager.shared
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -323,6 +325,89 @@ struct BudgetyMacContentView: View {
         return sign + CurrencyCatalog.format(net.magnitude, code: code)
     }
 
+    /// 全シート横断のヒット合計を target 通貨に換算して集計する。
+    private func grandTotal(of groups: [MacExpenseMatchGroup], target: String)
+        -> (expense: Decimal, income: Decimal, mixed: Bool, count: Int) {
+        var expenseSum: Decimal = 0
+        var incomeSum: Decimal = 0
+        var currencies = Set<String>()
+        var count = 0
+        for group in groups {
+            for e in group.expenses {
+                count += 1
+                currencies.insert(e.resolvedCurrencyCode)
+                let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
+                if e.kind == .income { incomeSum += amt } else { expenseSum += amt }
+            }
+        }
+        return (expenseSum, incomeSum, currencies.count > 1, count)
+    }
+
+    /// iOS の SearchTotalCard 相当: 検索ヒットの合計を表示するカード。
+    @ViewBuilder
+    private func searchSummaryCard(_ groups: [MacExpenseMatchGroup]) -> some View {
+        let total = grandTotal(of: groups, target: searchTotalCurrency)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.gradient)
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 18, weight: .semibold))
+                }
+                .frame(width: 40, height: 40)
+                Text("検索結果").font(.title3.weight(.semibold))
+                Spacer()
+                searchCurrencyMenu
+            }
+            Text(trimmedQuery.isEmpty ? "\(total.count)件" : "「\(trimmedQuery)」 · \(total.count)件")
+                .font(.subheadline).foregroundStyle(.secondary)
+            Text(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))
+                .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText(value: NSDecimalNumber(decimal: total.expense).doubleValue))
+                .animation(.snappy, value: total.expense)
+            HStack(spacing: 12) {
+                Text("+ \(CurrencyCatalog.format(total.income, code: searchTotalCurrency))")
+                Text("|").foregroundStyle(.tertiary)
+                Text("- \(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))")
+            }
+            .font(.subheadline.monospacedDigit().weight(.medium))
+            .foregroundStyle(.secondary)
+            if total.mixed {
+                Label("複数通貨を \(searchTotalCurrency) に換算して合計しています",
+                      systemImage: "arrow.left.arrow.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.accentColor.opacity(0.12))
+        )
+    }
+
+    /// 合計の表示通貨を切り替えるメニュー。
+    private var searchCurrencyMenu: some View {
+        Menu {
+            Picker("通貨", selection: $searchTotalCurrency) {
+                ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
+                    Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(searchTotalCurrency)
+                Image(systemName: "chevron.up.chevron.down").font(.caption2)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+        }
+    }
+
     @ViewBuilder
     private func resultCard<H: View, C: View>(
         @ViewBuilder header: () -> H,
@@ -379,15 +464,17 @@ struct BudgetyMacContentView: View {
         let locked = lockedSheetsForSearch
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("検索結果").font(.title2.bold())
-                    Text("「\(trimmedQuery)」 · \(totalMatchCount)件")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
+                // 検索ヒットの合計カード (iOS の SearchTotalCard 相当)。常に表示。
+                searchSummaryCard(groups)
 
-                if groups.isEmpty && matched.isEmpty {
-                    ContentUnavailableView.search(text: trimmedQuery)
-                        .padding(.vertical, 40)
+                if groups.isEmpty && matched.isEmpty && locked.isEmpty {
+                    Text(trimmedQuery.isEmpty
+                         ? "検索ワードを入力してください"
+                         : "「\(trimmedQuery)」に一致する項目がありません")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
                 }
 
                 // シート名ヒット
