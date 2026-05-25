@@ -147,23 +147,14 @@ struct MemojiEditorView: View {
                         .font(.headline.weight(.semibold))
                         .rotationEffect(.degrees(colorsExpanded ? 0 : -90))
                     Spacer()
-                    // 折りたたみ時はメインの色 (選択中) のみ表示。
-                    if !colorsExpanded {
-                        Circle()
-                            .fill(Color(hex: bgColorHex) ?? .gray)
-                            .frame(width: 34, height: 34)
-                            .overlay(
-                                Circle().strokeBorder(swatchBorderColor(bgColorHex), lineWidth: 1.5)
-                            )
-                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
 
-            // 展開時のみグリッド表示。上端から下へ広がるアニメーション。
             if colorsExpanded {
+                // 展開時はグリッド。上端から下へ広がるアニメーション。
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
                     spacing: 14
@@ -173,6 +164,16 @@ struct MemojiEditorView: View {
                     }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                // 折りたたみ時は数色を横並びで表示 (スクロールで他の色も選べる)。
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Self.palette, id: \.self) { hex in
+                            swatch(hex, size: 56)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
         .clipped()
@@ -192,7 +193,7 @@ struct MemojiEditorView: View {
                 Circle()
                     .fill(base)
                     .overlay(
-                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 1.5)
+                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 2.5)
                     )
                     .frame(width: size, height: size)
                 // 選択中: 塗りは縮めず、少し余白を空けて同色の外側リングを出す。
