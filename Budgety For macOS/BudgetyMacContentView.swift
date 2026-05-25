@@ -28,14 +28,22 @@ struct BudgetyMacContentView: View {
     @State private var showSyncWaitingAlert: Bool = false
     @State private var showOfflineAlert: Bool = false
     @State private var showNotSignedInAlert: Bool = false
+    /// サイドバーの横断検索クエリ。空でなければ detail に検索結果を出す。
+    @State private var searchText: String = ""
     @StateObject private var lockManager = SheetLockManager.shared
+    @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
+
+    private var trimmedQuery: String { searchText.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
-            if let sheet = selectedSheet {
+            if !trimmedQuery.isEmpty {
+                // 横断検索中は全シートの検索結果を detail に表示。
+                searchResultsDetail
+            } else if let sheet = selectedSheet {
                 if lockManager.isUnlocked(sheet) {
                     BudgetyMacSheetView(sheet: sheet)
                 } else {
@@ -89,6 +97,8 @@ struct BudgetyMacContentView: View {
             if let old, lockManager.hasPassword(for: old) {
                 lockManager.lock(old)
             }
+            // サイドバーでシートを選んだら検索を終了して、そのシートを表示する。
+            if !trimmedQuery.isEmpty { searchText = "" }
         }
         .onChange(of: scenePhase) { _, phase in
             // アプリがバックグラウンド (非表示) になったら全シートを再ロック。
@@ -115,6 +125,7 @@ struct BudgetyMacContentView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+        .searchable(text: $searchText, placement: .sidebar, prompt: Text("シート・支出を検索"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             profileFooter
         }
@@ -227,6 +238,208 @@ struct BudgetyMacContentView: View {
             }
             .reduce(Decimal(0)) { $0 + $1.amountDecimal }
         return "今月 \(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))"
+    }
+
+    // MARK: - 全シート横断検索
+
+    /// 支出 1 件が (シート名以外の) クエリにマッチするか。
+    private func matchesExpense(_ e: Expense, query q: String) -> Bool {
+        let fields: [String] = [
+            e.displayTitle.lowercased(),
+            e.categoryDisplayName.lowercased(),
+            e.displayPaidBy.lowercased(),
+            e.formattedSignedAmount.lowercased(),
+            (e.note ?? "").lowercased()
+        ]
+        return fields.contains { $0.contains(q) }
+    }
+
+    /// 名前がクエリにマッチするシート。
+    private var matchedSheetsForSearch: [ExpenseSheet] {
+        let q = trimmedQuery.lowercased()
+        guard !q.isEmpty else { return [] }
+        return sheets.filter { $0.displayName.lowercased().contains(q) }
+    }
+
+    /// ロック中 (パスワードあり & 未解錠) のシート。中身は検索対象外。
+    private var lockedSheetsForSearch: [ExpenseSheet] {
+        sheets.filter { lockManager.hasPassword(for: $0) && !lockManager.isUnlocked($0) }
+    }
+
+    private struct MacExpenseMatchGroup: Identifiable {
+        let sheet: ExpenseSheet
+        let expenses: [Expense]
+        let net: Decimal
+        let currency: String
+        var id: NSManagedObjectID { sheet.objectID }
+    }
+
+    /// 支出/収入がクエリにマッチするものを所属シートごとにまとめる (ロック中は除外)。
+    private var expenseMatchGroups: [MacExpenseMatchGroup] {
+        let q = trimmedQuery.lowercased()
+        guard !q.isEmpty else { return [] }
+        var groups: [MacExpenseMatchGroup] = []
+        for sheet in sheets {
+            if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) { continue }
+            guard let exps = sheet.expenses as? Set<Expense> else { continue }
+            let matched = exps
+                .filter { matchesExpense($0, query: q) }
+                .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+            guard !matched.isEmpty else { continue }
+            let target = sheet.resolvedDefaultCurrencyCode
+            var net: Decimal = 0
+            for e in matched {
+                let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
+                net += (e.kind == .income) ? amt : -amt
+            }
+            groups.append(MacExpenseMatchGroup(sheet: sheet, expenses: matched, net: net, currency: target))
+        }
+        return groups
+    }
+
+    private var totalMatchCount: Int {
+        expenseMatchGroups.reduce(0) { $0 + $1.expenses.count }
+    }
+
+    private func openFromSearch(_ sheet: ExpenseSheet) {
+        selectedSheet = sheet
+        searchText = ""
+    }
+
+    private func netString(_ net: Decimal, code: String) -> String {
+        let sign = net > 0 ? "+" : (net < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(net.magnitude, code: code)
+    }
+
+    @ViewBuilder
+    private func resultCard<H: View, C: View>(
+        @ViewBuilder header: () -> H,
+        @ViewBuilder content: () -> C
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            header().font(.subheadline.weight(.semibold))
+            VStack(spacing: 0) { content() }
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.quaternary.opacity(0.5))
+                )
+        }
+    }
+
+    private func sheetHitRow(_ sheet: ExpenseSheet) -> some View {
+        HStack(spacing: 12) {
+            SheetIconView(record: sheet, size: 32)
+            Text(sheet.displayName).font(.body)
+            Spacer()
+            if lockManager.hasPassword(for: sheet) {
+                Image(systemName: lockManager.isUnlocked(sheet) ? "lock.open.fill" : "lock.fill")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private func searchExpenseRow(_ e: Expense) -> some View {
+        HStack(spacing: 12) {
+            CategoryIconView(expense: e, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
+                    .font(.body).foregroundStyle(.primary).lineLimit(1)
+                if let d = e.date {
+                    Text(d, format: .dateTime.year().month().day())
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Text(e.formattedSignedAmount)
+                .font(.callout.monospacedDigit()).foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var searchResultsDetail: some View {
+        let groups = expenseMatchGroups
+        let matched = matchedSheetsForSearch
+        let locked = lockedSheetsForSearch
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("検索結果").font(.title2.bold())
+                    Text("「\(trimmedQuery)」 · \(totalMatchCount)件")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+
+                if groups.isEmpty && matched.isEmpty {
+                    ContentUnavailableView.search(text: trimmedQuery)
+                        .padding(.vertical, 40)
+                }
+
+                // シート名ヒット
+                if !matched.isEmpty {
+                    resultCard {
+                        Label("シート", systemImage: "rectangle.stack.fill")
+                    } content: {
+                        ForEach(Array(matched.enumerated()), id: \.element.objectID) { idx, sheet in
+                            Button { openFromSearch(sheet) } label: { sheetHitRow(sheet) }
+                                .buttonStyle(.plain)
+                            if idx < matched.count - 1 { Divider().padding(.leading, 52) }
+                        }
+                    }
+                }
+
+                // 支出ヒット (シート別)
+                ForEach(groups) { group in
+                    resultCard {
+                        HStack {
+                            Label(group.sheet.displayName, systemImage: "tray.full")
+                                .foregroundStyle(group.sheet.tint)
+                            Spacer()
+                            Text(netString(group.net, code: group.currency))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    } content: {
+                        ForEach(Array(group.expenses.enumerated()), id: \.element.objectID) { idx, e in
+                            Button { openFromSearch(group.sheet) } label: { searchExpenseRow(e) }
+                                .buttonStyle(.plain)
+                            if idx < group.expenses.count - 1 { Divider().padding(.leading, 52) }
+                        }
+                    }
+                }
+
+                // ロック中シート (解除導線)
+                if !locked.isEmpty {
+                    resultCard {
+                        Label("ロック中のシート", systemImage: "lock.fill")
+                    } content: {
+                        ForEach(Array(locked.enumerated()), id: \.element.objectID) { idx, sheet in
+                            Button { openFromSearch(sheet) } label: {
+                                HStack(spacing: 12) {
+                                    SheetIconView(record: sheet, size: 32)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(sheet.displayName).font(.body).foregroundStyle(.primary)
+                                        Text("ロック中 · 解除して検索に含める")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if idx < locked.count - 1 { Divider().padding(.leading, 52) }
+                        }
+                    }
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
