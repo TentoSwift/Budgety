@@ -182,6 +182,11 @@ struct SettingsView: View {
                         Text(Bundle.main.versionDisplay)
                             .foregroundStyle(.secondary)
                     }
+                    NavigationLink {
+                        LicenseListScreen()
+                    } label: {
+                        Label("ライセンス", systemImage: "doc.text")
+                    }
                 }
 
                 Section {
