@@ -22,6 +22,8 @@ struct SettlementView: View {
     @State private var editingRecord: SettlementRecord?
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
+    /// 送金プランから「支出を選んで精算」する対象。
+    @State private var settlingTransfer: TransferSettleTarget?
 
     /// 新規 SettlementRecord 入力時のプリフィル。
     private struct LoggingPrefill: Identifiable {
@@ -29,6 +31,14 @@ struct SettlementView: View {
         let from: String
         let to: String
         let amount: Decimal
+        let currencyCode: String
+    }
+
+    /// 送金プランの 1 行から「返す支出を選んで精算」する対象。
+    private struct TransferSettleTarget: Identifiable {
+        let id = UUID()
+        let from: String   // 返す人 (債務者)
+        let to: String     // 受け取る人 (立て替えた人)
         let currencyCode: String
     }
 
@@ -83,6 +93,15 @@ struct SettlementView: View {
                 prefillTo: prefill.to,
                 prefillAmount: prefill.amount,
                 prefillCurrencyCode: prefill.currencyCode
+            )
+        }
+        .sheet(item: $settlingTransfer) { target in
+            TransferExpenseSettleView(
+                record: record,
+                fromID: target.from,
+                toID: target.to,
+                currencyCode: target.currencyCode,
+                onDone: { recompute() }
             )
         }
         .sheet(item: $editingRecord) { rec in
@@ -415,15 +434,28 @@ struct SettlementView: View {
                     size: 32
                 )
                 Spacer()
-                Button {
-                    loggingPrefill = LoggingPrefill(
-                        from: transfer.fromProfileID,
-                        to: transfer.toProfileID,
-                        amount: transfer.amount,
-                        currencyCode: currencyCode
-                    )
+                Menu {
+                    Button {
+                        settlingTransfer = TransferSettleTarget(
+                            from: transfer.fromProfileID,
+                            to: transfer.toProfileID,
+                            currencyCode: currencyCode
+                        )
+                    } label: {
+                        Label("支出を選んで精算", systemImage: "checklist")
+                    }
+                    Button {
+                        loggingPrefill = LoggingPrefill(
+                            from: transfer.fromProfileID,
+                            to: transfer.toProfileID,
+                            amount: transfer.amount,
+                            currencyCode: currencyCode
+                        )
+                    } label: {
+                        Label("金額で記録", systemImage: "pencil")
+                    }
                 } label: {
-                    Text("送金済み")
+                    Text("精算")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -610,5 +642,106 @@ struct SettlementView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+// MARK: - 送金プランから「支出を選んで精算」
+
+/// 送金プランの 1 行 (from が to に返す) について、to が立て替えた支出のうち
+/// from が未精算の受益者になっているものを一覧し、選んだ支出を from について精算済みにする。
+private struct TransferExpenseSettleView: View {
+    @ObservedObject var record: ExpenseSheet
+    let fromID: String
+    let toID: String
+    let currencyCode: String
+    var onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: Set<NSManagedObjectID> = []
+
+    /// to が支払い、from が未精算の受益者になっている支出 (= from が to に返すべき支出)。
+    private var candidates: [Expense] {
+        ((record.expenses as? Set<Expense>) ?? [])
+            .filter { e in
+                guard e.kind == .expense else { return false }
+                guard (e.payerProfileID ?? "") == toID else { return false }
+                let bens = e.resolvedBeneficiaryIDs()
+                return bens.contains(fromID) && !e.isBeneficiarySettled(fromID)
+            }
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+    }
+
+    private func share(of e: Expense) -> Decimal {
+        e.amountDecimal / Decimal(max(e.resolvedBeneficiaryIDs().count, 1))
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if candidates.isEmpty {
+                    ContentUnavailableView("精算する支出がありません", systemImage: "checkmark.seal")
+                } else {
+                    Section {
+                        ForEach(candidates, id: \.objectID) { e in
+                            row(e)
+                        }
+                    } footer: {
+                        Text("選んだ支出を「\(record.memberDisplayInfo(for: fromID).name)」について精算済みにします。残高・送金プランに反映されます。")
+                    }
+                }
+            }
+            .navigationTitle("返す支出を選択")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("精算 (\(selected.count)件)") { settle() }
+                        .disabled(selected.isEmpty)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 480)
+        #endif
+    }
+
+    @ViewBuilder
+    private func row(_ e: Expense) -> some View {
+        let isOn = selected.contains(e.objectID)
+        Button {
+            if isOn { selected.remove(e.objectID) } else { selected.insert(e.objectID) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
+                        .foregroundStyle(.primary)
+                    if let d = e.date {
+                        Text(d, format: .dateTime.year().month().day())
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Text(CurrencyCatalog.format(share(of: e), code: e.resolvedCurrencyCode))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settle() {
+        for e in candidates where selected.contains(e.objectID) {
+            e.setBeneficiarySettled(true, for: fromID)
+        }
+        PersistenceController.shared.save()
+        Haptics.success()
+        onDone()
+        dismiss()
     }
 }
