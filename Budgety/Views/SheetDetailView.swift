@@ -818,6 +818,8 @@ struct SheetDetailView: View {
         copy.categoryRaw = expense.categoryRaw
         copy.paidBy = nil
         copy.payerProfileID = expense.payerProfileID
+        // 複製は割り勘を引き継がない (支払者のみの負担にする)。
+        copy.beneficiaryProfileIDs = expense.payerProfileID
         copy.date = .now
         copy.note = expense.note
         copy.createdAt = .now

@@ -249,6 +249,17 @@ extension Expense {
         settledBeneficiaryIDList = list
     }
 
+    /// 現在の受益者に含まれない精算済みフラグを除去する。
+    /// 割り勘を編集して受益者から外した人の精算済みマークが残ると、
+    /// 再追加時に勝手に「精算済み」表示になるため、保存時に掃除する。
+    func pruneSettledBeneficiaries() {
+        let current = Set(beneficiaryIDList)
+        let pruned = settledBeneficiaryIDList.filter { current.contains($0) }
+        if pruned.count != settledBeneficiaryIDList.count {
+            settledBeneficiaryIDList = pruned
+        }
+    }
+
     var kind: TransactionKind {
         get { TransactionKind(rawValue: kindRaw ?? "") ?? .expense }
         set { kindRaw = newValue.rawValue }

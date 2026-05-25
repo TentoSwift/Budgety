@@ -723,6 +723,8 @@ struct MacAddExpenseView: View {
         if newCSV != oldCSV {
             expense.beneficiaryIDList = effectiveBeneficiaryIDs
         }
+        // 受益者から外した人の精算済みフラグを掃除する。
+        expense.pruneSettledBeneficiaries()
     }
 
     private func deleteExpense() {
