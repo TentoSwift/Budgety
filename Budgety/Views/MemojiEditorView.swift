@@ -30,7 +30,6 @@ struct MemojiEditorView: View {
 
     @State private var memojiImage: UIImage? = nil
     @State private var memojiType: MemojiImageType? = nil
-    @State private var isEditable: Bool = true
     @State private var bgColorHex: String = MemojiEditorView.palette.first ?? "#5B8DEF"
     /// ミー文字の位置調整 (ドラッグ)。
     @State private var memojiOffset: CGSize = .zero
@@ -88,11 +87,10 @@ struct MemojiEditorView: View {
     private var avatarArea: some View {
         ZStack {
             Circle().fill(bgColor.gradient)
-            // タップで絵文字 / ミー文字キーボードを開き、ドラッグで位置調整。
-            MemojiViewRepresentable(
+            // 表示時に自動でミー文字キーボードを開く。ドラッグで位置調整。
+            AutoFocusMemojiView(
                 image: $memojiImage,
                 memojiType: $memojiType,
-                isEditable: $isEditable,
                 maxLetters: 1,
                 textColor: .white
             )
@@ -223,6 +221,70 @@ struct MemojiEditorView: View {
         let renderer = ImageRenderer(content: content)
         renderer.scale = 3
         return renderer.uiImage?.jpegData(compressionQuality: 0.9)
+    }
+}
+
+// MARK: - 自動でキーボードを開く MemojiView ラッパー
+
+/// パッケージの `MemojiView` (UIKit) をラップし、表示時に自動で
+/// ミー文字キーボードを開く (= タップ不要)。内部の UITextView を探して
+/// window に入ったら becomeFirstResponder する。
+private struct AutoFocusMemojiView: UIViewRepresentable {
+    @Binding var image: UIImage?
+    @Binding var memojiType: MemojiImageType?
+    var maxLetters: Int = 1
+    var textColor: UIColor? = .white
+
+    func makeUIView(context: Context) -> MemojiView {
+        let view = MemojiView()
+        view.isEditable = true
+        view.maxLetters = maxLetters
+        view.textColor = textColor
+        view.onChange = { img, type in
+            DispatchQueue.main.async {
+                image = img
+                memojiType = type
+            }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: MemojiView, context: Context) {
+        uiView.image = image
+        guard !context.coordinator.started else { return }
+        context.coordinator.started = true
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { focusWhenReady(uiView, coordinator: coordinator) }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var started = false
+        var didFocus = false
+        var attempts = 0
+    }
+
+    /// view が window に入るまで待ってから内部 UITextView を first responder にする。
+    private func focusWhenReady(_ view: MemojiView, coordinator: Coordinator) {
+        guard !coordinator.didFocus, coordinator.attempts < 25 else { return }
+        coordinator.attempts += 1
+        if view.window != nil, let tv = Self.findTextView(in: view) {
+            coordinator.didFocus = true
+            tv.becomeFirstResponder()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            focusWhenReady(view, coordinator: coordinator)
+        }
+    }
+
+    private static func findTextView(in view: UIView) -> UITextView? {
+        if let tv = view as? UITextView { return tv }
+        for sub in view.subviews {
+            if let found = findTextView(in: sub) { return found }
+        }
+        return nil
     }
 }
 
