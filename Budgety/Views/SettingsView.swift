@@ -12,6 +12,7 @@ struct SettingsView: View {
     @StateObject private var profile = UserProfileStore.shared
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
@@ -123,19 +124,11 @@ struct SettingsView: View {
                 }
 
                 Section("為替レート") {
-                    HStack {
-                        Label("基準通貨", systemImage: "dollarsign.circle")
-                        Spacer()
-                        Text(fx.baseCurrency).foregroundStyle(.secondary)
+                    infoRow("基準通貨", systemImage: "dollarsign.circle") {
+                        Text(fx.baseCurrency)
                     }
-                    HStack {
-                        Label("最終更新", systemImage: "clock.arrow.circlepath")
-                        Spacer()
-                        if let date = fx.lastRateDate {
-                            Text(date).foregroundStyle(.secondary)
-                        } else {
-                            Text("未取得").foregroundStyle(.secondary)
-                        }
+                    infoRow("最終更新", systemImage: "clock.arrow.circlepath") {
+                        Text(fx.lastRateDate ?? "未取得")
                     }
                     Button {
                         Task { await fx.refresh() }
@@ -176,11 +169,8 @@ struct SettingsView: View {
                 }
 
                 Section("バージョン") {
-                    HStack {
-                        Text("Budgety")
-                        Spacer()
+                    infoRow("Budgety") {
                         Text(Bundle.main.versionDisplay)
-                            .foregroundStyle(.secondary)
                     }
                     NavigationLink {
                         LicenseListScreen()
@@ -230,6 +220,32 @@ struct SettingsView: View {
                     showPaywall = true
                 }
             }
+        }
+    }
+
+    /// ラベル + 値の行。AX サイズでは横に収まらないので AnyLayout で縦積みに切替。
+    /// systemImage を渡すと Label アイコン付き、省略すると素の Text ラベル。
+    @ViewBuilder
+    private func infoRow<Trailing: View>(
+        _ label: String,
+        systemImage: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 8))
+        layout {
+            if let systemImage {
+                Label(label, systemImage: systemImage)
+            } else {
+                Text(label)
+            }
+            if !isAX { Spacer(minLength: 8) }
+            trailing()
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: isAX ? .infinity : nil,
+                       alignment: isAX ? .leading : .trailing)
         }
     }
 }
