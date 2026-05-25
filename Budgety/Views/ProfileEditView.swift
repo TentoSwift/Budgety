@@ -114,6 +114,9 @@ struct ProfileEditView: View {
                                     Label("Memoji・絵文字", systemImage: "face.smiling")
                                         .font(.callout)
                                 }
+                                // Form の同一行で PhotosPicker とタップ領域が競合しないよう
+                                // 各ボタンに明示スタイルを付ける (= 写真選択が効かなくなる不具合の修正)。
+                                .buttonStyle(.borderless)
                                 #endif
                             }
                             if draftPhoto != nil {
@@ -125,6 +128,7 @@ struct ProfileEditView: View {
                                     Label("削除", systemImage: "trash")
                                         .font(.callout)
                                 }
+                                .buttonStyle(.borderless)
                                 #if os(macOS)
                                 .tint(.red)
                                 #endif
