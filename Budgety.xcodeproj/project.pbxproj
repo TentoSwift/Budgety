@@ -183,6 +183,7 @@
 				Views/OnboardingView.swift,
 				Views/PaywallView.swift,
 				Views/ProfileEditView.swift,
+				Views/VirtualMemberEditView.swift,
 				Views/RecurringListView.swift,
 				Views/RecurringSettingsView.swift,
 				Views/SetSheetPasswordView.swift,

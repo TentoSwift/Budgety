@@ -36,14 +36,11 @@ struct EditSheetView: View {
     @State private var newMemberName = ""
     /// 名前変更対象の recordName。nil = 新規追加。
     @State private var editingMemberID: String?
-    /// 写真を設定する対象のバーチャルメンバー (recordName)。
-    /// dismiss では消さず、適用完了後に applyMemberPhoto でクリアする。
-    @State private var photoTargetID: String?
-    /// 写真ピッカーの表示状態 (photoTargetID とは独立。dismiss で対象を消さないため)。
-    @State private var showMemberPhotoPicker: Bool = false
-    #if canImport(PhotosUI)
-    @State private var memberPhotoItem: PhotosPickerItem?
-    #endif
+    /// 編集中のバーチャルメンバー (プロフィール編集シート提示用)。
+    @State private var editingVirtualMember: EditingVirtualMember?
+
+    /// `.sheet(item:)` 用の recordName ラッパー。
+    private struct EditingVirtualMember: Identifiable { let id: String }
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
     private var selfParticipantProfile: ParticipantProfile? {
@@ -217,63 +214,13 @@ struct EditSheetView: View {
                 }
                 Button("キャンセル", role: .cancel) { newMemberName = ""; editingMemberID = nil }
             }
-            #if canImport(PhotosUI)
-            .photosPicker(
-                isPresented: $showMemberPhotoPicker,
-                selection: $memberPhotoItem,
-                matching: .images
-            )
-            .onChange(of: memberPhotoItem) { _, item in applyMemberPhoto(item) }
-            #endif
-        }
-    }
-
-    #if canImport(PhotosUI)
-    /// 選んだ写真を対象バーチャルメンバーの photoData に保存する (縮小して CKAsset を抑える)。
-    private func applyMemberPhoto(_ item: PhotosPickerItem?) {
-        guard let item, let targetID = photoTargetID else { return }
-        Task { @MainActor in
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let pp = record.virtualMemberProfiles.first(where: { $0.recordName == targetID }) {
-                pp.photoData = Self.downsizeImageData(data, maxDimension: 256)
-                pp.updatedAt = .now
-                PersistenceController.shared.save()
+            .sheet(item: $editingVirtualMember) { item in
+                if let pp = record.virtualMemberProfiles.first(where: { $0.recordName == item.id }) {
+                    VirtualMemberEditView(profile: pp)
+                }
             }
-            memberPhotoItem = nil
-            photoTargetID = nil
         }
     }
-
-    /// 画像を maxDimension 程度に縮小して JPEG にする。
-    private static func downsizeImageData(_ data: Data, maxDimension: CGFloat) -> Data {
-        #if canImport(UIKit)
-        guard let img = UIImage(data: data) else { return data }
-        let maxSide = max(img.size.width, img.size.height)
-        let scale = maxSide > maxDimension ? maxDimension / maxSide : 1
-        let newSize = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: newSize)) }
-        return resized.jpegData(compressionQuality: 0.82) ?? data
-        #elseif canImport(AppKit)
-        guard let img = NSImage(data: data) else { return data }
-        let maxSide = max(img.size.width, img.size.height)
-        let scale = maxSide > maxDimension ? maxDimension / maxSide : 1
-        let newSize = NSSize(width: img.size.width * scale, height: img.size.height * scale)
-        let target = NSImage(size: newSize)
-        target.lockFocus()
-        img.draw(in: NSRect(origin: .zero, size: newSize))
-        target.unlockFocus()
-        guard let tiff = target.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.82]) else {
-            return data
-        }
-        return jpeg
-        #else
-        return data
-        #endif
-    }
-    #endif
 
     private var sheetIconGrid: some View {
         // AX サイズで列が詰まらないよう、最小幅 50pt の adaptive grid
@@ -375,39 +322,23 @@ struct EditSheetView: View {
     private var memberSection: some View {
         Section {
             ForEach(record.virtualMemberProfiles, id: \.objectID) { pp in
-                HStack(spacing: 12) {
-                    // アバターをタップで写真を選択。
-                    Button {
-                        photoTargetID = pp.recordName
-                        showMemberPhotoPicker = true
-                    } label: {
+                // 行タップでプロフィール編集 (名前 + 写真 + Memoji + 背景色)。
+                Button {
+                    if let rn = pp.recordName {
+                        editingVirtualMember = EditingVirtualMember(id: rn)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
                         AvatarView(photoData: pp.photoData,
                                    displayName: pp.displayNameOrEmpty,
                                    colorHex: pp.displayColorHex, size: 32)
-                            .overlay(alignment: .bottomTrailing) {
-                                Image(systemName: "camera.circle.fill")
-                                    .font(.system(size: 13))
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(.white, Color.accentColor)
-                            }
+                        Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                     }
-                    .buttonStyle(.borderless)
-                    // 名前をタップで名前変更。
-                    Button {
-                        editingMemberID = pp.recordName
-                        newMemberName = pp.displayName ?? ""
-                        showMemberPrompt = true
-                    } label: {
-                        HStack {
-                            Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "pencil").font(.caption).foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
                 }
+                .buttonStyle(.plain)
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
                         if let rn = pp.recordName { record.deleteVirtualMember(profileID: rn) }
@@ -428,7 +359,7 @@ struct EditSheetView: View {
         } header: {
             Text("バーチャルメンバー")
         } footer: {
-            Text("アプリを使っていない相手を割り勘・支払者に追加できます。行をタップで名前変更、スワイプで削除。")
+            Text("アプリを使っていない相手を割り勘・支払者に追加できます。行をタップで名前・写真を編集、スワイプで削除。")
         }
     }
 
