@@ -25,6 +25,7 @@ struct ExpenseDetailView: View {
             detailsSection
             if showsParticipants {
                 participantsSection
+                settlementSection
             }
             photoSection
             if let note = expense.note,
@@ -167,6 +168,63 @@ struct ExpenseDetailView: View {
         }
         let names = ids.map { sheet.memberDisplayInfo(for: $0).name }
         return names.joined(separator: ", ")
+    }
+
+    // MARK: - 精算 (相手ごと)
+
+    /// 割り勘の相手ごとに「精算済み」を切り替えるセクション (支出のみ)。
+    /// 精算済みにした相手のぶんは精算計算 (誰が誰に) から外れる。
+    @ViewBuilder
+    private var settlementSection: some View {
+        if expense.kind == .expense, let sheet = expense.sheet {
+            let allIDs = expense.resolvedBeneficiaryIDs()
+            let share = expense.amountDecimal / Decimal(max(allIDs.count, 1))
+            let code = expense.resolvedCurrencyCode
+            let payerID = expense.payerProfileID ?? ""
+            // 支払者自身は「自分に返す」対象外なので除外。
+            let ids = allIDs.filter { $0 != payerID }
+            if !ids.isEmpty {
+                Section {
+                    ForEach(ids, id: \.self) { id in
+                        settleRow(id: id, sheet: sheet, share: share, code: code)
+                    }
+                } header: {
+                    Text("精算")
+                } footer: {
+                    Text("返してもらった相手をタップして精算済みにします。精算済みのぶんは「誰が誰に」の精算計算から外れます。")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func settleRow(id: String, sheet: ExpenseSheet, share: Decimal, code: String) -> some View {
+        let info = sheet.memberDisplayInfo(for: id)
+        let settled = expense.isBeneficiarySettled(id)
+        Button {
+            expense.setBeneficiarySettled(!settled, for: id)
+            PersistenceController.shared.save()
+            Haptics.success()
+        } label: {
+            HStack(spacing: 12) {
+                AvatarView(photoData: info.photoData, displayName: info.name,
+                           colorHex: info.colorHex, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(info.name).foregroundStyle(.primary)
+                    Text(CurrencyCatalog.format(share, code: code))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if settled {
+                    Label("精算済み", systemImage: "checkmark.seal.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else {
+                    Image(systemName: "circle").foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Photo

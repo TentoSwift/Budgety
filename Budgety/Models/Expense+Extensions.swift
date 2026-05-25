@@ -215,6 +215,40 @@ extension Expense {
         return sheet?.allMemberProfileIDs() ?? []
     }
 
+    /// 精算済みにした受益者の profileID リスト (支出ごと・相手ごとの精算)。
+    /// `beneficiaryProfileIDs` のサブセット。内部表現は CSV。
+    var settledBeneficiaryIDList: [String] {
+        get {
+            (settledBeneficiaryProfileIDs ?? "")
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            var seen = Set<String>()
+            let cleaned = newValue
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && seen.insert($0).inserted }
+            settledBeneficiaryProfileIDs = cleaned.joined(separator: ",")
+        }
+    }
+
+    /// 指定受益者がこの支出で精算済みか。
+    func isBeneficiarySettled(_ profileID: String) -> Bool {
+        settledBeneficiaryIDList.contains(profileID)
+    }
+
+    /// 指定受益者の精算済みフラグを切り替える。
+    func setBeneficiarySettled(_ settled: Bool, for profileID: String) {
+        var list = settledBeneficiaryIDList
+        if settled {
+            if !list.contains(profileID) { list.append(profileID) }
+        } else {
+            list.removeAll { $0 == profileID }
+        }
+        settledBeneficiaryIDList = list
+    }
+
     var kind: TransactionKind {
         get { TransactionKind(rawValue: kindRaw ?? "") ?? .expense }
         set { kindRaw = newValue.rawValue }
