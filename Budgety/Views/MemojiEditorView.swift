@@ -181,7 +181,7 @@ struct MemojiEditorView: View {
 
     private func swatch(_ hex: String, size: CGFloat) -> some View {
         // 塗りは明度を下げる (暗め)。枠線は逆に明るく。
-        let fill = brightened(hex, factor: 0.7)
+        let fill = brightened(hex, factor: 0.9)
         let isSelected = (bgColorHex == hex)
         // 選択リング + 余白ぶんの外周を常に確保してレイアウトのズレを防ぐ。
         let outer = size + 14
