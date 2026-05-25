@@ -35,6 +35,9 @@ struct MemojiEditorView: View {
     /// ミー文字の位置調整 (ドラッグ)。
     @State private var memojiOffset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    /// ミー文字の拡大縮小 (ピンチ)。
+    @State private var memojiScale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
     /// 背景色グリッドの展開状態。
     @State private var colorsExpanded: Bool = false
 
@@ -57,7 +60,9 @@ struct MemojiEditorView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     avatarArea
-                    Text("タップしてミー文字を選択")
+                    Text(memojiImage == nil
+                         ? "タップしてミー文字を選択"
+                         : "ドラッグで移動・ピンチで拡大縮小")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     colorSection
@@ -92,8 +97,9 @@ struct MemojiEditorView: View {
                 textColor: .white
             )
             .padding(34)
+            .scaleEffect(memojiScale)
             .offset(memojiOffset)
-            // simultaneousGesture: タップ (= 編集) を殺さずにドラッグで移動。
+            // simultaneousGesture: タップ (= 編集) を殺さずにドラッグ移動・ピンチ拡縮。
             .simultaneousGesture(
                 DragGesture(minimumDistance: 8)
                     .onChanged { value in
@@ -103,6 +109,13 @@ struct MemojiEditorView: View {
                         ))
                     }
                     .onEnded { _ in lastOffset = memojiOffset }
+            )
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        memojiScale = clampScale(lastScale * value.magnification)
+                    }
+                    .onEnded { _ in lastScale = memojiScale }
             )
         }
         .frame(width: previewSize, height: previewSize)
@@ -116,6 +129,11 @@ struct MemojiEditorView: View {
             width: min(max(s.width, -limit), limit),
             height: min(max(s.height, -limit), limit)
         )
+    }
+
+    /// 拡大縮小の範囲を制限する。
+    private func clampScale(_ s: CGFloat) -> CGFloat {
+        min(max(s, 0.5), 3.0)
     }
 
     // MARK: - 背景色 (chevron 展開グリッド)
@@ -194,6 +212,7 @@ struct MemojiEditorView: View {
                     .resizable()
                     .scaledToFit()
                     .padding(side * 0.16)
+                    .scaleEffect(memojiScale)
                     .offset(x: memojiOffset.width * scale,
                             y: memojiOffset.height * scale)
             }
