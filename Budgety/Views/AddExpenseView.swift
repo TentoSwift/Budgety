@@ -104,6 +104,9 @@ struct AddExpenseView: View {
     /// 空 = 「シートの全員で均等割り」(精算計算側で展開される)。
     /// 収入では使わない (精算対象外)。
     @State private var selectedBeneficiaries: Set<String> = []
+    /// 割り勘トグル。オフ = この支出は支払者のみの負担 (受益者 = 支払者)。
+    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    @State private var splitEnabled: Bool = false
 
     // MARK: - Recurring (繰り返し)
 
@@ -638,19 +641,49 @@ struct AddExpenseView: View {
         }
     }
 
-    /// 受益者ピッカーのプレビュー文字列。空 = 全員均等、それ以外 = 「N 人選択中: 名前1, 名前2...」。
-    @MainActor
-    private func beneficiarySummary(in sheet: ExpenseSheet) -> String {
-        if selectedBeneficiaries.isEmpty {
-            return "全員均等"
+    /// 受益者をインラインで選ぶ 1 行 (アバター + 名前 + チェック)。タップで選択をトグル。
+    @ViewBuilder
+    private func beneficiaryInlineRow(_ id: String, sheet: ExpenseSheet) -> some View {
+        let info = sheet.memberDisplayInfo(for: id)
+        let isOn = selectedBeneficiaries.contains(id)
+        Button {
+            if isOn { selectedBeneficiaries.remove(id) } else { selectedBeneficiaries.insert(id) }
+        } label: {
+            HStack(spacing: 12) {
+                AvatarView(
+                    photoData: info.photoData,
+                    displayName: info.name,
+                    colorHex: info.colorHex,
+                    size: 32
+                )
+                Text(info.name).foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                    .font(.title3)
+            }
         }
-        let names = selectedBeneficiaries.map { sheet.memberDisplayInfo(for: $0).name }
-        return "\(selectedBeneficiaries.count) 人: \(names.joined(separator: ", "))"
+        .buttonStyle(.plain)
+    }
+
+    /// 割り勘の「全員」ボタン: シートの全メンバーを受益者に追加。
+    @MainActor
+    private func selectAllBeneficiaries(sheet: ExpenseSheet) {
+        for id in sheet.allMemberProfileIDs() { selectedBeneficiaries.insert(id) }
     }
 
     /// 永続化用のソート済み CSV (順序非依存で同値判定するため)。
     private var selectedBeneficiaryCSV: String {
         selectedBeneficiaries.sorted().joined(separator: ",")
+    }
+
+    /// 実際に保存する受益者 CSV。
+    /// - 共有していない (ソロ) シートでは従来どおり全員均等 (= 選択中、既定は空)。
+    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
+    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    private var effectiveBeneficiaryCSV: String {
+        guard shouldShowSharingFields else { return selectedBeneficiaryCSV }
+        return splitEnabled ? selectedBeneficiaryCSV : (selectedPayerProfileID ?? "")
     }
 
     /// `selectedPayer` (Member) に対応する ParticipantProfile を同シートから引く。
@@ -905,15 +938,43 @@ struct AddExpenseView: View {
 
                 payerSection
 
-                if kind == .expense, let sheet = contextSheet {
+                if kind == .expense, shouldShowSharingFields, let sheet = contextSheet {
                     Section {
-                        NavigationLink {
-                            DiscardGuardedBack(modifier: discardDialogModifier) {
-                                BeneficiaryPickerView(selected: $selectedBeneficiaries, record: sheet)
+                        Toggle("割り勘", isOn: Binding(
+                            get: { splitEnabled },
+                            set: { on in
+                                splitEnabled = on
+                                // オンにした直後、支払者だけが入っている状態なら
+                                // 既定の「全員均等」(空) から選ばせる。
+                                if on, selectedBeneficiaries == Set([selectedPayerProfileID ?? ""]) {
+                                    selectedBeneficiaries = []
+                                }
                             }
-                        } label: {
-                            beneficiaryLabel(sheet: sheet)
+                        ))
+                        if splitEnabled {
+                            // 別画面に遷移せず、この場でメンバーを選ぶ (インライン)。
+                            ForEach(sheet.allMemberProfileIDs(), id: \.self) { id in
+                                beneficiaryInlineRow(id, sheet: sheet)
+                            }
                         }
+                    } header: {
+                        if splitEnabled {
+                            HStack {
+                                Text("割る相手")
+                                Spacer()
+                                Button("全員") { selectAllBeneficiaries(sheet: sheet) }
+                                    .font(.caption)
+                                    .textCase(nil)
+                                Button("クリア") { selectedBeneficiaries.removeAll() }
+                                    .font(.caption)
+                                    .textCase(nil)
+                                    .disabled(selectedBeneficiaries.isEmpty)
+                            }
+                        }
+                    } footer: {
+                        Text(splitEnabled
+                             ? "チェックした人で均等割り。全員未選択なら全員で均等割りです。"
+                             : "オフのときはこの支出を支払者の負担として扱い、精算では割りません。")
                     }
                 }
 
@@ -1142,18 +1203,6 @@ struct AddExpenseView: View {
         }
     }
 
-    @ViewBuilder
-    private func beneficiaryLabel(sheet: ExpenseSheet) -> some View {
-        LabeledContent("受益者") {
-            Text(beneficiarySummary(in: sheet))
-                .foregroundStyle(.secondary)
-                // AX サイズでは LabeledContent が縦積みになるので、
-                // 切り詰めを許して横で済ませるのは normal サイズだけにする。
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .truncationMode(.tail)
-        }
-    }
-
     /// xmark / 各サブ view に共通で当てる「変更を破棄しますか?」ダイアログ。
     /// 同じ `$showDiscardConfirm` バインディングなので、その時点で
     /// 表示中の view (= xmark を含む AddExpenseView 本体 or push 済みサブ view)
@@ -1221,7 +1270,7 @@ struct AddExpenseView: View {
         if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
         if (selectedPayerProfileID ?? "") != origPayerProfileID { return true }
         if selectedCategory?.objectID != origCategoryObjectID { return true }
-        if selectedBeneficiaryCSV != origBeneficiaryCSV { return true }
+        if effectiveBeneficiaryCSV != origBeneficiaryCSV { return true }
         if (photoData?.count ?? 0) != origPhotoByteCount { return true }
         return false
     }
@@ -1258,8 +1307,8 @@ struct AddExpenseView: View {
                 expense.category = nil
             }
         }
-        if selectedBeneficiaryCSV != origBeneficiaryCSV {
-            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
+        if effectiveBeneficiaryCSV != origBeneficiaryCSV {
+            expense.beneficiaryProfileIDs = effectiveBeneficiaryCSV
         }
     }
 
@@ -1366,6 +1415,10 @@ struct AddExpenseView: View {
             note = expense.note ?? ""
             photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
+            // 受益者が「支払者ただ 1 人」なら割り勘オフ (支払者のみの負担)。
+            // 空 (=全員) や複数なら割り勘オン。
+            let loadedPayerID = expense.payerProfileID ?? ""
+            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
             if let rule = expense.relatedRule {
@@ -1431,7 +1484,7 @@ struct AddExpenseView: View {
             expense.note = note
             expense.photoData = photoData
             expense.createdAt = .now
-            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
+            expense.beneficiaryProfileIDs = effectiveBeneficiaryCSV
 
             expense.sheet = record
             // category は Expense と同じストア (= sheet と同じストア) に居る前提でのみ紐付ける

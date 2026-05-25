@@ -29,6 +29,9 @@ struct MacAddExpenseView: View {
     @State private var selectedCategory: ExpenseCategory?
     @State private var payerProfileID: String = ""
     @State private var selectedBeneficiaries: Set<String> = []
+    /// 割り勘トグル。オフ = 支払者のみの負担 (受益者 = 支払者)。
+    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    @State private var splitEnabled: Bool = false
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
@@ -177,26 +180,44 @@ struct MacAddExpenseView: View {
                 Section("支払い者") {
                     payerPicker
                 }
-                Section {
-                    beneficiariesList
-                } header: {
-                    HStack {
-                        Text("受益者")
-                        Spacer()
-                        Button(action: { selectAllBeneficiaries() }) {
-                            Text("全員").font(.caption)
+                if hasOtherMembers {
+                    Section {
+                        Toggle("割り勘", isOn: Binding(
+                            get: { splitEnabled },
+                            set: { on in
+                                splitEnabled = on
+                                // オンにした直後、支払者だけが入っていれば全員均等(空)から選ばせる。
+                                if on, selectedBeneficiaries == Set([payerProfileID]) {
+                                    selectedBeneficiaries = []
+                                }
+                            }
+                        ))
+                        if splitEnabled {
+                            beneficiariesList
                         }
-                        .buttonStyle(.borderless)
-                        Button(action: { selectedBeneficiaries.removeAll() }) {
-                            Text("解除").font(.caption)
+                    } header: {
+                        if splitEnabled {
+                            HStack {
+                                Text("割る相手")
+                                Spacer()
+                                Button(action: { selectAllBeneficiaries() }) {
+                                    Text("全員").font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                Button(action: { selectedBeneficiaries.removeAll() }) {
+                                    Text("解除").font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(selectedBeneficiaries.isEmpty)
+                            }
                         }
-                        .buttonStyle(.borderless)
-                        .disabled(selectedBeneficiaries.isEmpty)
+                    } footer: {
+                        Text(splitEnabled
+                             ? "選んだ人で均等割り。全員未選択の場合は「全員均等割り」として扱います。"
+                             : "オフのときはこの支出を支払者の負担として扱い、精算では割りません。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                } footer: {
-                    Text("選んだ人で均等割り。全員未選択の場合は「全員均等割り」として扱います。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
                 Section("メモ (任意)") {
                     TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
@@ -442,6 +463,9 @@ struct MacAddExpenseView: View {
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
+            // 受益者が「支払者ただ 1 人」なら割り勘オフ。空(=全員)や複数ならオン。
+            let loadedPayerID = e.payerProfileID ?? ""
+            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
 
             // CRDT 差分書き戻し用にスナップショット保存
             origTitle = title
@@ -459,6 +483,18 @@ struct MacAddExpenseView: View {
             selectedBeneficiaries = []
             currencyCode = sheet.resolvedDefaultCurrencyCode
         }
+    }
+
+    /// 自分以外のメンバーがいる (= 共有シート) か。割り勘トグルの表示判定に使う。
+    private var hasOtherMembers: Bool { allMemberIDs.count > 1 }
+
+    /// 実際に保存する受益者 ID 配列。
+    /// - 共有していないシートでは従来どおり選択値 (既定は空 = 全員均等)。
+    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
+    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    private var effectiveBeneficiaryIDs: [String] {
+        guard hasOtherMembers else { return Array(selectedBeneficiaries) }
+        return splitEnabled ? Array(selectedBeneficiaries) : (payerProfileID.isEmpty ? [] : [payerProfileID])
     }
 
     private func save() {
@@ -500,7 +536,7 @@ struct MacAddExpenseView: View {
             } else {
                 target.payerMemberID = nil
             }
-            target.beneficiaryIDList = Array(selectedBeneficiaries)
+            target.beneficiaryIDList = effectiveBeneficiaryIDs
         }
 
         PersistenceController.shared.save()
@@ -548,7 +584,7 @@ struct MacAddExpenseView: View {
             }
         }
         // beneficiaryIDList は内部で重複・空除去するので、CSV 比較で diff を取る
-        let newCSV = Array(selectedBeneficiaries)
+        let newCSV = effectiveBeneficiaryIDs
             .sorted()
             .joined(separator: ",")
         let oldCSV = origBeneficiaryCSV
@@ -557,7 +593,7 @@ struct MacAddExpenseView: View {
             .sorted()
             .joined(separator: ",")
         if newCSV != oldCSV {
-            expense.beneficiaryIDList = Array(selectedBeneficiaries)
+            expense.beneficiaryIDList = effectiveBeneficiaryIDs
         }
     }
 
