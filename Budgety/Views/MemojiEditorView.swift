@@ -176,17 +176,29 @@ struct MemojiEditorView: View {
     }
 
     private func swatch(_ hex: String, size: CGFloat) -> some View {
-        Button {
+        let isSelected = (bgColorHex == hex)
+        return Button {
             bgColorHex = hex
         } label: {
             Circle()
                 .fill((Color(hex: hex) ?? .gray).gradient)
                 .frame(width: size, height: size)
+                // 枠線はその色を暗くした (brightness を下げた) 色。選択中は太く。
                 .overlay(
-                    Circle().strokeBorder(.primary.opacity(0.9), lineWidth: bgColorHex == hex ? 3 : 0)
+                    Circle().strokeBorder(swatchBorderColor(hex), lineWidth: isSelected ? 4 : 1.5)
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    /// スウォッチの色を brightness を下げて枠線用の色にする (白系でも縁が見える)。
+    private func swatchBorderColor(_ hex: String) -> Color {
+        guard let base = Color(hex: hex) else { return .secondary }
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
+            return Color(UIColor(base))
+        }
+        return Color(UIColor(hue: h, saturation: s, brightness: max(0, b * 0.6), alpha: a))
     }
 
     // MARK: - 書き出し
