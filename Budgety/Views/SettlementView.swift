@@ -16,23 +16,12 @@ struct SettlementView: View {
     @StateObject private var profile = UserProfileStore.shared
     @State private var result: SettlementResult?
 
-    /// 「送金済みにする」シートの表示状態。
-    @State private var loggingPrefill: LoggingPrefill?
     /// 編集対象の SettlementRecord (= シート再表示)
     @State private var editingRecord: SettlementRecord?
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
     /// 送金プランから「支出を選んで精算」する対象。
     @State private var settlingTransfer: TransferSettleTarget?
-
-    /// 新規 SettlementRecord 入力時のプリフィル。
-    private struct LoggingPrefill: Identifiable {
-        let id = UUID()
-        let from: String
-        let to: String
-        let amount: Decimal
-        let currencyCode: String
-    }
 
     /// 送金プランの 1 行から「返す支出を選んで精算」する対象。
     private struct TransferSettleTarget: Identifiable {
@@ -86,15 +75,6 @@ struct SettlementView: View {
             recompute()
         }
         .onChange(of: fx.lastUpdated) { _, _ in recompute() }
-        .sheet(item: $loggingPrefill) { prefill in
-            LogSettlementView(
-                sheet: record,
-                prefillFrom: prefill.from,
-                prefillTo: prefill.to,
-                prefillAmount: prefill.amount,
-                prefillCurrencyCode: prefill.currencyCode
-            )
-        }
         .sheet(item: $settlingTransfer) { target in
             TransferExpenseSettleView(
                 record: record,
@@ -434,26 +414,12 @@ struct SettlementView: View {
                     size: 32
                 )
                 Spacer()
-                Menu {
-                    Button {
-                        settlingTransfer = TransferSettleTarget(
-                            from: transfer.fromProfileID,
-                            to: transfer.toProfileID,
-                            currencyCode: currencyCode
-                        )
-                    } label: {
-                        Label("支出を選んで精算", systemImage: "checklist")
-                    }
-                    Button {
-                        loggingPrefill = LoggingPrefill(
-                            from: transfer.fromProfileID,
-                            to: transfer.toProfileID,
-                            amount: transfer.amount,
-                            currencyCode: currencyCode
-                        )
-                    } label: {
-                        Label("金額で記録", systemImage: "pencil")
-                    }
+                Button {
+                    settlingTransfer = TransferSettleTarget(
+                        from: transfer.fromProfileID,
+                        to: transfer.toProfileID,
+                        currencyCode: currencyCode
+                    )
                 } label: {
                     Text("精算")
                         .font(.caption.weight(.semibold))
@@ -480,25 +446,18 @@ struct SettlementView: View {
         .padding(.vertical, 2)
     }
 
-    /// 期間内に記録された送金履歴。新規記録ボタンも出す。
+    /// 過去に記録された送金履歴 (旧バージョン / 他端末で手動記録されたもの)。
+    /// 新規の精算は「送金プラン」から支出を選んで行うため、ここは記録がある時だけ
+    /// 表示する読み取り専用 (編集 / 削除のみ) のセクション。
     @ViewBuilder
     private var settlementHistorySection: some View {
         let records = settlementsInCurrentRange
-        card(
-            title: "送金履歴",
-            footer: "送金プランから「送金済み」をタップすると、ここに記録されて残高に反映されます。"
-        ) {
-            VStack(spacing: 12) {
-                if records.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(systemName: "tray")
-                            .foregroundStyle(.secondary)
-                        Text("送金記録はまだありません")
-                            .foregroundStyle(.secondary)
-                            .font(.callout)
-                        Spacer()
-                    }
-                } else {
+        if !records.isEmpty {
+            card(
+                title: "送金履歴",
+                footer: "以前に記録した送金です。残高に反映されます。"
+            ) {
+                VStack(spacing: 12) {
                     ForEach(Array(records.enumerated()), id: \.element.objectID) { idx, r in
                         HStack(spacing: 0) {
                             settlementRecordRow(r)
@@ -530,23 +489,6 @@ struct SettlementView: View {
                         }
                     }
                 }
-                Divider()
-                Button {
-                    loggingPrefill = LoggingPrefill(
-                        from: profile.canonicalSelfID(forShare: ShareCoordinator.shared.existingShare(for: record))
-                            ?? profile.userRecordName
-                            ?? "",
-                        to: "",
-                        amount: 0,
-                        currencyCode: record.resolvedDefaultCurrencyCode
-                    )
-                } label: {
-                    Label("送金を手動で記録", systemImage: "plus.circle")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
             }
         }
     }
