@@ -228,20 +228,27 @@ struct ExpenseDetailView: View {
     private func settleRow(id: String, sheet: ExpenseSheet, share: Decimal, code: String) -> some View {
         let info = sheet.memberDisplayInfo(for: id)
         let settled = expense.isBeneficiarySettled(id)
-        Button {
+        // AX サイズでは横に収まらないので縦積みに切り替える。
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return Button {
             expense.setBeneficiarySettled(!settled, for: id)
             PersistenceController.shared.save()
             Haptics.success()
         } label: {
-            HStack(spacing: 12) {
-                AvatarView(photoData: info.photoData, displayName: info.name,
-                           colorHex: info.colorHex, size: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.name).foregroundStyle(.primary)
-                    Text(CurrencyCatalog.format(share, code: code))
-                        .font(.caption).foregroundStyle(.secondary)
+            layout {
+                HStack(spacing: 12) {
+                    AvatarView(photoData: info.photoData, displayName: info.name,
+                               colorHex: info.colorHex, size: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(info.name).foregroundStyle(.primary)
+                        Text(CurrencyCatalog.format(share, code: code))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
+                if !isAX { Spacer(minLength: 8) }
                 if settled {
                     Label("精算済み", systemImage: "checkmark.seal.fill")
                         .font(.caption.weight(.semibold))

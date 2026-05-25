@@ -610,6 +610,7 @@ private struct TransferExpenseSettleView: View {
     var onDone: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selected: Set<NSManagedObjectID> = []
 
     /// to が支払い、from が未精算の受益者になっている支出 (= from が to に返すべき支出)。
@@ -666,21 +667,28 @@ private struct TransferExpenseSettleView: View {
     @ViewBuilder
     private func row(_ e: Expense) -> some View {
         let isOn = selected.contains(e.objectID)
-        Button {
+        // AX サイズでは横に収まらないので縦積みに切り替える。
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return Button {
             if isOn { selected.remove(e.objectID) } else { selected.insert(e.objectID) }
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isOn ? record.tint : Color.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
-                        .foregroundStyle(.primary)
-                    if let d = e.date {
-                        Text(d, format: .dateTime.year().month().day())
-                            .font(.caption).foregroundStyle(.secondary)
+            layout {
+                HStack(spacing: 12) {
+                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isOn ? record.tint : Color.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
+                            .foregroundStyle(.primary)
+                        if let d = e.date {
+                            Text(d, format: .dateTime.year().month().day())
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Spacer()
+                if !isAX { Spacer(minLength: 8) }
                 Text(CurrencyCatalog.format(share(of: e), code: e.resolvedCurrencyCode))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
