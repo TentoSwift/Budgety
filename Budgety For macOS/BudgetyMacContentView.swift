@@ -30,6 +30,8 @@ struct BudgetyMacContentView: View {
     @State private var showNotSignedInAlert: Bool = false
     /// サイドバーの横断検索クエリ。空でなければ detail に検索結果を出す。
     @State private var searchText: String = ""
+    /// 検索結果から解錠しようとしているロック中シート (インライン解錠モーダル)。
+    @State private var unlockingSheet: ExpenseSheet?
     @StateObject private var lockManager = SheetLockManager.shared
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -73,6 +75,16 @@ struct BudgetyMacContentView: View {
         }
         .sheet(isPresented: $showingPaywall) {
             MacModalSheet { PaywallView() }
+        }
+        .sheet(item: $unlockingSheet) { sheet in
+            // 検索結果からロック中シートを解錠するモーダル。解錠すると
+            // lockManager の更新で検索結果に含まれる (検索からは離れない)。
+            MacSheetLockView(
+                record: sheet,
+                onUnlock: { unlockingSheet = nil },
+                onCancel: { unlockingSheet = nil }
+            )
+            .frame(width: 420, height: 460)
         }
         .alert("同期完了を待っています", isPresented: $showSyncWaitingAlert) {
             Button("OK", role: .cancel) {}
@@ -417,7 +429,10 @@ struct BudgetyMacContentView: View {
                         Label("ロック中のシート", systemImage: "lock.fill")
                     } content: {
                         ForEach(Array(locked.enumerated()), id: \.element.objectID) { idx, sheet in
-                            Button { openFromSearch(sheet) } label: {
+                            // インラインの解錠モーダルを出す。検索からは離れないので
+                            // 複数シートを続けて解錠できる (selectedSheet を変えないため
+                            // 直前に解錠したシートが再ロックされない)。
+                            Button { unlockingSheet = sheet } label: {
                                 HStack(spacing: 12) {
                                     SheetIconView(record: sheet, size: 32)
                                     VStack(alignment: .leading, spacing: 2) {
