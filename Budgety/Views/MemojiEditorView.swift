@@ -165,8 +165,8 @@ struct MemojiEditorView: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        ForEach(Self.palette.prefix(8), id: \.self) { hex in
-                            swatch(hex, size: 44)
+                        ForEach(Self.palette, id: \.self) { hex in
+                            swatch(hex, size: 60)
                         }
                     }
                     .padding(.vertical, 4)
