@@ -128,10 +128,46 @@ struct ExpenseDetailView: View {
     private var participantsSection: some View {
         Section {
             payerRow
-            if let sheet = expense.sheet {
-                detailRow(expense.kind == .income ? "受け取り対象" : "受益者",
-                          beneficiaryText(in: sheet))
+            beneficiaryRow
+        }
+    }
+
+    /// 受益者をアバター + 名前のチップで表示する (全員均等ならその旨も併記)。
+    @ViewBuilder
+    private var beneficiaryRow: some View {
+        if let sheet = expense.sheet {
+            let ids = expense.resolvedBeneficiaryIDs()
+            let all = sheet.allMemberProfileIDs()
+            let isEveryone = ids.isEmpty || Set(ids) == Set(all)
+            let displayIDs = isEveryone ? all : ids
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(expense.kind == .income ? "受け取り対象" : "受益者")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isEveryone {
+                        Text("全員均等").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(displayIDs, id: \.self) { id in
+                            let info = sheet.memberDisplayInfo(for: id)
+                            VStack(spacing: 4) {
+                                AvatarView(photoData: info.photoData,
+                                           displayName: info.name,
+                                           colorHex: info.colorHex, size: 36)
+                                Text(info.name)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: 56)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -160,15 +196,6 @@ struct ExpenseDetailView: View {
         }
     }
 
-    private func beneficiaryText(in sheet: ExpenseSheet) -> String {
-        let ids = expense.resolvedBeneficiaryIDs()
-        let all = sheet.allMemberProfileIDs()
-        if ids.isEmpty || Set(ids) == Set(all) {
-            return "全員均等"
-        }
-        let names = ids.map { sheet.memberDisplayInfo(for: $0).name }
-        return names.joined(separator: ", ")
-    }
 
     // MARK: - 精算 (相手ごと)
 
