@@ -12,6 +12,16 @@ import SwiftUI
 import CoreData
 import CloudKit
 
+/// 支出の支払い者が指定 profileID と一致するか。「自分」(selfIDs のいずれか) を
+/// 選んだ場合は、payerProfileID が selfIDs に含まれれば一致とみなす (旧 ID 対応)。
+fileprivate func macExpensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
+    let pid = exp.payerProfileID ?? ""
+    if selfIDs.contains(payerID) {
+        return selfIDs.contains(pid)
+    }
+    return pid == payerID
+}
+
 struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var viewContext
@@ -37,14 +47,61 @@ struct BudgetyMacSheetView: View {
     @State private var showingSetPassword = false
     @State private var showingLockPaywall = false
 
+    // フィルタ
+    @State private var searchText: String = ""
+    @State private var selectedCategory: ExpenseCategory?
+    @State private var selectedPayerID: String?
+
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
+    /// 検索クエリ・カテゴリ・支払い者フィルタを適用した支出。
+    private var filteredExpenses: [Expense] {
+        var list = allExpenses
+        if let cat = selectedCategory {
+            list = list.filter { $0.category?.objectID == cat.objectID }
+        }
+        if let payerID = selectedPayerID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: sheet))
+            list = list.filter { macExpensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
+        }
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty {
+            list = list.filter {
+                $0.displayTitle.lowercased().contains(q)
+                    || $0.categoryDisplayName.lowercased().contains(q)
+                    || $0.displayPaidBy.lowercased().contains(q)
+                    || ($0.note ?? "").lowercased().contains(q)
+            }
+        }
+        return list
+    }
+
+    /// 絞り込みが有効か。
+    private var isFiltering: Bool {
+        selectedCategory != nil || selectedPayerID != nil
+            || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// 支出があるカテゴリ一覧 (フィルタ用、sortOrder 順)。
+    private var usedCategories: [ExpenseCategory] {
+        var seen: Set<NSManagedObjectID> = []
+        var result: [ExpenseCategory] = []
+        for exp in allExpenses {
+            if let cat = exp.category, !seen.contains(cat.objectID) {
+                seen.insert(cat.objectID)
+                result.append(cat)
+            }
+        }
+        return result.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     private var groupedByDate: [(date: Date, items: [Expense])] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: allExpenses) { exp -> Date in
+        let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
             cal.startOfDay(for: exp.date ?? .now)
         }
         return dict.map { (date: $0.key, items: $0.value) }
@@ -93,11 +150,15 @@ struct BudgetyMacSheetView: View {
             VStack(spacing: 20) {
                 summaryHero
                 membersStrip
+                if !usedCategories.isEmpty {
+                    categoryPills
+                }
                 expensesList
             }
             .padding(20)
             .frame(maxWidth: .infinity)
         }
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出・収入を検索"))
         // スクロール量を直接監視 (macOS 15+/26 で確実に動く)。
         // ヒーローの高さぶん (約 140pt) スクロールしたら「通り過ぎた」とみなす。
         .onScrollGeometryChange(for: CGFloat.self) { geo in
@@ -218,6 +279,12 @@ struct BudgetyMacSheetView: View {
         }
     }
 
+    private func clearFilters() {
+        searchText = ""
+        selectedCategory = nil
+        selectedPayerID = nil
+    }
+
     private var summaryHero: some View {
         let t = monthlyTotals
         let code = sheet.resolvedDefaultCurrencyCode
@@ -283,33 +350,93 @@ struct BudgetyMacSheetView: View {
         return HStack(spacing: 12) {
             ForEach(ids, id: \.self) { id in
                 let info = sheet.memberDisplayInfo(for: id)
-                VStack(spacing: 4) {
-                    AvatarView(
-                        photoData: info.photoData,
-                        displayName: info.name,
-                        colorHex: info.colorHex,
-                        size: 36
-                    )
-                    Text(info.name)
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(.secondary)
+                let isSelected = selectedPayerID == id
+                Button {
+                    // タップで「その人が支払い者」の絞り込みをトグル。
+                    selectedPayerID = isSelected ? nil : id
+                } label: {
+                    VStack(spacing: 4) {
+                        AvatarView(
+                            photoData: info.photoData,
+                            displayName: info.name,
+                            colorHex: info.colorHex,
+                            size: 36
+                        )
+                        .overlay(
+                            Circle().strokeBorder(sheet.tint, lineWidth: isSelected ? 2.5 : 0)
+                        )
+                        Text(info.name)
+                            .font(.caption2.weight(isSelected ? .semibold : .regular))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .foregroundStyle(isSelected ? sheet.tint : .secondary)
+                    }
+                    .frame(maxWidth: 80)
                 }
-                .frame(maxWidth: 80)
+                .buttonStyle(.plain)
+                .help(isSelected ? "フィルタを解除" : "\(info.name) の支出で絞り込む")
             }
             Spacer()
         }
         .padding(.horizontal, 8)
     }
 
+    /// カテゴリ絞り込みのチップ列 (すべて + 使用中カテゴリ)。
+    private var categoryPills: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button {
+                    selectedCategory = nil
+                } label: {
+                    Text("すべて")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(selectedCategory == nil ? sheet.tint : Color.gray.opacity(0.2)))
+                        .foregroundStyle(selectedCategory == nil ? .white : .primary)
+                }
+                .buttonStyle(.plain)
+
+                ForEach(usedCategories, id: \.objectID) { cat in
+                    let isSelected = selectedCategory?.objectID == cat.objectID
+                    Button {
+                        selectedCategory = isSelected ? nil : cat
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: cat.displaySymbol)
+                            Text(cat.displayName)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(isSelected ? cat.tint : Color.gray.opacity(0.2)))
+                        .foregroundStyle(isSelected ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+    }
+
     private var expensesList: some View {
         VStack(spacing: 16) {
             if groupedByDate.isEmpty {
-                ContentUnavailableView {
-                    Label("支出がありません", systemImage: "list.bullet")
-                } 
-                .padding(.vertical, 40)
+                if isFiltering {
+                    ContentUnavailableView {
+                        Label("該当する支出がありません", systemImage: "line.3.horizontal.decrease.circle")
+                    } description: {
+                        Text("検索条件やフィルタを変更してください。")
+                    } actions: {
+                        Button("フィルタをクリア") { clearFilters() }
+                    }
+                    .padding(.vertical, 40)
+                } else {
+                    ContentUnavailableView {
+                        Label("支出がありません", systemImage: "list.bullet")
+                    }
+                    .padding(.vertical, 40)
+                }
             }
             ForEach(groupedByDate, id: \.date) { group in
                 VStack(spacing: 0) {
