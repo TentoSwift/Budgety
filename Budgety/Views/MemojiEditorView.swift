@@ -211,7 +211,7 @@ struct MemojiEditorView: View {
         guard UIColor(base).getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
             return Color(UIColor(base))
         }
-        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b + 0.3), alpha: a))
+        return Color(UIColor(hue: h, saturation: s, brightness: min(1, b + 0.5), alpha: a))
     }
 
     // MARK: - 書き出し
