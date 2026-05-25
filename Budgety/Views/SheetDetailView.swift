@@ -6,6 +6,7 @@
 import SwiftUI
 import CoreData
 import CloudKit
+import UIKit
 import CustomPicker
 #if os(iOS)
 import CustomNavigationTitle
@@ -301,7 +302,14 @@ struct SheetDetailView: View {
         }
         .toolbar {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            ToolbarSpacer(.fixed, placement: .bottomBar)
+            // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
+            // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
+            // iPhone は検索バーが bottomBar に残り `+` を右へ押すので fixed のまま。
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+            } else {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
+            }
             ToolbarItem(placement: .bottomBar) {
                 Button(role: .confirm) {
                     showingAddExpense = true
