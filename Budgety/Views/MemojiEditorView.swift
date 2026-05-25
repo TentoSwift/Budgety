@@ -176,17 +176,27 @@ struct MemojiEditorView: View {
     }
 
     private func swatch(_ hex: String, size: CGFloat) -> some View {
+        let base = Color(hex: hex) ?? .gray
         let isSelected = (bgColorHex == hex)
         return Button {
             bgColorHex = hex
         } label: {
-            Circle()
-                .fill((Color(hex: hex) ?? .gray).gradient)
-                .frame(width: size, height: size)
-                // 枠線はその色を暗くした (brightness を下げた) 色。選択中は太く。
-                .overlay(
-                    Circle().strokeBorder(swatchBorderColor(hex), lineWidth: isSelected ? 4 : 1.5)
-                )
+            ZStack {
+                // 選択中: 同色の外側リング (塗りとの間に背景が見える gap)。
+                Circle()
+                    .stroke(base, lineWidth: isSelected ? 3 : 0)
+                    .frame(width: size, height: size)
+                // 塗り。枠線はその色を暗くした色 (白系でも縁が見える)。
+                // 選択中は塗りを縮めて gap を作る。
+                Circle()
+                    .fill(base.gradient)
+                    .overlay(
+                        Circle().strokeBorder(swatchBorderColor(hex), lineWidth: 1.5)
+                    )
+                    .frame(width: isSelected ? size - 12 : size,
+                           height: isSelected ? size - 12 : size)
+            }
+            .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
     }
