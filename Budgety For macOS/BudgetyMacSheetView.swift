@@ -233,6 +233,12 @@ struct BudgetyMacSheetView: View {
             .frame(maxWidth: .infinity)
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出・収入を検索"))
+        // 別シートへ切り替わったらフィルタ (検索・カテゴリ・支払者) を解除する。
+        // detail の BudgetyMacSheetView は位置が同じため再生成されず @State が残るので、
+        // sheet の変化を検知して明示的にクリアする。
+        .onChange(of: sheet.objectID) { _, _ in
+            clearFilters()
+        }
         // スクロール量を直接監視 (macOS 15+/26 で確実に動く)。
         // ヒーローの高さぶん (約 140pt) スクロールしたら「通り過ぎた」とみなす。
         .onScrollGeometryChange(for: CGFloat.self) { geo in
@@ -306,7 +312,7 @@ struct BudgetyMacSheetView: View {
                         }
                     }
                 } label: {
-                    Label("その他", systemImage: "ellipsis.circle")
+                    Label("その他", systemImage: "ellipsis")
                 }
                 .help("その他")
             }
