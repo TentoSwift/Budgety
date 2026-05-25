@@ -523,7 +523,7 @@
 		2D18B4CE2FB31606006F2C29 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BudgetyIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
@@ -559,7 +559,7 @@
 		2D18B4CF2FB31606006F2C29 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BudgetyIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
