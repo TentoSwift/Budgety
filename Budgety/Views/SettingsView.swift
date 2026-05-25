@@ -24,12 +24,7 @@ struct SettingsView: View {
                 Section {
                     if pm.isPremium {
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Budgety Premium").bold()
-                                Text("シート共有機能が有効です")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Text("Budgety Premium").bold()
                         } icon: {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundStyle(.green)
