@@ -25,6 +25,12 @@ struct WatchAddExpenseView: View {
     @State private var showingCategoryPicker: Bool = false
     @State private var manuallySelectedCategory: ExpenseCategory?
 
+    /// 割り勘トグル。オフ = 自分の負担のみ。オン = `selectedBeneficiaries` で割る相手を選ぶ
+    /// (空 = 全員均等)。共有シート (他メンバーあり) でのみ UI を出す。
+    @State private var splitEnabled: Bool = false
+    @State private var selectedBeneficiaries: Set<String> = []
+    @State private var showingSplitPicker: Bool = false
+
     /// シートの全支出カテゴリ (= sortOrder 順)。
     private var availableCategories: [ExpenseCategory] {
         guard let cats = sheet.categories as? Set<ExpenseCategory> else { return [] }
@@ -41,6 +47,17 @@ struct WatchAddExpenseView: View {
     /// 実際に保存に使うカテゴリ (= ユーザー選択優先 / 無ければ auto)。
     private var effectiveCategory: ExpenseCategory? {
         manuallySelectedCategory ?? autoCategory
+    }
+
+    /// 共有シート (自分以外の参加メンバーがいる) か。割り勘 UI はこの時だけ出す。
+    private var isShared: Bool { sheet.hasAcceptedOtherMembers() }
+
+    /// 割り勘ボタンのラベル。
+    private var splitLabel: String {
+        guard splitEnabled else { return "割り勘なし" }
+        let total = sheet.acceptedMemberProfileIDs().count
+        let n = selectedBeneficiaries.isEmpty ? total : selectedBeneficiaries.count
+        return n >= total ? "全員で割り勘" : "\(n)人で割り勘"
     }
 
     /// シートの通貨記号 (¥ / $ / € など)。
@@ -102,12 +119,48 @@ struct WatchAddExpenseView: View {
                 manuallySelectedCategory = picked
             }
         }
+        .sheet(isPresented: $showingSplitPicker) {
+            WatchSplitPicker(
+                sheet: sheet,
+                splitEnabled: $splitEnabled,
+                selected: $selectedBeneficiaries
+            )
+        }
+    }
+
+    /// 割り勘の状態を表すボタン (共有シートのみ)。タップで相手選択シートを開く。
+    @ViewBuilder
+    private var splitPreview: some View {
+        if isShared {
+            Button {
+                showingSplitPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: splitEnabled ? "person.2.fill" : "person.fill")
+                        .font(.caption2.weight(.semibold))
+                    Text(splitLabel)
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .opacity(0.7)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(.white.opacity(0.20)))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 6) {
-            categoryPreview
+            VStack(spacing: 4) {
+                categoryPreview
+                splitPreview
+            }
             Spacer(minLength: 0)
             Text(amountText)
                 .font(.system(size: 48, weight: .heavy, design: .rounded).monospacedDigit())
@@ -224,6 +277,17 @@ struct WatchAddExpenseView: View {
         if let pid = profile.userRecordName, !pid.isEmpty {
             expense.payerProfileID = pid
         }
+        // 割り勘: 共有シートのみ反映。
+        // - オン: 選んだ相手 (空 = 全員均等)
+        // - オフ: 自分のみの負担 (= 精算で他者に割らない)
+        // 非共有シートは従来どおり未設定 (= 全員 = 自分のみ) にする。
+        if isShared {
+            if splitEnabled {
+                expense.beneficiaryProfileIDs = selectedBeneficiaries.sorted().joined(separator: ",")
+            } else if let pid = profile.userRecordName, !pid.isEmpty {
+                expense.beneficiaryProfileIDs = pid
+            }
+        }
         do {
             try ctx.save()
             WKInterfaceDevice.current().play(.success)
@@ -282,5 +346,90 @@ struct WatchCategoryPicker: View {
             .navigationTitle("カテゴリ")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+// MARK: - Split (割り勘) Picker
+
+/// 割り勘の ON/OFF と、割る相手 (受益者) を選ぶピッカー。
+/// メンバーは ParticipantProfile から解決 (= watchOS でも CloudKit 同期済みなら表示可能)。
+struct WatchSplitPicker: View {
+    let sheet: ExpenseSheet
+    @Binding var splitEnabled: Bool
+    @Binding var selected: Set<String>
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var members: [String] { sheet.acceptedMemberProfileIDs() }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Toggle("割り勘する", isOn: $splitEnabled)
+                }
+                if splitEnabled {
+                    Section("割る相手") {
+                        ForEach(members, id: \.self) { id in
+                            memberRow(id)
+                        }
+                    }
+                } else {
+                    Section {
+                        Text("この支出はあなたの負担として記録します")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("割り勘")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完了") { dismiss() }
+                }
+            }
+            .onChange(of: splitEnabled) { _, on in
+                // 初めてオンにした時は全員を選択 (= 全員均等)。
+                if on && selected.isEmpty {
+                    selected = Set(members)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberRow(_ id: String) -> some View {
+        let info = sheet.memberDisplayInfo(for: id)
+        let isOn = selected.contains(id)
+        Button {
+            if isOn { selected.remove(id) } else { selected.insert(id) }
+            WKInterfaceDevice.current().play(.click)
+        } label: {
+            HStack(spacing: 10) {
+                avatar(name: info.name, colorHex: info.colorHex)
+                Text(info.name)
+                    .font(.body)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.body)
+                    .foregroundStyle(isOn ? sheet.tint : .secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 写真は使わず、配色 + 頭文字の簡易アバター (watchOS には AvatarView / UIImage を持ち込まない)。
+    private func avatar(name: String, colorHex: String) -> some View {
+        let color = Color(hex: colorHex) ?? .blue
+        return Circle()
+            .fill(color.gradient)
+            .frame(width: 28, height: 28)
+            .overlay(
+                Text(String(name.prefix(1)))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            )
     }
 }
