@@ -142,36 +142,39 @@ struct AddExpenseView: View {
     /// 金額フォーカス中に safeArea に出す簡易電卓 + 「次へ」のバー。
     /// inputAccessoryView の代替。
     private var amountCalcBar: some View {
-        HStack(spacing: 6) {
-            // 計算式 ("1000 + 200") をライブに左へ表示。演算子が無いときも
-            // 入力中の数値を出す (= 何も無いより常に式が見える方が分かりやすい)。
-            Text(calcExpression)
-                .font(.body.monospacedDigit())
-                .foregroundStyle(.primary)
+        // 上段: 計算式をしっかり表示。下段: 演算子ボタン + 「次へ」。
+        // 1 段に詰めると HStack で Text が押し潰されて見えないことがあるため。
+        VStack(alignment: .leading, spacing: 6) {
+            Text(calcExpression.isEmpty ? "0" : calcExpression)
+                .font(.title3.monospacedDigit().weight(.semibold))
+                .foregroundStyle(calcExpression.isEmpty ? .secondary : .primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(0.5)
                 .truncationMode(.head)
-            Spacer(minLength: 4)
-            calcOpButton(.sub)
-            calcOpButton(.add)
-            calcOpButton(.mul)
-            calcOpButton(.div)
-            Button { calcEquals() } label: {
-                Image(systemName: "equal").frame(width: 32, height: 32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                calcOpButton(.sub)
+                calcOpButton(.add)
+                calcOpButton(.mul)
+                calcOpButton(.div)
+                Button { calcEquals() } label: {
+                    Image(systemName: "equal").frame(width: 32, height: 32)
+                }
+                .buttonStyle(.bordered)
+                .disabled(calcPendingOp == nil)
+                Spacer()
+                Button {
+                    calcEquals()
+                    amountFocused = false
+                    titleFocused = true
+                } label: {
+                    Text("次へ").frame(minWidth: 64, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.bordered)
-            .disabled(calcPendingOp == nil)
-            Button {
-                calcEquals()
-                amountFocused = false
-                titleFocused = true
-            } label: {
-                Text("次へ").frame(minWidth: 52, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(.regularMaterial)
     }
 
