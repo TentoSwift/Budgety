@@ -55,6 +55,30 @@ struct AddExpenseView: View {
     /// 遅れて出るため、UIKit の becomeFirstResponder() で即座に開く。
     @State private var amountFocused: Bool = false
     @State private var titleFocused: Bool = false
+
+    /// 金額フォーカス中だけ safeArea に出す簡易電卓の演算子。
+    private enum CalcOp { case add, sub, mul, div
+        var systemImage: String {
+            switch self {
+            case .add: "plus"
+            case .sub: "minus"
+            case .mul: "multiply"
+            case .div: "divide"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .add: "+"
+            case .sub: "−"
+            case .mul: "×"
+            case .div: "÷"
+            }
+        }
+    }
+    /// 演算待ちの左辺。タップで amountText が右辺になる。
+    @State private var calcAccumulator: Decimal? = nil
+    /// 確定待ちの演算子。
+    @State private var calcPendingOp: CalcOp? = nil
     @State private var kind: TransactionKind = .expense
     @State private var currencyCode: String = "JPY"
     @State private var selectedCategory: ExpenseCategory?
@@ -112,6 +136,104 @@ struct AddExpenseView: View {
     @State private var showAddMemberPrompt = false
     @State private var newMemberName = ""
     @State private var memberPaywall = false
+
+    // MARK: - Amount calc bar (safeArea)
+
+    /// 金額フォーカス中に safeArea に出す簡易電卓 + 「次へ」のバー。
+    /// inputAccessoryView の代替。
+    private var amountCalcBar: some View {
+        HStack(spacing: 6) {
+            // 演算待ちの "1000 +" を左に表示。
+            if let acc = calcAccumulator, let op = calcPendingOp {
+                Text("\(formatCalc(acc)) \(op.symbol)")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 4)
+            } else {
+                Spacer(minLength: 0)
+            }
+            calcOpButton(.sub)
+            calcOpButton(.add)
+            calcOpButton(.mul)
+            calcOpButton(.div)
+            Button { calcEquals() } label: {
+                Image(systemName: "equal").frame(width: 32, height: 32)
+            }
+            .buttonStyle(.bordered)
+            .disabled(calcPendingOp == nil)
+            Button {
+                calcEquals()
+                amountFocused = false
+                titleFocused = true
+            } label: {
+                Text("次へ").frame(minWidth: 52, minHeight: 32)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.regularMaterial)
+    }
+
+    private func calcOpButton(_ op: CalcOp) -> some View {
+        Button { applyCalcOp(op) } label: {
+            Image(systemName: op.systemImage).frame(width: 32, height: 32)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    /// 演算子をタップ: 入力済み数値を accumulator に取り込み、次の演算子を保持する。
+    /// 空タップ時は pending op の差し替えだけ行う (= 演算子の打ち間違い訂正)。
+    private func applyCalcOp(_ newOp: CalcOp) {
+        if let cur = Decimal(string: amountText) {
+            if let acc = calcAccumulator, let op = calcPendingOp {
+                calcAccumulator = applyCalc(op, acc, cur)
+            } else {
+                calcAccumulator = cur
+            }
+            amountText = ""
+        }
+        calcPendingOp = newOp
+        Haptics.selection()
+    }
+
+    /// = を確定: 現在の amountText を右辺として演算結果を amountText に書き戻す。
+    private func calcEquals() {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return }
+        let cur = Decimal(string: amountText) ?? 0
+        let result = applyCalc(op, acc, cur)
+        amountText = formatCalc(result)
+        calcAccumulator = nil
+        calcPendingOp = nil
+        Haptics.success()
+    }
+
+    private func applyCalc(_ op: CalcOp, _ a: Decimal, _ b: Decimal) -> Decimal {
+        switch op {
+        case .add: return a + b
+        case .sub: return a - b
+        case .mul: return a * b
+        case .div:
+            guard b != 0 else { return a }
+            var result = Decimal()
+            var num = a
+            var den = b
+            NSDecimalDivide(&result, &num, &den, .plain)
+            return result
+        }
+    }
+
+    /// 入力欄に書き戻す時の文字列化。末尾の不要な 0 と小数点を落とす。
+    private func formatCalc(_ d: Decimal) -> String {
+        var s = NSDecimalNumber(decimal: d).stringValue
+        if s.contains(".") {
+            while s.hasSuffix("0") { s.removeLast() }
+            if s.hasSuffix(".") { s.removeLast() }
+        }
+        return s
+    }
 
     // MARK: - Recurring (繰り返し)
 
@@ -910,7 +1032,8 @@ struct AddExpenseView: View {
                             .frame(minWidth: 24, alignment: .leading)
                         // UIKit (UITextView) ベース。onAppear で focus を立てると即座に
                         // キーボードが開く (SwiftUI TextField + @FocusState だと遅延する)。
-                        // 数字キーボードには Return が無いので「次へ」アクセサリでタイトルへ送る。
+                        // 数字キーボードには Return が無いので、Form の safeAreaInset に
+                        // 「+ − × ÷ =」と「次へ」を載せて計算 + 遷移できるようにする。
                         DynamicTextField(
                             text: $amountText,
                             focus: $amountFocused,
@@ -918,9 +1041,7 @@ struct AddExpenseView: View {
                             font: .monospacedDigitSystemFont(
                                 ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
                                 weight: .regular),
-                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
-                            accessoryNextTitle: "次へ",
-                            onAccessoryNext: { amountFocused = false; titleFocused = true }
+                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad
                         )
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
@@ -1038,6 +1159,14 @@ struct AddExpenseView: View {
             .tint(sheetTint)
             .listStyle(.plain)
             .scrollDismissesKeyboard(.interactively)
+            // 金額フォーカス中だけキーボード上 (safeArea) に簡易電卓と「次へ」を出す。
+            .safeAreaInset(edge: .bottom) {
+                if amountFocused {
+                    amountCalcBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: amountFocused)
             .onChange(of: kind) { _, newKind in
                 // 種別変更時にカテゴリの整合を取り、提案も再計算
                 if let cur = selectedCategory, cur.kind == newKind {
