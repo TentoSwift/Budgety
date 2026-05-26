@@ -20,6 +20,9 @@ struct DynamicTextView: UIViewRepresentable {
     /// 設定すると inputAccessoryView (ツールバー) にボタンを表示する。
     var accessoryNextTitle: String? = nil
     var onAccessoryNext: (() -> Void)? = nil
+    /// true のとき、空のフィールドで delete を押すとキーボードを閉じる
+    /// (数字入力で「もう入れない」時に戻れるようにする)。
+    var dismissOnDeleteWhenEmpty: Bool = false
     /// Enter (改行) が入力された時に呼ばれる。フォーカスは内部で外される。
     var onSubmit: (() -> Void)? = nil
 
@@ -125,6 +128,14 @@ struct DynamicTextView: UIViewRepresentable {
                 parent.onSubmit?()
                 return false
             }
+            // 空のフィールドで delete (= replacementText が空 & 削除対象なし) を押したら
+            // キーボードを閉じる。dismissOnDeleteWhenEmpty が true の時のみ。
+            if parent.dismissOnDeleteWhenEmpty,
+               text.isEmpty, range.length == 0, textView.text.isEmpty {
+                textView.resignFirstResponder()
+                parent.focus = false
+                return false
+            }
             return true
         }
     }
@@ -139,6 +150,7 @@ struct DynamicTextField: View {
     var keyboardType: UIKeyboardType = .default
     var accessoryNextTitle: String? = nil
     var onAccessoryNext: (() -> Void)? = nil
+    var dismissOnDeleteWhenEmpty: Bool = false
     var onSubmit: (() -> Void)? = nil
 
     var body: some View {
@@ -150,6 +162,7 @@ struct DynamicTextField: View {
             keyboardType: keyboardType,
             accessoryNextTitle: accessoryNextTitle,
             onAccessoryNext: onAccessoryNext,
+            dismissOnDeleteWhenEmpty: dismissOnDeleteWhenEmpty,
             onSubmit: onSubmit
         )
         .background(alignment: .topLeading) {

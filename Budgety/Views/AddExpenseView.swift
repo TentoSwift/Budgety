@@ -143,17 +143,15 @@ struct AddExpenseView: View {
     /// inputAccessoryView の代替。
     private var amountCalcBar: some View {
         HStack(spacing: 6) {
-            // 演算待ちの "1000 +" を左に表示。
-            if let acc = calcAccumulator, let op = calcPendingOp {
-                Text("\(formatCalc(acc)) \(op.symbol)")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Spacer(minLength: 4)
-            } else {
-                Spacer(minLength: 0)
-            }
+            // 計算式 ("1000 + 200") をライブに左へ表示。演算子が無いときも
+            // 入力中の数値を出す (= 何も無いより常に式が見える方が分かりやすい)。
+            Text(calcExpression)
+                .font(.body.monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .truncationMode(.head)
+            Spacer(minLength: 4)
             calcOpButton(.sub)
             calcOpButton(.add)
             calcOpButton(.mul)
@@ -175,6 +173,18 @@ struct AddExpenseView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.regularMaterial)
+    }
+
+    /// バー左に出す計算式 ("1000 + 200" 等)。
+    /// 演算子が無いときは入力中の amountText だけ、入力も無いときは空文字を返す。
+    private var calcExpression: String {
+        let curr = amountText
+        if let acc = calcAccumulator, let op = calcPendingOp {
+            return curr.isEmpty
+                ? "\(formatCalc(acc)) \(op.symbol)"
+                : "\(formatCalc(acc)) \(op.symbol) \(curr)"
+        }
+        return curr
     }
 
     private func calcOpButton(_ op: CalcOp) -> some View {
@@ -1041,7 +1051,8 @@ struct AddExpenseView: View {
                             font: .monospacedDigitSystemFont(
                                 ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
                                 weight: .regular),
-                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad
+                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+                            dismissOnDeleteWhenEmpty: true
                         )
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
