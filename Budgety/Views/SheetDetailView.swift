@@ -381,6 +381,12 @@ struct SheetDetailView: View {
                     } label: {
                         Label("カテゴリを管理", systemImage: "tag.fill")
                     }
+                    NavigationLink {
+                        VirtualMemberListView(record: record)
+                            .sheetLockCover(record)
+                    } label: {
+                        Label("バーチャルメンバー", systemImage: "person.crop.circle.badge.plus")
+                    }
                     // ロック設定はオーナーのみ。参加者 (= 非オーナー) はロック解除画面で
                     // パスワードを入れて閲覧することしかできない。
                     if record.isOwnedByCurrentUser {
