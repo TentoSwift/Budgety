@@ -143,13 +143,14 @@ struct AddExpenseView: View {
     /// inputAccessoryView の代替。
     private var amountCalcBar: some View {
         HStack(spacing: 6) {
-            // 演算待ちの "1000 +" を左に表示。
-            if let acc = calcAccumulator, let op = calcPendingOp {
-                Text("\(formatCalc(acc)) \(op.symbol)")
+            // 演算中の計算式 ("1000 + 200" のように右辺も含めて) を左に表示。
+            if let expr = calcExpression {
+                Text(expr)
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
+                    .truncationMode(.head)
                 Spacer(minLength: 4)
             } else {
                 Spacer(minLength: 0)
@@ -175,6 +176,14 @@ struct AddExpenseView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.regularMaterial)
+    }
+
+    /// バー左に出す計算式 ("1000 + 200" 等)。演算中でなければ nil。
+    /// 入力中の右辺 (amountText) も含めてライブに見せる。
+    private var calcExpression: String? {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return nil }
+        let right = amountText.isEmpty ? "" : " \(amountText)"
+        return "\(formatCalc(acc)) \(op.symbol)\(right)"
     }
 
     private func calcOpButton(_ op: CalcOp) -> some View {
