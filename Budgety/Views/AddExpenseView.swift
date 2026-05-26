@@ -144,57 +144,54 @@ struct AddExpenseView: View {
     private var amountCalcBar: some View {
         // 上段: 計算式をしっかり表示。下段: 演算子ボタン + 「次へ」。
         // 1 段に詰めると HStack で Text が押し潰されて見えないことがあるため。
-        VStack(alignment: .leading, spacing: 6) {
-            Text(calcExpression.isEmpty ? "0" : calcExpression)
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .foregroundStyle(calcExpression.isEmpty ? .secondary : .primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .truncationMode(.head)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 6) {
+        VStack(alignment: .leading) {
+            // 計算プレビューは演算子を押したとき以降だけ表示する。
+            if !calcExpression.isEmpty {
+                Text(calcExpression)
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .glassEffect()
+            }
+            HStack {
+                Spacer()
                 calcOpButton(.sub)
                 calcOpButton(.add)
                 calcOpButton(.mul)
                 calcOpButton(.div)
                 Button { calcEquals() } label: {
-                    Image(systemName: "equal").frame(width: 32, height: 32)
+                    Image(systemName: "equal")
+                        .padding()
                 }
-                .buttonStyle(.bordered)
+                .glassEffect()
                 .disabled(calcPendingOp == nil)
                 Spacer()
-                Button {
-                    calcEquals()
-                    amountFocused = false
-                    titleFocused = true
-                } label: {
-                    Text("次へ").frame(minWidth: 64, minHeight: 32)
-                }
-                .buttonStyle(.borderedProminent)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.regularMaterial)
+        .padding(.horizontal)
+        .padding(.vertical)
     }
 
-    /// バー左に出す計算式 ("1000 + 200" 等)。
-    /// 演算子が無いときは入力中の amountText だけ、入力も無いときは空文字を返す。
+    /// バー上に出す計算式 ("1000 + 200" 等)。
+    /// 演算子が押されていないときは空文字 (= プレビューを出さない)。
     private var calcExpression: String {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return "" }
         let curr = amountText
-        if let acc = calcAccumulator, let op = calcPendingOp {
-            return curr.isEmpty
-                ? "\(formatCalc(acc)) \(op.symbol)"
-                : "\(formatCalc(acc)) \(op.symbol) \(curr)"
-        }
-        return curr
+        return curr.isEmpty
+            ? "\(formatCalc(acc)) \(op.symbol)"
+            : "\(formatCalc(acc)) \(op.symbol) \(curr)"
     }
 
     private func calcOpButton(_ op: CalcOp) -> some View {
         Button { applyCalcOp(op) } label: {
-            Image(systemName: op.systemImage).frame(width: 32, height: 32)
+            Image(systemName: op.systemImage)
+                .padding()
         }
-        .buttonStyle(.bordered)
+        .glassEffect()
     }
 
     /// 演算子をタップ: 入力済み数値を accumulator に取り込み、次の演算子を保持する。
@@ -202,7 +199,7 @@ struct AddExpenseView: View {
     private func applyCalcOp(_ newOp: CalcOp) {
         if let cur = Decimal(string: amountText) {
             if let acc = calcAccumulator, let op = calcPendingOp {
-                calcAccumulator = applyCalc(op, acc, cur)
+                calcAccumulator = roundedForCurrency(applyCalc(op, acc, cur))
             } else {
                 calcAccumulator = cur
             }
@@ -216,11 +213,21 @@ struct AddExpenseView: View {
     private func calcEquals() {
         guard let acc = calcAccumulator, let op = calcPendingOp else { return }
         let cur = Decimal(string: amountText) ?? 0
-        let result = applyCalc(op, acc, cur)
+        let result = roundedForCurrency(applyCalc(op, acc, cur))
         amountText = formatCalc(result)
         calcAccumulator = nil
         calcPendingOp = nil
         Haptics.success()
+    }
+
+    /// 小数を持たない通貨 (JPY/KRW/VND/IDR 等) のときは整数に丸める。
+    /// `÷` で割り切れない時に "333.3333..." のような値にならないようにする。
+    private func roundedForCurrency(_ d: Decimal) -> Decimal {
+        guard !decimalKeypadNeeded else { return d }
+        var result = Decimal()
+        var source = d
+        NSDecimalRound(&result, &source, 0, .plain)
+        return result
     }
 
     private func applyCalc(_ op: CalcOp, _ a: Decimal, _ b: Decimal) -> Decimal {
