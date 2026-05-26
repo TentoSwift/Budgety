@@ -1050,7 +1050,8 @@ struct AddExpenseView: View {
                             font: .monospacedDigitSystemFont(
                                 ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
                                 weight: .regular),
-                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad
+                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+                            dismissOnDeleteWhenEmpty: true
                         )
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
