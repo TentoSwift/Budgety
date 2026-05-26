@@ -197,6 +197,15 @@ struct AddExpenseView: View {
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
+    /// 電卓バーを safeArea に表示するか。
+    /// 金額にフォーカス中 / 金額入力済み / 計算中 (= サブ画面から戻った直後も)。
+    private var showCalcBar: Bool {
+        amountFocused
+            || !amountText.isEmpty
+            || calcAccumulator != nil
+            || calcPendingOp != nil
+    }
+
     /// バー上に出す計算式 ("1000 + 200" 等)。
     /// 演算子が押されていないときは空文字 (= プレビューを出さない)。
     private var calcExpression: String {
@@ -226,6 +235,8 @@ struct AddExpenseView: View {
             amountText = ""
         }
         calcPendingOp = newOp
+        // サブ画面から戻ってキーボードが閉じている場合に再オープン。
+        amountFocused = true
         Haptics.selection()
     }
 
@@ -1089,6 +1100,7 @@ struct AddExpenseView: View {
                         text: $title,
                         focus: $titleFocused,
                         placeholder: "タイトル",
+                        dismissOnDeleteWhenEmpty: true,
                         onSubmit: { titleFocused = false }
                     )
                     .onChange(of: title) { _, _ in
@@ -1190,14 +1202,17 @@ struct AddExpenseView: View {
             .tint(sheetTint)
             .listStyle(.plain)
             .scrollDismissesKeyboard(.interactively)
-            // 金額フォーカス中だけキーボード上 (safeArea) に簡易電卓と「次へ」を出す。
+            // 金額入力中 or 計算中はキーボード上 (safeArea) に簡易電卓を出す。
+            // サブ画面に遷移して戻った時 (= UITextView の first responder が外れて
+            // amountFocused が false に戻る) でも、金額入力 / 計算が継続しているなら
+            // バーを表示し続ける。
             .safeAreaInset(edge: .bottom) {
-                if amountFocused {
+                if showCalcBar {
                     amountCalcBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: amountFocused)
+            .animation(.easeInOut(duration: 0.15), value: showCalcBar)
             .onChange(of: kind) { _, newKind in
                 // 種別変更時にカテゴリの整合を取り、提案も再計算
                 if let cur = selectedCategory, cur.kind == newKind {
