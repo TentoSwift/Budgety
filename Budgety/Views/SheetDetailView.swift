@@ -138,6 +138,8 @@ struct SheetDetailView: View {
     /// ロック状態をツールバーボタンに反映するため observe する。
     @StateObject private var lockManager = SheetLockManager.shared
     @Environment(\.dismiss) private var dismiss
+    /// 「視差効果を減らす」(Reduce Motion) が ON ならアニメーションを抑制する。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var demoOpenStats: Bool = false
     @State private var demoOpenChat: Bool = false
     /// AddExpenseView から「定期項目を編集」が押された時にセットされる。
@@ -279,7 +281,8 @@ struct SheetDetailView: View {
         }
         .listStyle(.plain)
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
-        .animation(.default, value: filteredExpenses.map(\.objectID))
+        // Reduce Motion 時はアニメーションしない。
+        .animation(reduceMotion ? nil : .default, value: filteredExpenses.map(\.objectID))
         #if os(iOS)
         // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
         .scrollAwareTitle(record.displayName)
@@ -858,6 +861,8 @@ private struct SummaryCard: View {
     let searchQuery: String
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Reduce Motion 時は数値ロール (numericText) とアニメーションを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 子 Expense の編集 (amount 変更等) は ExpenseSheet の objectWillChange を発火させないため、
     /// `record.expenses` 経由で集計すると view が再描画されない。
@@ -982,8 +987,8 @@ private struct SummaryCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(t.expense)))
-                .animation(.snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(t.expense)))
+                .animation(reduceMotion ? nil : .snappy, value: t.expense)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
@@ -1087,8 +1092,8 @@ private struct SummaryCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(expense)))
-                .animation(.snappy, value: expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
+                .animation(reduceMotion ? nil : .snappy, value: expense)
             Text(expenseCaption)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -1254,19 +1259,19 @@ private struct SummaryCard: View {
 
         layout {
             Text("+ \(CurrencyCatalog.format(income, code: code))")
-                .contentTransition(.numericText(value: doubleValue(income)))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(income)))
             if !dynamicTypeSize.isAccessibilitySize {
                 Text("|")
                     .foregroundStyle(.tertiary)
             }
             Text("- \(CurrencyCatalog.format(expense, code: code))")
-                .contentTransition(.numericText(value: doubleValue(expense)))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
         }
         .font(.subheadline.monospacedDigit().weight(.medium))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.snappy, value: income)
-        .animation(.snappy, value: expense)
+        .animation(reduceMotion ? nil : .snappy, value: income)
+        .animation(reduceMotion ? nil : .snappy, value: expense)
     }
 
     private var hasMultipleCurrencies: Bool {

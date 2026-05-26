@@ -37,6 +37,8 @@ struct BudgetyMacContentView: View {
     @StateObject private var lockManager = SheetLockManager.shared
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
+    /// Reduce Motion 時は数値ロールを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var trimmedQuery: String { searchText.trimmingCharacters(in: .whitespaces) }
 
@@ -368,8 +370,8 @@ struct BudgetyMacContentView: View {
             Text(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))
                 .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
-                .contentTransition(.numericText(value: NSDecimalNumber(decimal: total.expense).doubleValue))
-                .animation(.snappy, value: total.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: total.expense).doubleValue))
+                .animation(reduceMotion ? nil : .snappy, value: total.expense)
             HStack(spacing: 12) {
                 Text("+ \(CurrencyCatalog.format(total.income, code: searchTotalCurrency))")
                 Text("|").foregroundStyle(.tertiary)

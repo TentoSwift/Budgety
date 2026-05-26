@@ -26,6 +26,8 @@ fileprivate func macExpensePayerMatches(_ exp: Expense, payerID: String, selfIDs
 struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var viewContext
+    /// Reduce Motion 時は数値ロール・一覧アニメーションを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var pub = PublicProfileSync.shared
     /// FX レート更新で月合計 / 日合計を再計算するために observe する。
     @ObservedObject private var fx = FXRatesService.shared
@@ -476,8 +478,8 @@ struct BudgetyMacSheetView: View {
             Text(CurrencyCatalog.format(t.expense, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .contentTransition(.numericText(value: NSDecimalNumber(decimal: t.expense).doubleValue))
-                .animation(.snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: t.expense).doubleValue))
+                .animation(reduceMotion ? nil : .snappy, value: t.expense)
 
             // 合計の下に「+収入 | -支出」のサマリ行 (左寄せ)
             HStack(spacing: 12) {
@@ -654,7 +656,8 @@ struct BudgetyMacSheetView: View {
             }
         }
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
-        .animation(.default, value: listExpenses.map(\.objectID))
+        // Reduce Motion 時はアニメーションしない。
+        .animation(reduceMotion ? nil : .default, value: listExpenses.map(\.objectID))
     }
 
     private func expenseRow(_ e: Expense) -> some View {
