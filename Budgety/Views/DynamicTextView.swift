@@ -31,7 +31,7 @@ struct DynamicTextView: UIViewRepresentable {
 
     /// `font` に Dynamic Type スケールをかけ、必要なら maxFontSize でキャップ。
     private func scaledFont() -> UIFont {
-        let scaled = scaledFont()
+        let scaled = UIFontMetrics.default.scaledFont(for: font)
         if let cap = maxFontSize, scaled.pointSize > cap {
             return scaled.withSize(cap)
         }
