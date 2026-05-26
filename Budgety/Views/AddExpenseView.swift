@@ -310,9 +310,11 @@ struct AddExpenseView: View {
     }
 
     private var navTitle: String {
+        // kind を切り替えたらタイトルも追従する (支出 ↔ 収入)。
+        let noun = kind == .income ? "収入" : "支出"
         switch mode {
-        case .create: "支出を追加"
-        case .edit: "支出を編集"
+        case .create: return "\(noun)を追加"
+        case .edit:   return "\(noun)を編集"
         }
     }
 
@@ -1079,7 +1081,7 @@ struct AddExpenseView: View {
                     DynamicTextField(
                         text: $title,
                         focus: $titleFocused,
-                        placeholder: kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)",
+                        placeholder: "タイトル",
                         onSubmit: { titleFocused = false }
                     )
                     .onChange(of: title) { _, _ in
