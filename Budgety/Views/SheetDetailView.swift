@@ -624,6 +624,8 @@ struct SheetDetailView: View {
                                 onDuplicate: { duplicate(expense) },
                                 onDelete: { deleteExpense(expense) }
                             )
+                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                            .transition(.identity)
                         }
                 } header: {
                     DateHeaderView(label: section.dayLabel,

@@ -643,6 +643,8 @@ struct BudgetyMacSheetView: View {
                                 expenseRow(e)
                             }
                             .buttonStyle(.plain)
+                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                            .transition(.identity)
                             if e.objectID != group.items.last?.objectID {
                                 Divider().padding(.leading, 60)
                             }
