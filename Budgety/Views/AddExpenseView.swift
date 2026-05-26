@@ -7,6 +7,7 @@ import SwiftUI
 import CoreData
 import PhotosUI
 import CloudKit
+import UIKit
 
 struct AddExpenseView: View {
     enum Mode {
@@ -49,10 +50,10 @@ struct AddExpenseView: View {
     @State private var title: String = ""
     @State private var amountText: String = ""
     @State private var showingDeleteConfirm: Bool = false
-    /// 新規追加時に amount → title の順でキーボードフォーカスを送る。
-    enum FocusField: Hashable { case amount }
-    @FocusState private var focusedField: FocusField?
-    /// `DynamicTextView` の Bool バインディング (UITextView は @FocusState 非対応のため別管理)
+    /// 金額・タイトルとも UIKit (UITextView) ベースの DynamicTextField を使う。
+    /// SwiftUI の @FocusState を onAppear でトグルするとキーボードが画面ロード後に
+    /// 遅れて出るため、UIKit の becomeFirstResponder() で即座に開く。
+    @State private var amountFocused: Bool = false
     @State private var titleFocused: Bool = false
     @State private var kind: TransactionKind = .expense
     @State private var currencyCode: String = "JPY"
@@ -907,29 +908,29 @@ struct AddExpenseView: View {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
-                        TextField("0", text: $amountText)
-                            .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .focused($focusedField, equals: .amount)
-                            .font(.title3.monospacedDigit())
-                            .onChange(of: amountText) { _, new in
-                                // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
-                                let normalized = new
-                                    .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
-                                let allowed = decimalKeypadNeeded
-                                    ? normalized.filter { $0.isASCII && ($0.isNumber || $0 == ".") }
-                                    : normalized.filter { $0.isASCII && $0.isNumber }
-                                if allowed != new { amountText = allowed }
-                            }
-                            // 数字キーボードには Return が無いので、ツールバーの「次へ」で
-                            // タイトル入力へ送る。
-                            .toolbar {
-                                ToolbarItemGroup(placement: .keyboard) {
-                                    Spacer()
-                                    if focusedField == .amount {
-                                        Button("次へ") { titleFocused = true }
-                                    }
-                                }
-                            }
+                        // UIKit (UITextView) ベース。onAppear で focus を立てると即座に
+                        // キーボードが開く (SwiftUI TextField + @FocusState だと遅延する)。
+                        // 数字キーボードには Return が無いので「次へ」アクセサリでタイトルへ送る。
+                        DynamicTextField(
+                            text: $amountText,
+                            focus: $amountFocused,
+                            placeholder: "0",
+                            font: .monospacedDigitSystemFont(
+                                ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
+                                weight: .regular),
+                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+                            accessoryNextTitle: "次へ",
+                            onAccessoryNext: { amountFocused = false; titleFocused = true }
+                        )
+                        .onChange(of: amountText) { _, new in
+                            // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                            let normalized = new
+                                .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
+                            let allowed = decimalKeypadNeeded
+                                ? normalized.filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                                : normalized.filter { $0.isASCII && $0.isNumber }
+                            if allowed != new { amountText = allowed }
+                        }
                     }
                     // 次にタイトルを入力する。
                     DynamicTextField(
@@ -1124,10 +1125,11 @@ struct AddExpenseView: View {
                 // 新規追加時はキーボードを自動で開いて金額にフォーカス (金額を先に入力)。
                 // 編集 (.edit) では既存値を読みやすくするため自動フォーカスしない。
                 if case .create = mode {
-                    focusedField = .amount
+                    amountFocused = true
                 }
             }
             .onDisappear {
+                amountFocused = false
                 titleFocused = false
             }
             .fullScreenCover(isPresented: $showCameraScanner) {

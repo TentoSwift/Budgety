@@ -14,6 +14,12 @@ struct DynamicTextView: UIViewRepresentable {
     @Binding var focus: Bool
     var placeholder: String = ""
     var font: UIFont = .systemFont(ofSize: 17)
+    /// キーボード種別。金額入力では `.decimalPad` / `.numberPad` を指定する。
+    var keyboardType: UIKeyboardType = .default
+    /// 数字キーボード等に「次へ」アクセサリを出して次のフィールドへ送る。
+    /// 設定すると inputAccessoryView (ツールバー) にボタンを表示する。
+    var accessoryNextTitle: String? = nil
+    var onAccessoryNext: (() -> Void)? = nil
     /// Enter (改行) が入力された時に呼ばれる。フォーカスは内部で外される。
     var onSubmit: (() -> Void)? = nil
 
@@ -30,14 +36,29 @@ struct DynamicTextView: UIViewRepresentable {
         textView.textColor = .label
         textView.font = UIFontMetrics.default.scaledFont(for: font)
         textView.adjustsFontForContentSizeCategory = true
+        textView.keyboardType = keyboardType
 
         textView.textContainer.lineFragmentPadding = 0
         textView.textContainerInset = .zero
+
+        // 「次へ」アクセサリ (数字キーボードには Return が無いため、これで次のフィールドへ)。
+        if let title = accessoryNextTitle {
+            let bar = UIToolbar()
+            bar.sizeToFit()
+            let flex = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+            let next = UIBarButtonItem(title: title, style: .done,
+                                       target: context.coordinator,
+                                       action: #selector(Coordinator.accessoryNextTapped))
+            bar.items = [flex, next]
+            textView.inputAccessoryView = bar
+        }
 
         return textView
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
+        // クロージャ等を最新の値に保つ (アクセサリ・onSubmit の stale 参照を防ぐ)。
+        context.coordinator.parent = self
         if uiView.text != text {
             uiView.text = text
         }
@@ -73,6 +94,10 @@ struct DynamicTextView: UIViewRepresentable {
 
         init(_ parent: DynamicTextView) {
             self.parent = parent
+        }
+
+        @objc func accessoryNextTapped() {
+            parent.onAccessoryNext?()
         }
 
         // UIKit → SwiftUI のフォーカス同期
@@ -111,6 +136,9 @@ struct DynamicTextField: View {
     @Binding var focus: Bool
     var placeholder: String
     var font: UIFont = .systemFont(ofSize: 17)
+    var keyboardType: UIKeyboardType = .default
+    var accessoryNextTitle: String? = nil
+    var onAccessoryNext: (() -> Void)? = nil
     var onSubmit: (() -> Void)? = nil
 
     var body: some View {
@@ -119,6 +147,9 @@ struct DynamicTextField: View {
             focus: $focus,
             placeholder: placeholder,
             font: font,
+            keyboardType: keyboardType,
+            accessoryNextTitle: accessoryNextTitle,
+            onAccessoryNext: onAccessoryNext,
             onSubmit: onSubmit
         )
         .background(alignment: .topLeading) {
