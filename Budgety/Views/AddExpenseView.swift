@@ -167,10 +167,10 @@ struct AddExpenseView: View {
                     Image(systemName: "equal")
                         .padding()
                 }
-                .glassEffect()
                 .disabled(calcPendingOp == nil)
                 Spacer()
             }
+            .glassEffect()
         }
         .padding(.horizontal)
         .padding(.vertical)
@@ -191,7 +191,6 @@ struct AddExpenseView: View {
             Image(systemName: op.systemImage)
                 .padding()
         }
-        .glassEffect()
     }
 
     /// 演算子をタップ: 入力済み数値を accumulator に取り込み、次の演算子を保持する。
@@ -1062,7 +1061,9 @@ struct AddExpenseView: View {
                                 ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
                                 weight: .regular),
                             keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
-                            dismissOnDeleteWhenEmpty: true
+                            // 計算中 (演算子押下後で accumulator あり) は delete で閉じない。
+                            // 右辺を入力する前に誤ってキーボードを閉じないため。
+                            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
                         )
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
