@@ -193,6 +193,9 @@ struct AddExpenseView: View {
         }
         .padding(.horizontal)
         .padding(.vertical)
+        // AX サイズだと SF Symbol + padding が巨大化して UI が崩れるので、
+        // バー全体の Dynamic Type を .xxLarge までにキャップする。
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
     /// バー上に出す計算式 ("1000 + 200" 等)。
