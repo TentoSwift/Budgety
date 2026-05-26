@@ -278,6 +278,8 @@ struct SheetDetailView: View {
                 }
         }
         .listStyle(.plain)
+        // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
+        .animation(.default, value: filteredExpenses.map(\.objectID))
         #if os(iOS)
         // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
         .scrollAwareTitle(record.displayName)

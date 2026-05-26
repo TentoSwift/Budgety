@@ -653,6 +653,8 @@ struct BudgetyMacSheetView: View {
                 }
             }
         }
+        // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
+        .animation(.default, value: listExpenses.map(\.objectID))
     }
 
     private func expenseRow(_ e: Expense) -> some View {
