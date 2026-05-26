@@ -116,12 +116,14 @@ struct DynamicTextView: UIViewRepresentable {
         }
 
         // UIKit → SwiftUI のフォーカス同期
+        // SwiftUI 描画サイクル中に @State を書き換えるとイベントが落ちる
+        // (キーボード復帰時に bar が出ない原因) ので、必ず次の runloop に遅延する。
         func textViewDidBeginEditing(_ textView: UITextView) {
-            parent.focus = true
+            DispatchQueue.main.async { [weak self] in self?.parent.focus = true }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            parent.focus = false
+            DispatchQueue.main.async { [weak self] in self?.parent.focus = false }
         }
 
         func textViewDidChange(_ textView: UITextView) {

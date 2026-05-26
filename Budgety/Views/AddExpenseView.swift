@@ -1197,10 +1197,16 @@ struct AddExpenseView: View {
             .safeAreaInset(edge: .bottom) {
                 if amountFocused {
                     amountCalcBar
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: amountFocused)
+            // フォーカスを失った瞬間 (= 他 View へ遷移したとき等) に計算を確定する。
+            // これによりサブ画面から戻ったら計算式は確定済 (amountText に結果) で
+            // キーボードは閉じている状態になる。再開したい時はもう一度金額をタップ。
+            .onChange(of: amountFocused) { oldValue, newValue in
+                if oldValue && !newValue {
+                    calcEquals()
+                }
+            }
             .onChange(of: kind) { _, newKind in
                 // 種別変更時にカテゴリの整合を取り、提案も再計算
                 if let cur = selectedCategory, cur.kind == newKind {
@@ -1284,13 +1290,14 @@ struct AddExpenseView: View {
                 Text("元に戻せません。")
             }
             .onAppear {
+                let isFirstAppear = !didLoad
                 loadIfNeeded()
-                // 新規追加時はキーボードを自動で開いて金額にフォーカス (金額を先に入力)。
+                // 新規追加 (.create) の初回だけ、金額に自動フォーカスしてキーボードを開く。
                 // 編集 (.edit) では既存値を読みやすくするため自動フォーカスしない。
-                // onAppear は初回 + サブ画面 (NavigationLink/sheet) から戻った時にも
-                // 発火するので、戻ってきた時にも金額キーボードを再オープンするため
-                // 描画安定を待って (asyncAfter) フォーカスを立てる。
-                if case .create = mode {
+                // サブ画面 (NavigationLink/sheet) から戻ったときは「計算を確定して
+                // キーボードを閉じた」状態を維持し、再フォーカスしない (もう一度金額を
+                // タップすれば再開できる)。
+                if case .create = mode, isFirstAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         amountFocused = true
                     }
