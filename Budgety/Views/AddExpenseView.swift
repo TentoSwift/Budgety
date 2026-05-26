@@ -49,7 +49,7 @@ struct AddExpenseView: View {
     @State private var title: String = ""
     @State private var amountText: String = ""
     @State private var showingDeleteConfirm: Bool = false
-    /// 新規追加時に title → amount の順でキーボードフォーカスを送る。
+    /// 新規追加時に amount → title の順でキーボードフォーカスを送る。
     enum FocusField: Hashable { case amount }
     @FocusState private var focusedField: FocusField?
     /// `DynamicTextView` の Bool バインディング (UITextView は @FocusState 非対応のため別管理)
@@ -902,15 +902,7 @@ struct AddExpenseView: View {
 
 
                 Section {
-                    DynamicTextField(
-                        text: $title,
-                        focus: $titleFocused,
-                        placeholder: kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)",
-                        onSubmit: { focusedField = .amount }
-                    )
-                    .onChange(of: title) { _, _ in
-                        recomputeTitleSuggestion()
-                    }
+                    // 金額を先に入力する。
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
@@ -928,6 +920,26 @@ struct AddExpenseView: View {
                                     : normalized.filter { $0.isASCII && $0.isNumber }
                                 if allowed != new { amountText = allowed }
                             }
+                            // 数字キーボードには Return が無いので、ツールバーの「次へ」で
+                            // タイトル入力へ送る。
+                            .toolbar {
+                                ToolbarItemGroup(placement: .keyboard) {
+                                    Spacer()
+                                    if focusedField == .amount {
+                                        Button("次へ") { titleFocused = true }
+                                    }
+                                }
+                            }
+                    }
+                    // 次にタイトルを入力する。
+                    DynamicTextField(
+                        text: $title,
+                        focus: $titleFocused,
+                        placeholder: kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)",
+                        onSubmit: { titleFocused = false }
+                    )
+                    .onChange(of: title) { _, _ in
+                        recomputeTitleSuggestion()
                     }
                     Picker("通貨", selection: $currencyCode) {
                         ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
@@ -1109,10 +1121,10 @@ struct AddExpenseView: View {
             }
             .onAppear {
                 loadIfNeeded()
-                // 新規追加時はキーボードを自動で開いて title にフォーカス。
+                // 新規追加時はキーボードを自動で開いて金額にフォーカス (金額を先に入力)。
                 // 編集 (.edit) では既存値を読みやすくするため自動フォーカスしない。
                 if case .create = mode {
-                    titleFocused = true
+                    focusedField = .amount
                 }
             }
             .onDisappear {

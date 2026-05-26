@@ -22,6 +22,8 @@ struct MacAddExpenseView: View {
 
     @State private var title: String = ""
     @State private var amountText: String = ""
+    /// 新規追加時に金額へ初期フォーカスする (金額を先に入力)。
+    @FocusState private var amountFocused: Bool
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
     @State private var date: Date = .now
     @State private var kind: TransactionKind = .expense
@@ -151,10 +153,7 @@ struct MacAddExpenseView: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                Section("タイトル") {
-                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
-                        .labelsHidden()
-                }
+                // 金額を先に入力する。
                 Section("金額") {
                     HStack {
                         // 注意: Form 内の HStack に置いた TextField は、第1引数のタイトルが
@@ -162,6 +161,7 @@ struct MacAddExpenseView: View {
                         // .labelsHidden() でラベル列を消し、prompt: で placeholder を出す。
                         TextField("金額", text: $amountText, prompt: Text("0"))
                             .labelsHidden()
+                            .focused($amountFocused)
                             .onChange(of: amountText) { _, new in
                                 // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
                                 let normalized = new
@@ -180,6 +180,11 @@ struct MacAddExpenseView: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 160)
                     }
+                }
+                // 次にタイトルを入力する。
+                Section("タイトル") {
+                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
+                        .labelsHidden()
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)
@@ -318,6 +323,12 @@ struct MacAddExpenseView: View {
             Text("元に戻せません。")
         }
         .task { await loadShareAndDefaults() }
+        .onAppear {
+            // 新規追加時のみ、金額へ自動フォーカス。
+            if expense == nil {
+                DispatchQueue.main.async { amountFocused = true }
+            }
+        }
         .onChange(of: title) { _, newValue in
             kickAICategorySuggest(title: newValue)
         }
