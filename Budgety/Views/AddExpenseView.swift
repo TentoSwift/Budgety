@@ -143,18 +143,15 @@ struct AddExpenseView: View {
     /// inputAccessoryView の代替。
     private var amountCalcBar: some View {
         HStack(spacing: 6) {
-            // 演算中の計算式 ("1000 + 200" のように右辺も含めて) を左に表示。
-            if let expr = calcExpression {
-                Text(expr)
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .truncationMode(.head)
-                Spacer(minLength: 4)
-            } else {
-                Spacer(minLength: 0)
-            }
+            // 計算式 ("1000 + 200") をライブに左へ表示。演算子が無いときも
+            // 入力中の数値を出す (= 何も無いより常に式が見える方が分かりやすい)。
+            Text(calcExpression)
+                .font(.body.monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .truncationMode(.head)
+            Spacer(minLength: 4)
             calcOpButton(.sub)
             calcOpButton(.add)
             calcOpButton(.mul)
@@ -178,12 +175,16 @@ struct AddExpenseView: View {
         .background(.regularMaterial)
     }
 
-    /// バー左に出す計算式 ("1000 + 200" 等)。演算中でなければ nil。
-    /// 入力中の右辺 (amountText) も含めてライブに見せる。
-    private var calcExpression: String? {
-        guard let acc = calcAccumulator, let op = calcPendingOp else { return nil }
-        let right = amountText.isEmpty ? "" : " \(amountText)"
-        return "\(formatCalc(acc)) \(op.symbol)\(right)"
+    /// バー左に出す計算式 ("1000 + 200" 等)。
+    /// 演算子が無いときは入力中の amountText だけ、入力も無いときは空文字を返す。
+    private var calcExpression: String {
+        let curr = amountText
+        if let acc = calcAccumulator, let op = calcPendingOp {
+            return curr.isEmpty
+                ? "\(formatCalc(acc)) \(op.symbol)"
+                : "\(formatCalc(acc)) \(op.symbol) \(curr)"
+        }
+        return curr
     }
 
     private func calcOpButton(_ op: CalcOp) -> some View {
