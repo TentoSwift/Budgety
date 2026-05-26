@@ -177,9 +177,13 @@ extension Expense {
            let pp = profiles.first(where: { $0.recordName == pid }) {
             return pp
         }
-        // 2) displayName 一致 (旧データ移行用)
+        // 2) displayName 一致 (旧データ移行用)。同名が複数いると Set の列挙順次第で
+        //    別人を拾い、背景色がチカチカ入れ替わるため、recordName でソートして決定的に選ぶ。
         guard let name = paidBy, !name.isEmpty else { return nil }
-        return profiles.first(where: { $0.displayName == name })
+        return profiles
+            .filter { $0.displayName == name }
+            .sorted { ($0.recordName ?? "") < ($1.recordName ?? "") }
+            .first
     }
 
     var amountDecimal: Decimal {
