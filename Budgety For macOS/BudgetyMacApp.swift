@@ -22,6 +22,7 @@ struct BudgetyMacApp: App {
             BudgetyMacContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .frame(minWidth: 900, minHeight: 600)
+                .appUpdateGate()
                 .overlay(alignment: .top) {
                     if let toast {
                         Text(toast)
