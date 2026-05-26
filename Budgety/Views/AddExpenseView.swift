@@ -137,61 +137,81 @@ struct AddExpenseView: View {
     @State private var newMemberName = ""
     @State private var memberPaywall = false
 
+    // MARK: - Amount field (UIKit-backed)
+
+    /// 金額入力 UITextView (DynamicTextField)。本体 body の型推論を軽くするため
+    /// 外出ししている。
+    /// - 基準フォント: title3 標準の 20pt。DynamicTextView 内で UIFontMetrics で
+    ///   AX 倍率がかかる (周囲の UI と一緒にスケールする)。
+    /// - 計算中 (accumulator/pendingOp あり) は delete で閉じない。
+    private var amountField: some View {
+        DynamicTextField(
+            text: $amountText,
+            focus: $amountFocused,
+            placeholder: "0",
+            font: .monospacedDigitSystemFont(ofSize: 20, weight: .regular),
+            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
+        )
+    }
+
     // MARK: - Amount calc bar (safeArea)
 
     /// 金額フォーカス中に safeArea に出す簡易電卓 + 「次へ」のバー。
     /// inputAccessoryView の代替。
     private var amountCalcBar: some View {
-        HStack(spacing: 6) {
-            // 計算式 ("1000 + 200") をライブに左へ表示。演算子が無いときも
-            // 入力中の数値を出す (= 何も無いより常に式が見える方が分かりやすい)。
-            Text(calcExpression)
-                .font(.body.monospacedDigit())
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .truncationMode(.head)
-            Spacer(minLength: 4)
-            calcOpButton(.sub)
-            calcOpButton(.add)
-            calcOpButton(.mul)
-            calcOpButton(.div)
-            Button { calcEquals() } label: {
-                Image(systemName: "equal").frame(width: 32, height: 32)
+        // 上段: 計算式をしっかり表示。下段: 演算子ボタン + 「次へ」。
+        // 1 段に詰めると HStack で Text が押し潰されて見えないことがあるため。
+        VStack(alignment: .leading) {
+            // 計算プレビューは演算子を押したとき以降だけ表示する。
+            if !calcExpression.isEmpty {
+                Text(calcExpression)
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .glassEffect()
             }
-            .buttonStyle(.bordered)
-            .disabled(calcPendingOp == nil)
-            Button {
-                calcEquals()
-                amountFocused = false
-                titleFocused = true
-            } label: {
-                Text("次へ").frame(minWidth: 52, minHeight: 32)
+            HStack {
+                Spacer()
+                calcOpButton(.sub)
+                calcOpButton(.add)
+                calcOpButton(.mul)
+                calcOpButton(.div)
+                Button { calcEquals() } label: {
+                    Image(systemName: "equal")
+                        .padding()
+                }
+                .disabled(calcPendingOp == nil)
+                Spacer()
             }
-            .buttonStyle(.borderedProminent)
+            .glassEffect()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.regularMaterial)
+        .padding(.horizontal)
+        .padding(.vertical)
+        // AX サイズだと SF Symbol + padding が巨大化して UI が崩れるので、
+        // バー全体の Dynamic Type を .xxLarge までにキャップする。
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
-    /// バー左に出す計算式 ("1000 + 200" 等)。
-    /// 演算子が無いときは入力中の amountText だけ、入力も無いときは空文字を返す。
+    /// バー上に出す計算式 ("1000 + 200" 等)。
+    /// 演算子が押されていないときは空文字 (= プレビューを出さない)。
     private var calcExpression: String {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return "" }
         let curr = amountText
-        if let acc = calcAccumulator, let op = calcPendingOp {
-            return curr.isEmpty
-                ? "\(formatCalc(acc)) \(op.symbol)"
-                : "\(formatCalc(acc)) \(op.symbol) \(curr)"
-        }
-        return curr
+        return curr.isEmpty
+            ? "\(formatCalc(acc)) \(op.symbol)"
+            : "\(formatCalc(acc)) \(op.symbol) \(curr)"
     }
 
     private func calcOpButton(_ op: CalcOp) -> some View {
         Button { applyCalcOp(op) } label: {
-            Image(systemName: op.systemImage).frame(width: 32, height: 32)
+            Image(systemName: op.systemImage)
+                .padding()
         }
-        .buttonStyle(.bordered)
     }
 
     /// 演算子をタップ: 入力済み数値を accumulator に取り込み、次の演算子を保持する。
@@ -199,7 +219,7 @@ struct AddExpenseView: View {
     private func applyCalcOp(_ newOp: CalcOp) {
         if let cur = Decimal(string: amountText) {
             if let acc = calcAccumulator, let op = calcPendingOp {
-                calcAccumulator = applyCalc(op, acc, cur)
+                calcAccumulator = roundedForCurrency(applyCalc(op, acc, cur))
             } else {
                 calcAccumulator = cur
             }
@@ -213,11 +233,21 @@ struct AddExpenseView: View {
     private func calcEquals() {
         guard let acc = calcAccumulator, let op = calcPendingOp else { return }
         let cur = Decimal(string: amountText) ?? 0
-        let result = applyCalc(op, acc, cur)
+        let result = roundedForCurrency(applyCalc(op, acc, cur))
         amountText = formatCalc(result)
         calcAccumulator = nil
         calcPendingOp = nil
         Haptics.success()
+    }
+
+    /// 小数を持たない通貨 (JPY/KRW/VND/IDR 等) のときは整数に丸める。
+    /// `÷` で割り切れない時に "333.3333..." のような値にならないようにする。
+    private func roundedForCurrency(_ d: Decimal) -> Decimal {
+        guard !decimalKeypadNeeded else { return d }
+        var result = Decimal()
+        var source = d
+        NSDecimalRound(&result, &source, 0, .plain)
+        return result
     }
 
     private func applyCalc(_ op: CalcOp, _ a: Decimal, _ b: Decimal) -> Decimal {
@@ -301,9 +331,11 @@ struct AddExpenseView: View {
     }
 
     private var navTitle: String {
+        // kind を切り替えたらタイトルも追従する (支出 ↔ 収入)。
+        let noun = kind == .income ? "収入" : "支出"
         switch mode {
-        case .create: "支出を追加"
-        case .edit: "支出を編集"
+        case .create: return "\(noun)を追加"
+        case .edit:   return "\(noun)を編集"
         }
     }
 
@@ -1040,20 +1072,8 @@ struct AddExpenseView: View {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
-                        // UIKit (UITextView) ベース。onAppear で focus を立てると即座に
-                        // キーボードが開く (SwiftUI TextField + @FocusState だと遅延する)。
-                        // 数字キーボードには Return が無いので、Form の safeAreaInset に
-                        // 「+ − × ÷ =」と「次へ」を載せて計算 + 遷移できるようにする。
-                        DynamicTextField(
-                            text: $amountText,
-                            focus: $amountFocused,
-                            placeholder: "0",
-                            font: .monospacedDigitSystemFont(
-                                ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
-                                weight: .regular),
-                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
-                            dismissOnDeleteWhenEmpty: true
-                        )
+                        // UIKit (UITextView) ベース。詳細は amountField 参照。
+                        amountField
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
                             let normalized = new
@@ -1068,7 +1088,7 @@ struct AddExpenseView: View {
                     DynamicTextField(
                         text: $title,
                         focus: $titleFocused,
-                        placeholder: kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)",
+                        placeholder: "タイトル",
                         onSubmit: { titleFocused = false }
                     )
                     .onChange(of: title) { _, _ in
