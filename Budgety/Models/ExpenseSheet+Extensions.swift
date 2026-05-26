@@ -126,7 +126,7 @@ extension ExpenseSheet {
         }
 
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
-        let sortedProfiles = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+        let sortedProfiles = profiles.sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
         for pp in sortedProfiles {
             guard let rn = pp.recordName, !rn.isEmpty,
                   rn != "_defaultOwner_", rn != "__defaultOwner__",
@@ -161,7 +161,7 @@ extension ExpenseSheet {
             seen.insert(urn)
         }
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
-        let sorted = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+        let sorted = profiles.sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
         #if !os(watchOS)
         if let share {
             for p in share.participants {
@@ -206,7 +206,7 @@ extension ExpenseSheet {
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
         return profiles
             .filter { UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived }
-            .sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+            .sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
     }
 
     /// バーチャルメンバーのアバター配色パレット。
