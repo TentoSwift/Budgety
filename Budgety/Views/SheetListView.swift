@@ -740,6 +740,8 @@ private struct SearchTotalCard: View {
     @Binding var period: SheetDetailView.Period
     let count: Int
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Reduce Motion 時は数値ロールとアニメーションを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func doubleValue(_ d: Decimal) -> Double {
         NSDecimalNumber(decimal: d).doubleValue
@@ -781,8 +783,8 @@ private struct SearchTotalCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(expense)))
-                .animation(.snappy, value: expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
+                .animation(reduceMotion ? nil : .snappy, value: expense)
 
             // 「+収入 | -支出」行 (SummaryCard と同じく AX サイズでは縦積み)
             let ieLayout: AnyLayout = dynamicTypeSize.isAccessibilitySize
@@ -790,18 +792,18 @@ private struct SearchTotalCard: View {
                 : AnyLayout(HStackLayout(spacing: 12))
             ieLayout {
                 Text("+ \(CurrencyCatalog.format(income, code: currency))")
-                    .contentTransition(.numericText(value: doubleValue(income)))
+                    .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(income)))
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text("|").foregroundStyle(.tertiary)
                 }
                 Text("- \(CurrencyCatalog.format(expense, code: currency))")
-                    .contentTransition(.numericText(value: doubleValue(expense)))
+                    .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
             }
             .font(.subheadline.monospacedDigit().weight(.medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.snappy, value: income)
-            .animation(.snappy, value: expense)
+            .animation(reduceMotion ? nil : .snappy, value: income)
+            .animation(reduceMotion ? nil : .snappy, value: expense)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
