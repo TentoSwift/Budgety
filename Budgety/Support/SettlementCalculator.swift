@@ -208,7 +208,11 @@ enum SettlementCalculator {
             }
             // バーチャルメンバーは CKShare に出ないので PP から精算対象に追加する。
             let virtualPPs = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-            for pp in virtualPPs.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+            // 同名が複数いると displayName だけでは順序が不安定 (Set 列挙順依存) になり
+            // 残高タイルが入れ替わってチカチカするため、recordName をタイブレークに使う。
+            for pp in virtualPPs.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
                 guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn) else { continue }
                 let nid = normalize(rn)
                 if memberSet.insert(nid).inserted { memberOrder.append(nid) }
@@ -219,7 +223,10 @@ enum SettlementCalculator {
             // あるため含めない (抜けた人の精算は出さない)。これにより、
             // 共有していなくてもバーチャルメンバーが居れば精算が表示される。
             let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
+            // 同名タイブレークは recordName で (上記コメント参照)。
+            for pp in pps.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
                 guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn) else { continue }
                 let nid = normalize(rn)
                 if memberSet.insert(nid).inserted { memberOrder.append(nid) }
