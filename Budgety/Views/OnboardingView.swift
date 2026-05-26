@@ -19,9 +19,8 @@ struct OnboardingView: View {
     @State private var appeared = false
 
     var body: some View {
-        ZStack {
-            Color.platformSystemBackground.ignoresSafeArea()
 
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // 中央のアプリアイコン
@@ -29,7 +28,7 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 56)
                         .padding(.bottom, 28)
-
+                    
                     // 小見出し + タイトル (左寄せ)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ようこそ")
@@ -41,7 +40,7 @@ struct OnboardingView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 28)
-
+                    
                     // 機能ハイライト (左寄せ)
                     featuresList
                 }
@@ -56,13 +55,11 @@ struct OnboardingView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .onAppear { appeared = true }
-
-            // フッター (続ける)
-            VStack {
-                Spacer()
-                footer
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    footer
+                }
             }
-            .ignoresSafeArea(.keyboard)
         }
     }
 
@@ -155,28 +152,9 @@ struct OnboardingView: View {
             onContinue()
         } label: {
             Text("続ける")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .foregroundStyle(.white)
-                .background(Capsule().fill(Color.accentColor))
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 24)
-        .padding(.top, 8)
-        .padding(.bottom, 16)
-        .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(
-                colors: [Color.platformSystemBackground.opacity(0), Color.platformSystemBackground],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 130)
-            .allowsHitTesting(false),
-            alignment: .bottom
-        )
+        .tint(Color.accentColor)
     }
 }
 

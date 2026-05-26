@@ -181,7 +181,6 @@
 				Views/iCloudStatusBanner.swift,
 				Views/LogSettlementView.swift,
 				Views/MemberPickerView.swift,
-				Views/OnboardingView.swift,
 				Views/PaywallView.swift,
 				Views/ProfileEditView.swift,
 				Views/RecurringListView.swift,
