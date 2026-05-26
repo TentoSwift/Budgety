@@ -142,7 +142,7 @@ struct AddExpenseView: View {
     /// 金額入力 UITextView (DynamicTextField)。本体 body の型推論を軽くするため
     /// 外出ししている。
     /// - 基準フォント: title3 標準の 20pt。DynamicTextView 内で UIFontMetrics で
-    ///   スケールし、`maxFontSize` で AX 時の上限をキャップ (= 二重拡大の防止)。
+    ///   AX 倍率がかかる (周囲の UI と一緒にスケールする)。
     /// - 計算中 (accumulator/pendingOp あり) は delete で閉じない。
     private var amountField: some View {
         DynamicTextField(
@@ -151,8 +151,7 @@ struct AddExpenseView: View {
             placeholder: "0",
             font: .monospacedDigitSystemFont(ofSize: 20, weight: .regular),
             keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
-            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil,
-            maxFontSize: 28
+            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
         )
     }
 
