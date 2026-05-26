@@ -23,8 +23,20 @@ struct DynamicTextView: UIViewRepresentable {
     /// true のとき、空のフィールドで delete を押すとキーボードを閉じる
     /// (数字入力で「もう入れない」時に戻れるようにする)。
     var dismissOnDeleteWhenEmpty: Bool = false
+    /// 指定するとフォントの拡大上限を pt 単位でキャップする。AX サイズで巨大化
+    /// しないようにしたい時に使う (例: 金額入力で 28 を指定)。
+    var maxFontSize: CGFloat? = nil
     /// Enter (改行) が入力された時に呼ばれる。フォーカスは内部で外される。
     var onSubmit: (() -> Void)? = nil
+
+    /// `font` に Dynamic Type スケールをかけ、必要なら maxFontSize でキャップ。
+    private func scaledFont() -> UIFont {
+        let scaled = scaledFont()
+        if let cap = maxFontSize, scaled.pointSize > cap {
+            return scaled.withSize(cap)
+        }
+        return scaled
+    }
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -37,7 +49,7 @@ struct DynamicTextView: UIViewRepresentable {
 
         textView.backgroundColor = .clear
         textView.textColor = .label
-        textView.font = UIFontMetrics.default.scaledFont(for: font)
+        textView.font = scaledFont()
         textView.adjustsFontForContentSizeCategory = true
         textView.keyboardType = keyboardType
 
@@ -66,7 +78,7 @@ struct DynamicTextView: UIViewRepresentable {
             uiView.text = text
         }
         // Dynamic Type / アクセシビリティサイズ変更への追従
-        uiView.font = UIFontMetrics.default.scaledFont(for: font)
+        uiView.font = scaledFont()
 
         // SwiftUI → UIKit のフォーカス制御
         if focus && !uiView.isFirstResponder {
@@ -151,6 +163,7 @@ struct DynamicTextField: View {
     var accessoryNextTitle: String? = nil
     var onAccessoryNext: (() -> Void)? = nil
     var dismissOnDeleteWhenEmpty: Bool = false
+    var maxFontSize: CGFloat? = nil
     var onSubmit: (() -> Void)? = nil
 
     var body: some View {
@@ -163,6 +176,7 @@ struct DynamicTextField: View {
             accessoryNextTitle: accessoryNextTitle,
             onAccessoryNext: onAccessoryNext,
             dismissOnDeleteWhenEmpty: dismissOnDeleteWhenEmpty,
+            maxFontSize: maxFontSize,
             onSubmit: onSubmit
         )
         .background(alignment: .topLeading) {

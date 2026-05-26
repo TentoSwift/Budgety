@@ -137,6 +137,25 @@ struct AddExpenseView: View {
     @State private var newMemberName = ""
     @State private var memberPaywall = false
 
+    // MARK: - Amount field (UIKit-backed)
+
+    /// 金額入力 UITextView (DynamicTextField)。本体 body の型推論を軽くするため
+    /// 外出ししている。
+    /// - 基準フォント: title3 標準の 20pt。DynamicTextView 内で UIFontMetrics で
+    ///   スケールし、`maxFontSize` で AX 時の上限をキャップ (= 二重拡大の防止)。
+    /// - 計算中 (accumulator/pendingOp あり) は delete で閉じない。
+    private var amountField: some View {
+        DynamicTextField(
+            text: $amountText,
+            focus: $amountFocused,
+            placeholder: "0",
+            font: .monospacedDigitSystemFont(ofSize: 20, weight: .regular),
+            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil,
+            maxFontSize: 28
+        )
+    }
+
     // MARK: - Amount calc bar (safeArea)
 
     /// 金額フォーカス中に safeArea に出す簡易電卓 + 「次へ」のバー。
@@ -1051,22 +1070,8 @@ struct AddExpenseView: View {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
-                        // UIKit (UITextView) ベース。onAppear で focus を立てると即座に
-                        // キーボードが開く (SwiftUI TextField + @FocusState だと遅延する)。
-                        // 数字キーボードには Return が無いので、Form の safeAreaInset に
-                        // 「+ − × ÷ =」と「次へ」を載せて計算 + 遷移できるようにする。
-                        DynamicTextField(
-                            text: $amountText,
-                            focus: $amountFocused,
-                            placeholder: "0",
-                            font: .monospacedDigitSystemFont(
-                                ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
-                                weight: .regular),
-                            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
-                            // 計算中 (演算子押下後で accumulator あり) は delete で閉じない。
-                            // 右辺を入力する前に誤ってキーボードを閉じないため。
-                            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
-                        )
+                        // UIKit (UITextView) ベース。詳細は amountField 参照。
+                        amountField
                         .onChange(of: amountText) { _, new in
                             // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
                             let normalized = new
