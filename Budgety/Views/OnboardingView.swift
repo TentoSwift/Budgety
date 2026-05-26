@@ -23,18 +23,13 @@ struct OnboardingView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    // 中央のアプリアイコン
-                    appIcon
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 56)
-                        .padding(.bottom, 28)
                     
                     // 小見出し + タイトル (左寄せ)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("ようこそ")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
-                        Text("Budgety")
+                        Text("Budgetyへ")
                             .font(.largeTitle.weight(.bold))
                             .foregroundStyle(.primary)
                     }
@@ -44,14 +39,6 @@ struct OnboardingView: View {
                     // 機能ハイライト (左寄せ)
                     featuresList
                 }
-                .padding(.horizontal, 28)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 14)
-                .animation(.smooth(duration: 0.5), value: appeared)
-                // フッターに隠れないよう下に余白
-                .padding(.bottom, 120)
             }
             .scrollBounceBehavior(.basedOnSize)
             .onAppear { appeared = true }
@@ -63,26 +50,6 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - App icon
-
-    private var appIcon: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.accentColor, Color.accentColor.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 96, height: 96)
-                .shadow(color: Color.accentColor.opacity(0.3), radius: 16, y: 8)
-            Image(systemName: "yensign.bank.building")
-                .font(.system(size: 46, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .accessibilityHidden(true)
-    }
 
     // MARK: - Features
 
