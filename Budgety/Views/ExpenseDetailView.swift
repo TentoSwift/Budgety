@@ -228,37 +228,50 @@ struct ExpenseDetailView: View {
 
     @ViewBuilder
     private func settleRow(id: String, sheet: ExpenseSheet, share: Decimal, code: String) -> some View {
-        let info = sheet.memberDisplayInfo(for: id)
+        let from = sheet.memberDisplayInfo(for: id)
+        let payerID = expense.payerProfileID ?? ""
+        let to = sheet.memberDisplayInfo(for: payerID)
         let settled = expense.isBeneficiarySettled(id)
-        // AX サイズでは横に収まらないので縦積みに切り替える。
-        let isAX = dynamicTypeSize.isAccessibilitySize
-        let layout: AnyLayout = isAX
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 12))
-        return Button {
+        Button {
             expense.setBeneficiarySettled(!settled, for: id)
             PersistenceController.shared.save()
             Haptics.success()
         } label: {
-            layout {
-                HStack(spacing: 12) {
-                    AvatarView(photoData: info.photoData, displayName: info.name,
-                               colorHex: info.colorHex, size: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(info.name).foregroundStyle(.primary)
-                        Text(CurrencyCatalog.format(share, code: code))
-                            .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                // アバター行: 受益者 → 支払者 + 精算済みトグル
+                HStack(spacing: 10) {
+                    AvatarView(photoData: from.photoData, displayName: from.name,
+                               colorHex: from.colorHex, size: 32)
+                    Image(systemName: "arrow.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    AvatarView(photoData: to.photoData, displayName: to.name,
+                               colorHex: to.colorHex, size: 32)
+                    Spacer()
+                    if settled {
+                        Label("精算済み", systemImage: "checkmark.seal.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(sheet.tint)
+                    } else {
+                        Image(systemName: "circle").foregroundStyle(.secondary)
                     }
                 }
-                if !isAX { Spacer(minLength: 8) }
-                if settled {
-                    Label("精算済み", systemImage: "checkmark.seal.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(sheet.tint)
-                } else {
-                    Image(systemName: "circle").foregroundStyle(.secondary)
+                // 名前行: <from> → <to>
+                HStack(spacing: 6) {
+                    Text(from.name).font(.subheadline.weight(.medium))
+                    Text("→").foregroundStyle(.secondary)
+                    Text(to.name).font(.subheadline.weight(.medium))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                // 金額
+                Text(CurrencyCatalog.format(share, code: code))
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(sheet.tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
+            .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
