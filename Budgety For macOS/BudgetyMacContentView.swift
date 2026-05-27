@@ -619,6 +619,8 @@ struct MacEditSheetView: View {
     @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
+    /// バーチャルメンバー管理シート表示。
+    @State private var showingMembers: Bool = false
 
     var body: some View {
         MacSheetFormDialog(
@@ -628,6 +630,7 @@ struct MacEditSheetView: View {
             symbol: $symbol,
             currencyCode: $currencyCode,
             archiveBinding: $archivedDraft,
+            manageMembersAction: { showingMembers = true },
             primaryActionLabel: "保存",
             destructiveAction: { showingDeleteConfirm = true },
             onCancel: { dismiss() },
@@ -647,6 +650,17 @@ struct MacEditSheetView: View {
             Button("キャンセル", role: .cancel) {}
         } message: {
             Text("配下の支出・カテゴリ・送金記録もすべて削除されます。")
+        }
+        .sheet(isPresented: $showingMembers) {
+            NavigationStack {
+                VirtualMemberListView(record: record)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("閉じる") { showingMembers = false }
+                        }
+                    }
+            }
+            .frame(minWidth: 480, minHeight: 480)
         }
     }
 
@@ -685,6 +699,9 @@ private struct MacSheetFormDialog: View {
     /// nil でない時のみアーカイブ Toggle 行を出す (= Edit のみ)。
     /// Add 時はシートがまだ存在しないので非表示。
     var archiveBinding: Binding<Bool>? = nil
+    /// nil でない時のみ「メンバー管理」ボタンを出す (= Edit のみ)。
+    /// バーチャルメンバーの追加 / 編集 / 削除を行う別シートを開く。
+    var manageMembersAction: (() -> Void)? = nil
     let primaryActionLabel: String
     var destructiveAction: (() -> Void)? = nil
     let onCancel: () -> Void
@@ -764,6 +781,18 @@ private struct MacSheetFormDialog: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 320, alignment: .leading)
                         Spacer(minLength: 0)
+                    }
+
+                    if let manageMembersAction {
+                        Divider().padding(.top, 4)
+                        formRow(label: "メンバー:") {
+                            Button {
+                                manageMembersAction()
+                            } label: {
+                                Label("バーチャルメンバーを管理", systemImage: "person.2")
+                            }
+                            Spacer(minLength: 0)
+                        }
                     }
 
                     if let archiveBinding {

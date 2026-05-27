@@ -196,6 +196,7 @@
 				Views/SheetLockView.swift,
 				Views/StatsView.swift,
 				Views/VirtualMemberEditView.swift,
+				Views/VirtualMemberListView.swift,
 			);
 			target = 4D18B4C12FB31605006F2C30 /* Budgety For macOS */;
 		};
