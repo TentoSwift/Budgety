@@ -18,9 +18,16 @@ struct VirtualMemberListView: View {
     /// プロフィール編集シート (名前 + 写真 + Memoji + 背景色) 対象。
     @State private var editingMember: EditingMember?
     @State private var showingPaywall = false
+    /// 削除確認アラート対象のバーチャルメンバー。
+    @State private var pendingDelete: PendingDelete?
 
     /// `.sheet(item:)` 用の recordName ラッパー。
     private struct EditingMember: Identifiable { let id: String }
+    /// 削除確認用 (recordName + 表示名スナップショット)。
+    private struct PendingDelete: Identifiable {
+        let id: String  // recordName
+        let displayName: String
+    }
 
     var body: some View {
         List {
@@ -45,7 +52,12 @@ struct VirtualMemberListView: View {
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            if let rn = pp.recordName { record.deleteVirtualMember(profileID: rn) }
+                            if let rn = pp.recordName {
+                                pendingDelete = PendingDelete(
+                                    id: rn,
+                                    displayName: pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty
+                                )
+                            }
                         } label: { Label("削除", systemImage: "trash") }
                     }
                 }
@@ -74,6 +86,21 @@ struct VirtualMemberListView: View {
                 newMemberName = ""
             }
             Button("キャンセル", role: .cancel) { newMemberName = "" }
+        }
+        .alert(
+            "「\(pendingDelete?.displayName ?? "")」を削除しますか?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { target in
+            Button("削除", role: .destructive) {
+                record.deleteVirtualMember(profileID: target.id)
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: { _ in
+            Text("過去の支出で使われている場合、履歴を保つためアーカイブされ、新規の割り勘候補から外れます。使われていなければ完全に削除されます。")
         }
         .sheet(item: $editingMember) { item in
             if let pp = record.virtualMemberProfiles.first(where: { $0.recordName == item.id }) {
