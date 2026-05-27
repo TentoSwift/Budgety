@@ -61,6 +61,8 @@ struct BudgetyMacSheetView: View {
     // フィルタ
     @State private var searchText: String = ""
     @State private var selectedCategory: ExpenseCategory?
+    /// 「カテゴリなし」(= category == nil) でフィルタ中か。selectedCategory と相互排他。
+    @State private var filterUncategorized: Bool = false
     @State private var selectedPayerID: String?
     @State private var period: Period = .thisMonth
 
@@ -105,6 +107,8 @@ struct BudgetyMacSheetView: View {
         var list = input
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
+        } else if filterUncategorized {
+            list = list.filter { $0.category == nil }
         }
         if let payerID = selectedPayerID {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
@@ -139,8 +143,13 @@ struct BudgetyMacSheetView: View {
 
     /// 絞り込みが有効か。
     private var isFiltering: Bool {
-        selectedCategory != nil || selectedPayerID != nil
+        selectedCategory != nil || filterUncategorized || selectedPayerID != nil
             || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// カテゴリ未設定の支出が含まれているか。
+    private var hasUncategorizedExpenses: Bool {
+        allExpenses.contains { $0.category == nil }
     }
 
     /// 支出があるカテゴリ一覧 (フィルタ用、sortOrder 順)。
@@ -387,6 +396,7 @@ struct BudgetyMacSheetView: View {
     private func clearFilters() {
         searchText = ""
         selectedCategory = nil
+        filterUncategorized = false
         selectedPayerID = nil
     }
 
@@ -571,24 +581,31 @@ struct BudgetyMacSheetView: View {
 
     /// カテゴリ絞り込みのチップ列 (すべて + 使用中カテゴリ)。
     private var categoryPills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let isAllSelected = selectedCategory == nil && !filterUncategorized
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Button {
                     selectedCategory = nil
+                    filterUncategorized = false
                 } label: {
                     Text("すべて")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(selectedCategory == nil ? sheet.tint : Color.gray.opacity(0.2)))
-                        .foregroundStyle(selectedCategory == nil ? .white : .primary)
+                        .background(Capsule().fill(isAllSelected ? sheet.tint : Color.gray.opacity(0.2)))
+                        .foregroundStyle(isAllSelected ? .white : .primary)
                 }
                 .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
                     let isSelected = selectedCategory?.objectID == cat.objectID
                     Button {
-                        selectedCategory = isSelected ? nil : cat
+                        if isSelected {
+                            selectedCategory = nil
+                        } else {
+                            selectedCategory = cat
+                            filterUncategorized = false
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: cat.displaySymbol)
@@ -599,6 +616,24 @@ struct BudgetyMacSheetView: View {
                         .padding(.vertical, 6)
                         .background(Capsule().fill(isSelected ? cat.tint : Color.gray.opacity(0.2)))
                         .foregroundStyle(isSelected ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if hasUncategorizedExpenses {
+                    Button {
+                        filterUncategorized.toggle()
+                        if filterUncategorized { selectedCategory = nil }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.bullet")
+                            Text("カテゴリなし")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(filterUncategorized ? Color.gray : Color.gray.opacity(0.2)))
+                        .foregroundStyle(filterUncategorized ? .white : .primary)
                     }
                     .buttonStyle(.plain)
                 }
