@@ -160,7 +160,11 @@ struct SheetDetailView: View {
         self.record = record
         self.isPreview = isPreview
         self._allExpenses = FetchRequest<Expense>(
-            sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
+            // date が同じ時の並びが不安定にならないよう createdAt を tiebreaker に使う。
+            sortDescriptors: [
+                NSSortDescriptor(keyPath: \Expense.date, ascending: false),
+                NSSortDescriptor(keyPath: \Expense.createdAt, ascending: false),
+            ],
             predicate: NSPredicate(format: "sheet == %@", record),
             animation: .default
         )
@@ -897,7 +901,10 @@ private struct SummaryCard: View {
         self.selectedPayerID = selectedPayerID
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
-            sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
+            sortDescriptors: [
+                NSSortDescriptor(keyPath: \Expense.date, ascending: false),
+                NSSortDescriptor(keyPath: \Expense.createdAt, ascending: false),
+            ],
             predicate: NSPredicate(format: "sheet == %@", record),
             animation: .default
         )

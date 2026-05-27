@@ -95,8 +95,19 @@ struct BudgetyMacSheetView: View {
     }
 
     private var allExpenses: [Expense] {
+        // date だけだと同日支出の並びが Set 由来でランダム & 再描画で入れ替わるので、
+        // createdAt と objectID URI を tiebreaker に使い完全に決定的にする。
         ((sheet.expenses as? Set<Expense>) ?? [])
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+            .sorted { lhs, rhs in
+                let ld = lhs.date ?? .distantPast
+                let rd = rhs.date ?? .distantPast
+                if ld != rd { return ld > rd }
+                let lc = lhs.createdAt ?? .distantPast
+                let rc = rhs.createdAt ?? .distantPast
+                if lc != rc { return lc > rc }
+                return lhs.objectID.uriRepresentation().absoluteString
+                    < rhs.objectID.uriRepresentation().absoluteString
+            }
     }
 
     /// カテゴリ・支払い者・検索クエリで絞り込む (期間は含めない)。
