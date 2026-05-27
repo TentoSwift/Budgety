@@ -247,13 +247,13 @@ struct MacAddExpenseView: View {
                             }
                         }
                     } footer: {
-                        Text(splitEnabled
-                             ? (selectedBeneficiaries.isEmpty
-                                ? "割る相手を 1 人以上選んでください。"
-                                : "選んだ人で均等割りします。")
-                             : "オフのときはこの支出を支払者の負担として扱い、精算では割りません。")
-                            .font(.caption2)
-                            .foregroundStyle(splitEnabled && selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
+                        if splitEnabled {
+                            Text(selectedBeneficiaries.isEmpty
+                                 ? "割る相手を 1 人以上選んでください。"
+                                 : "選んだ人で均等割りします。")
+                                .font(.caption2)
+                                .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
+                        }
                     }
                 }
                 Section("メモ (任意)") {

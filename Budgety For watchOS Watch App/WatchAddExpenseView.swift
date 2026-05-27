@@ -282,19 +282,17 @@ struct WatchAddExpenseView: View {
         }
         // 割り勘: 共有シートのみ反映。
         // - オン: 選んだ相手 (空にはしない。未選択なら現メンバー全員を明示保存)
-        // - オフ: 自分のみの負担 (= 精算で他者に割らない)
+        // - オフ: 受益者未設定 (空) で保存
+        //   (= resolvedBeneficiaryIDs() で「割り勘オフ = 支払者単独負担」扱い)
         // 空 = 全員均等にすると、あとで追加したメンバーが過去の支出に遡って
-        // 含まれてしまうため、必ず明示的な ID リストを保存する。
-        if isShared {
-            if splitEnabled {
-                let ids = selectedBeneficiaries.isEmpty
-                    ? Set(sheet.acceptedMemberProfileIDs())
-                    : selectedBeneficiaries
-                expense.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
-            } else if let pid = profile.userRecordName, !pid.isEmpty {
-                expense.beneficiaryProfileIDs = pid
-            }
+        // 含まれてしまうため、オン時のみ必ず明示的な ID リストを保存する。
+        if isShared, splitEnabled {
+            let ids = selectedBeneficiaries.isEmpty
+                ? Set(sheet.acceptedMemberProfileIDs())
+                : selectedBeneficiaries
+            expense.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
         }
+        // オフの場合は beneficiaryProfileIDs を触らない (デフォルトの空のまま)
         do {
             try ctx.save()
             WKInterfaceDevice.current().play(.success)
