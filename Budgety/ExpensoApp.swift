@@ -104,7 +104,9 @@ struct ExpensoApp: App {
                     #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
-                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)
+                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)。
+                    // オンボーディング/プロフィール編集を表示中はダイアログが sheet を蹴り出すので延期。
+                    await waitUntilOnboardingFlowEnds()
                     await UserProfileStore.shared.refreshAppleIDName()
                     let ctx = persistenceController.container.viewContext
                     if BuildInfo.profileFeatureEnabled {
@@ -134,7 +136,9 @@ struct ExpensoApp: App {
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
                     SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
-                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)
+                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)。
+                    // 同上、通知許可ダイアログも onboarding 終了後に。
+                    await waitUntilOnboardingFlowEnds()
                     await SplitNotificationManager.shared.requestAuthorizationIfNeeded()
                     SplitNotificationManager.shared.processChanges(in: ctx)
                 }
@@ -205,6 +209,16 @@ struct ExpensoApp: App {
         withAnimation { shareToast = message }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation { shareToast = nil }
+        }
+    }
+
+    /// オンボーディング/プロフィール編集 sheet が閉じるまで待機。
+    /// Apple ID 名・通知許可など、システムダイアログを伴う処理は
+    /// オンボーディング表示中に走ると sheet を蹴り出してしまうため、これで保留する。
+    @MainActor
+    private func waitUntilOnboardingFlowEnds() async {
+        while onboardingFlow != nil {
+            try? await Task.sleep(nanoseconds: 300_000_000)
         }
     }
 
