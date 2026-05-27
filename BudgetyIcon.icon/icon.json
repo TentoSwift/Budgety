@@ -40,6 +40,16 @@
                   -8.63470143394261
                 ]
               }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.1,
+                "translation-in-points" : [
+                  7.4,
+                  -8.6
+                ]
+              }
             }
           ]
         }
@@ -71,6 +81,16 @@
                   7.039067369631994
                 ]
               }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  4.4,
+                  7
+                ]
+              }
             }
           ]
         },
@@ -90,6 +110,16 @@
                   37.58559049999997
                 ]
               }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.9,
+                "translation-in-points" : [
+                  104.4,
+                  37.6
+                ]
+              }
             }
           ]
         },
@@ -107,6 +137,16 @@
                 "translation-in-points" : [
                   -126.82004956300113,
                   36.91483369999992
+                ]
+              }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.8,
+                "translation-in-points" : [
+                  -126.8,
+                  36.9
                 ]
               }
             }
