@@ -20,6 +20,8 @@ struct CloudSharingView: View {
     @State private var iCloudHint: String?
     @State private var existingShare: CKShare?
     @State private var participantsRefresh: Int = 0
+    /// swipeAction で削除しようとしている参加者。nil 解除でアラート閉じ。
+    @State private var pendingRemove: ParticipantRemoveTarget?
     @State private var mailData: MailData?
     @State private var showMailUnavailable: Bool = false
     @State private var showCopiedToast: Bool = false
@@ -55,6 +57,24 @@ struct CloudSharingView: View {
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
+            }
+            .alert(
+                "この参加者を削除しますか?",
+                isPresented: Binding(
+                    get: { pendingRemove != nil },
+                    set: { if !$0 { pendingRemove = nil } }
+                ),
+                presenting: pendingRemove
+            ) { target in
+                Button("削除", role: .destructive) {
+                    let p = target.participant
+                    let s = target.share
+                    Task { await removeParticipant(p, from: s) }
+                    pendingRemove = nil
+                }
+                Button("キャンセル", role: .cancel) { pendingRemove = nil }
+            } message: { target in
+                Text("\(target.displayName) はこの共有シートから外されます。相手の端末からもシートが見えなくなります。")
             }
             .overlay(alignment: .top) {
                 if showCopiedToast {
@@ -248,20 +268,36 @@ struct CloudSharingView: View {
         if !displayed.isEmpty {
             Section {
                 ForEach(Array(displayed.enumerated()), id: \.offset) { _, participant in
-                    ParticipantRow(
-                        participant: participant,
-                        sheet: record,
-                        isOwnerView: isOwner
-                    ) { permission in
-                        await update(participant: participant, share: share, to: permission)
-                    } onRemove: {
-                        await removeParticipant(participant, from: share)
-                    }
+                    ParticipantRow(participant: participant, sheet: record)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if isOwner && participant.role != .owner {
+                                Button(role: .destructive) {
+                                    pendingRemove = ParticipantRemoveTarget(
+                                        participant: participant,
+                                        share: share
+                                    )
+                                } label: {
+                                    Label("削除", systemImage: "person.crop.circle.badge.minus")
+                                }
+                            }
+                        }
                 }
             } header: {
                 Text("参加者")
             }
             .id(participantsRefresh)
+        }
+    }
+
+    /// 参加者削除の確認アラート用ターゲット。
+    private struct ParticipantRemoveTarget: Identifiable {
+        let id = UUID()
+        let participant: CKShare.Participant
+        let share: CKShare
+        var displayName: String {
+            participant.userIdentity.nameComponents.flatMap {
+                PersonNameComponentsFormatter().string(from: $0)
+            } ?? participant.userIdentity.lookupInfo?.emailAddress ?? "参加者"
         }
     }
 
@@ -295,9 +331,9 @@ struct CloudSharingView: View {
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
-            Text("人を招待")
+            Text("メールで招待")
         } footer: {
-            Text("招待相手の Apple ID（メールアドレス）を入力します。")
+            Text("Apple ID のメールアドレスを入力して招待を送ります。相手はメールに届いたリンクをタップし、Budgety を開いて「参加」をタップすると共有が始まります。")
         }
     }
 
@@ -337,12 +373,12 @@ struct CloudSharingView: View {
                 .disabled(isProcessing)
             }
         } header: {
-            Text("リンクで共有")
+            Text("リンクで招待")
         } footer: {
             if resolvedURL == nil {
-                Text("リンクを作成して招待相手に送れます。")
+                Text("作成したリンクを AirDrop・メッセージ・LINE などで送れます。")
             } else {
-                Text("招待した相手だけがこのリンクで参加できます。")
+                Text("リンクを受け取った相手はタップして Budgety を開き、「参加」をタップすると共有が始まります。リンクを知っている人だけが参加できます。")
             }
         }
     }
@@ -456,9 +492,6 @@ struct CloudSharingView: View {
 private struct ParticipantRow: View {
     let participant: CKShare.Participant
     @ObservedObject var sheet: ExpenseSheet
-    var isOwnerView: Bool = true
-    let onPermissionChange: (CKShare.ParticipantPermission) async -> Void
-    let onRemove: () async -> Void
 
     @ObservedObject private var userProfile = UserProfileStore.shared
 
@@ -643,27 +676,6 @@ private struct ParticipantRow: View {
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
-            }
-            // 「編集可能」固定: 権限ピッカーは廃止し、ラベルだけ表示する。
-            if participant.role != .owner {
-                HStack(spacing: 8) {
-                    Label("編集可能", systemImage: "pencil.circle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.green)
-                        .labelStyle(.titleAndIcon)
-                    Spacer()
-                    if isOwnerView {
-                        Button(role: .destructive) {
-                            Task { await onRemove() }
-                        } label: {
-                            Label("削除", systemImage: "person.crop.circle.badge.minus")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.borderless)
-                        .tint(.red)
-                    }
-                }
-                .padding(.leading, 52)
             }
         }
         .padding(.vertical, 4)
