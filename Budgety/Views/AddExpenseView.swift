@@ -855,12 +855,12 @@ struct AddExpenseView: View {
     }
 
     /// 実際に保存する受益者 CSV。
-    /// - 割り勘 UI 非表示 (ソロ・非 Premium): 支払者のみ (= 単独負担で保存)。
+    /// - 割り勘オフ (UI 非表示含む): 空 (= 受益者未設定。`resolvedBeneficiaryIDs()` で
+    ///   支払者のみが受益者にフォールバックする)。
     /// - 割り勘オン: 選択中の相手。
-    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
     private var effectiveBeneficiaryCSV: String {
-        guard shouldShowSharingFields else { return selectedPayerProfileID ?? "" }
-        return splitEnabled ? selectedBeneficiaryCSV : (selectedPayerProfileID ?? "")
+        guard shouldShowSharingFields, splitEnabled else { return "" }
+        return selectedBeneficiaryCSV
     }
 
     /// `selectedPayer` (Member) に対応する ParticipantProfile を同シートから引く。
@@ -1685,7 +1685,14 @@ struct AddExpenseView: View {
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
             origPhotoByteCount = expense.photoData?.count ?? 0
-            origBeneficiaryCSV = selectedBeneficiaryCSV
+            // 保存値そのものを基準にする (UI 正規化に引きずられない)。
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = expense.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(expense.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
             origIsRecurring = isRecurring
             origFrequencyRaw = frequency.rawValue
             origRecurringInterval = Int32(recurringInterval)

@@ -619,7 +619,13 @@ struct MacAddExpenseView: View {
             origPayerProfileID = e.payerProfileID ?? ""
             origDate = date
             origNote = note
-            origBeneficiaryCSV = e.beneficiaryProfileIDs ?? ""
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = e.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(e.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
         } else {
             selectedCategory = nil
             payerProfileID = selfProfileID
@@ -633,10 +639,9 @@ struct MacAddExpenseView: View {
 
     /// 実際に保存する受益者 ID 配列。
     /// - 割り勘オン: 選択中の相手。
-    /// - 割り勘オフ (UI 非表示含む): 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    /// - 割り勘オフ: 空 (= 受益者未設定。resolvedBeneficiaryIDs() で支払者のみにフォールバック)。
     private var effectiveBeneficiaryIDs: [String] {
-        if splitEnabled { return Array(selectedBeneficiaries) }
-        return payerProfileID.isEmpty ? [] : [payerProfileID]
+        splitEnabled ? Array(selectedBeneficiaries) : []
     }
 
     private func save() {
