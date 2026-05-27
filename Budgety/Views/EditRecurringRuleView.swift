@@ -198,7 +198,7 @@ struct EditRecurringRuleView: View {
                     }
                 }
 
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }

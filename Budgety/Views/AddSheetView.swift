@@ -91,7 +91,7 @@ struct AddSheetView: View {
                     Text("「今月」表示時に進捗バーで残額を可視化します。0 のまま保存すると予算なし扱い。")
                 }
 
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
