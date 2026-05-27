@@ -179,6 +179,7 @@
 				Views/EditCategoryView.swift,
 				Views/EditRecurringRuleView.swift,
 				Views/EditSheetView.swift,
+				Views/ExpenseDetailView.swift,
 				Views/iCloudStatusBanner.swift,
 				Views/LogSettlementView.swift,
 				Views/MemberPickerView.swift,

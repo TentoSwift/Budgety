@@ -34,6 +34,7 @@ struct BudgetyMacSheetView: View {
 
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
+    @State private var detailExpense: Expense?
     @State private var showingSettlement = false
     @State private var showingCategories = false
     @State private var showingRecurring = false
@@ -326,6 +327,9 @@ struct BudgetyMacSheetView: View {
         }
         .sheet(item: $editingExpense) { e in
             MacAddExpenseView(sheet: sheet, expense: e)
+        }
+        .sheet(item: $detailExpense) { e in
+            MacModalSheet { ExpenseDetailView(expense: e) }
         }
         .sheet(isPresented: $showingSettlement) {
             MacModalSheet { SettlementView(record: sheet) }
@@ -639,7 +643,7 @@ struct BudgetyMacSheetView: View {
                     VStack(spacing: 0) {
                         ForEach(group.items, id: \.objectID) { e in
                             Button {
-                                editingExpense = e
+                                detailExpense = e
                             } label: {
                                 expenseRow(e)
                             }
