@@ -58,10 +58,10 @@ struct VirtualMemberEditView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完了") { save() }
+                    Button("完了", systemImage: "checkmark") { save() }
                         .keyboardShortcut(.return)
                 }
             }

@@ -215,7 +215,7 @@ struct SheetListView: View {
                     subScreenContent(screen)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("閉じる") { subScreen = nil }
+                                Button("閉じる", systemImage: "xmark") { subScreen = nil }
                             }
                         }
                 }

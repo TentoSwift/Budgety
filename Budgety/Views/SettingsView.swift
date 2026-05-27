@@ -205,12 +205,7 @@ struct SettingsView: View {
             .navigationTitle("設定")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("閉じる")
+                    Button("閉じる", systemImage: "xmark") { dismiss() }
                 }
             }
             .sheet(isPresented: $showPaywall) {

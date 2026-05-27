@@ -184,14 +184,14 @@ struct EditSheetView: View {
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     #if os(macOS)
                     Button("完了") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     #else
-                    Button("保存") { save() }
+                    Button("保存", systemImage: "checkmark") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     #endif
                 }

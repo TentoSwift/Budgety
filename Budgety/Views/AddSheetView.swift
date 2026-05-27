@@ -101,10 +101,10 @@ struct AddSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("作成") { save() }
+                    Button("作成", systemImage: "checkmark") { save() }
                         .disabled(!canSave)
                 }
             }

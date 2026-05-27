@@ -44,6 +44,15 @@ struct EditCategoryView: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// iOS の confirmation ボタン文言。新規は「追加」、編集は「保存」。
+    /// 他のシート (EditSheetView 等) のラベル運用に揃える。
+    private var saveButtonLabel: String {
+        switch mode {
+        case .create: "追加"
+        case .edit:   "保存"
+        }
+    }
+
     /// このカテゴリが属する (新規作成なら作成先の) シート。
     private var contextSheet: ExpenseSheet? {
         switch mode {
@@ -89,11 +98,7 @@ struct EditCategoryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    #if os(macOS)
-                    Button("キャンセル") { dismiss() }
-                    #else
-                    circleToolbarButton(systemImage: "xmark") { dismiss() }
-                    #endif
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     #if os(macOS)
@@ -101,9 +106,8 @@ struct EditCategoryView: View {
                         .disabled(!canSave)
                         .keyboardShortcut(.return)
                     #else
-                    circleToolbarButton(systemImage: "checkmark") { save() }
+                    Button(saveButtonLabel, systemImage: "checkmark") { save() }
                         .disabled(!canSave)
-                        .opacity(canSave ? 1 : 0.4)
                     #endif
                 }
             }
