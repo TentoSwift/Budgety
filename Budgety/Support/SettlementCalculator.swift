@@ -344,13 +344,12 @@ enum SettlementCalculator {
                 let count = Decimal(normalizedBeneficiaries.count)
                 let perShare = roundToCurrency(converted / count, code: target)
                 perShareOpt = perShare
-                // 相手ごとの精算: 精算済みの受益者は負担を消し、payer もそのぶんは
-                // 受け取らない (= 返済済みとして残高から除外)。perShare 自体は元の頭割り。
-                let settledSet = Set(e.settledBeneficiaryIDList.map { normalize($0) })
-                let unsettledBeneficiaries = normalizedBeneficiaries.filter { !settledSet.contains($0) }
-                let allocatedTotal = perShare * Decimal(unsettledBeneficiaries.count)
+                // 精算は SettlementRecord (= 送金プランからの記録) のみで行う。
+                // per-expense の settled フラグは廃止済みなので、ここでは全受益者を
+                // そのまま残高に反映する。
+                let allocatedTotal = perShare * Decimal(normalizedBeneficiaries.count)
                 balances[payer, default: 0] += allocatedTotal
-                for b in unsettledBeneficiaries {
+                for b in normalizedBeneficiaries {
                     balances[b, default: 0] -= perShare
                 }
             }

@@ -256,7 +256,6 @@ struct MacAddExpenseView: View {
                             .foregroundStyle(splitEnabled && selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                     }
                 }
-                settlementSection
                 Section("メモ (任意)") {
                     TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
                         .labelsHidden()
@@ -525,61 +524,6 @@ struct MacAddExpenseView: View {
         for id in allMemberIDs { selectedBeneficiaries.insert(id) }
     }
 
-    // MARK: - 精算 (相手ごと) — 編集中の支出のみ
-
-    /// 割り勘の相手ごとに「精算済み」を切り替えるセクション。
-    /// 精算済みにした相手のぶんは精算計算 (誰が誰に) から外れる。
-    @ViewBuilder
-    private var settlementSection: some View {
-        if let exp = expense, exp.kind == .expense {
-            let allIDs = exp.resolvedBeneficiaryIDs()
-            let share = exp.amountDecimal / Decimal(max(allIDs.count, 1))
-            let code = exp.resolvedCurrencyCode
-            let payerID = exp.payerProfileID ?? ""
-            let ids = allIDs.filter { $0 != payerID }
-            if !ids.isEmpty {
-                Section {
-                    ForEach(ids, id: \.self) { id in
-                        settleRow(exp: exp, id: id, share: share, code: code)
-                    }
-                } header: {
-                    Text("精算")
-                } footer: {
-                    Text("返してもらった相手をクリックして精算済みに。精算済みのぶんは「誰が誰に」の計算から外れます。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private func settleRow(exp: Expense, id: String, share: Decimal, code: String) -> some View {
-        let info = sheet.memberDisplayInfo(for: id)
-        let settled = exp.isBeneficiarySettled(id)
-        return Button {
-            exp.setBeneficiarySettled(!settled, for: id)
-            PersistenceController.shared.save()
-        } label: {
-            HStack(spacing: 12) {
-                AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.name).foregroundStyle(.primary)
-                    Text(CurrencyCatalog.format(share, code: code))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if settled {
-                    Label("精算済み", systemImage: "checkmark.seal.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.green)
-                } else {
-                    Image(systemName: "circle").foregroundStyle(.secondary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Load / Save
 
     @MainActor
@@ -744,8 +688,6 @@ struct MacAddExpenseView: View {
         if newCSV != oldCSV {
             expense.beneficiaryIDList = effectiveBeneficiaryIDs
         }
-        // 受益者から外した人の精算済みフラグを掃除する。
-        expense.pruneSettledBeneficiaries()
     }
 
     private func deleteExpense() {

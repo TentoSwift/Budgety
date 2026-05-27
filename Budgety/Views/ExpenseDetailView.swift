@@ -26,7 +26,6 @@ struct ExpenseDetailView: View {
             if showsParticipants {
                 participantsSection
             }
-            settlementSection
             photoSection
             if let note = expense.note,
                !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -208,84 +207,6 @@ struct ExpenseDetailView: View {
         }
     }
 
-
-    // MARK: - 精算 (相手ごと)
-
-    /// 割り勘の相手ごとに「精算済み」を切り替えるセクション (支出のみ)。
-    /// 精算済みにした相手のぶんは精算計算 (誰が誰に) から外れる。
-    @ViewBuilder
-    private var settlementSection: some View {
-        if expense.kind == .expense, let sheet = expense.sheet {
-            let allIDs = expense.resolvedBeneficiaryIDs()
-            let share = expense.amountDecimal / Decimal(max(allIDs.count, 1))
-            let code = expense.resolvedCurrencyCode
-            let payerID = expense.payerProfileID ?? ""
-            // 支払者自身は「自分に返す」対象外なので除外。
-            let ids = allIDs.filter { $0 != payerID }
-            if !ids.isEmpty {
-                Section {
-                    ForEach(ids, id: \.self) { id in
-                        settleRow(id: id, sheet: sheet, share: share, code: code)
-                    }
-                } header: {
-                    Text("精算")
-                } footer: {
-                    Text("返してもらった相手をタップして精算済みにします。精算済みのぶんは「誰が誰に」の精算計算から外れます。")
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func settleRow(id: String, sheet: ExpenseSheet, share: Decimal, code: String) -> some View {
-        let from = sheet.memberDisplayInfo(for: id)
-        let payerID = expense.payerProfileID ?? ""
-        let to = sheet.memberDisplayInfo(for: payerID)
-        let settled = expense.isBeneficiarySettled(id)
-        Button {
-            expense.setBeneficiarySettled(!settled, for: id)
-            PersistenceController.shared.save()
-            Haptics.success()
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                // アバター行: 受益者 → 支払者 + 精算済みトグル
-                HStack(spacing: 10) {
-                    AvatarView(photoData: from.photoData, displayName: from.name,
-                               colorHex: from.colorHex, size: 32)
-                    Image(systemName: "arrow.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    AvatarView(photoData: to.photoData, displayName: to.name,
-                               colorHex: to.colorHex, size: 32)
-                    Spacer()
-                    if settled {
-                        Label("精算済み", systemImage: "checkmark.seal.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(sheet.tint)
-                    } else {
-                        Image(systemName: "circle").foregroundStyle(.secondary)
-                    }
-                }
-                // 名前行: <from> → <to>
-                HStack(spacing: 6) {
-                    Text(from.name).font(.subheadline.weight(.medium))
-                    Text("→").foregroundStyle(.secondary)
-                    Text(to.name).font(.subheadline.weight(.medium))
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                // 金額
-                Text(CurrencyCatalog.format(share, code: code))
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(sheet.tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: - Photo
 

@@ -21,15 +21,22 @@ struct SettlementView: View {
     @State private var editingRecord: SettlementRecord?
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
-    /// 送金プランから「支出を選んで精算」する対象。
-    @State private var settlingTransfer: TransferSettleTarget?
+    /// 送金プランの 1 行を「精算済み」として SettlementRecord 化する対象。
+    /// nil 解除でアラート閉じ。
+    @State private var settlingTransfer: PendingTransferSettlement?
 
-    /// 送金プランの 1 行から「返す支出を選んで精算」する対象。
-    private struct TransferSettleTarget: Identifiable {
+    /// 送金プランの 1 行 = これから SettlementRecord として記録する送金。
+    /// per-expense フラグは触らず、SettlementRecord 1 件で精算を完了させる
+    /// (= greedy で集約された金額をそのまま記録できるので残高が一致する)。
+    private struct PendingTransferSettlement: Identifiable {
         let id = UUID()
-        let from: String   // 返す人 (債務者)
-        let to: String     // 受け取る人 (立て替えた人)
+        let fromID: String
+        let toID: String
+        let fromName: String
+        let toName: String
+        let amount: Decimal
         let currencyCode: String
+        var formattedAmount: String { CurrencyCatalog.format(amount, code: currencyCode) }
     }
 
     var body: some View {
@@ -45,7 +52,6 @@ struct SettlementView: View {
                         if result.balances.count > 1 {
                             balancesSection(result: result)
                             transfersSection(result: result)
-                            perExpenseSettleSection
                             settlementHistorySection
                         } else {
                             notSharedSection
@@ -77,14 +83,18 @@ struct SettlementView: View {
             recompute()
         }
         .onChange(of: fx.lastUpdated) { _, _ in recompute() }
-        .sheet(item: $settlingTransfer) { target in
-            TransferExpenseSettleView(
-                record: record,
-                fromID: target.from,
-                toID: target.to,
-                currencyCode: target.currencyCode,
-                onDone: { recompute() }
-            )
+        .alert(
+            "送金を記録しますか？",
+            isPresented: Binding(
+                get: { settlingTransfer != nil },
+                set: { if !$0 { settlingTransfer = nil } }
+            ),
+            presenting: settlingTransfer
+        ) { target in
+            Button("精算済みにする") { confirmSettleTransfer(target) }
+            Button("キャンセル", role: .cancel) { settlingTransfer = nil }
+        } message: { target in
+            Text("\(target.fromName) → \(target.toName)\n\(target.formattedAmount)")
         }
         .sheet(item: $editingRecord) { rec in
             LogSettlementView(sheet: record, record: rec)
@@ -151,133 +161,36 @@ struct SettlementView: View {
         result = SettlementCalculator.calculate(for: record, in: nil)
     }
 
-    // MARK: - 支出ごとの精算 (相手ごと)
-
-    /// 割り勘した支出 (= 支払者以外の受益者がいる支出) を新しい順で。
-    private var splitExpenses: [Expense] {
-        ((record.expenses as? Set<Expense>) ?? [])
-            .filter { e in
-                guard e.kind == .expense else { return false }
-                let payer = e.payerProfileID ?? ""
-                return !e.resolvedBeneficiaryIDs().filter { $0 != payer }.isEmpty
-            }
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-    }
-
-    /// 支出が全員精算済みか (支払者を除く受益者が全員精算済み)。
-    /// 受益者がいない (= 割り勘でない) 支出は対象外なので false。
-    private func isExpenseFullySettled(_ e: Expense) -> Bool {
-        let payerID = e.payerProfileID ?? ""
-        let ids = e.resolvedBeneficiaryIDs().filter { $0 != payerID }
-        guard !ids.isEmpty else { return false }
-        return ids.allSatisfy { e.isBeneficiarySettled($0) }
-    }
-
-    /// 支出ごとに、割り勘の相手単位で「精算済み」を切り替えるセクション。
-    /// 全員精算済みの支出は「精算済み」グループとして下にまとめる。
-    @ViewBuilder
-    private var perExpenseSettleSection: some View {
-        let expenses = splitExpenses
-        if !expenses.isEmpty {
-            let pending = expenses.filter { !isExpenseFullySettled($0) }
-            let settled = expenses.filter { isExpenseFullySettled($0) }
-            card(title: "支出ごとの精算",
-                 footer: "返してもらった相手をタップして精算済みに。精算済みのぶんは上の残高・送金プランから外れます。") {
-                VStack(spacing: 2) {
-                    ForEach(pending, id: \.objectID) { e in
-                        expenseSettleDisclosure(e)
-                    }
-                    if !settled.isEmpty {
-                        if !pending.isEmpty {
-                            Divider().padding(.vertical, 6)
-                        }
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(record.tint)
-                            Text("精算済み")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(settled.count) 件")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 2)
-                        ForEach(settled, id: \.objectID) { e in
-                            expenseSettleDisclosure(e)
-                        }
-                    }
-                }
-            }
+    /// 送金プランの 1 行を SettlementRecord として永続化。
+    /// per-expense フラグは触らない (= greedy で集約された金額をそのまま記録)。
+    /// 削除・編集は settlementHistorySection (送金履歴) から行える。
+    @MainActor
+    private func confirmSettleTransfer(_ target: PendingTransferSettlement) {
+        let ctx = PersistenceController.shared.container.viewContext
+        let rec = SettlementRecord(context: ctx)
+        if let store = record.objectID.persistentStore {
+            ctx.assign(rec, to: store)
         }
-    }
-
-    @ViewBuilder
-    private func expenseSettleDisclosure(_ e: Expense) -> some View {
-        let allIDs = e.resolvedBeneficiaryIDs()
-        let share = e.amountDecimal / Decimal(max(allIDs.count, 1))
-        let code = e.resolvedCurrencyCode
-        let payerID = e.payerProfileID ?? ""
-        let ids = allIDs.filter { $0 != payerID }
-        let settledCount = ids.filter { e.isBeneficiarySettled($0) }.count
-        DisclosureGroup {
-            ForEach(ids, id: \.self) { id in
-                expenseSettleRow(e: e, id: id, share: share, code: code)
-            }
-        } label: {
-            let isAX = dynamicTypeSize.isAccessibilitySize
-            let layout: AnyLayout = isAX
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                : AnyLayout(HStackLayout(spacing: 8))
-            layout {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
-                        .foregroundStyle(.primary)
-                    Text(e.formattedSignedAmount)
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if !isAX { Spacer() }
-                Text("\(settledCount)/\(ids.count) 精算")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(settledCount == ids.count && !ids.isEmpty ? record.tint : Color.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func expenseSettleRow(e: Expense, id: String, share: Decimal, code: String) -> some View {
-        let info = record.memberDisplayInfo(for: id)
-        let settled = e.isBeneficiarySettled(id)
-        return Button {
-            e.setBeneficiarySettled(!settled, for: id)
-            PersistenceController.shared.save()
-            Haptics.success()
-            recompute()
-        } label: {
-            let isAX = dynamicTypeSize.isAccessibilitySize
-            let layout: AnyLayout = isAX
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-                : AnyLayout(HStackLayout(spacing: 10))
-            layout {
-                HStack(spacing: 10) {
-                    AvatarView(photoData: info.photoData, displayName: info.name,
-                               colorHex: info.colorHex, size: 24)
-                    Text(info.name).foregroundStyle(.primary)
-                }
-                if !isAX { Spacer() }
-                HStack(spacing: 8) {
-                    Text(CurrencyCatalog.format(share, code: code))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Image(systemName: settled ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(settled ? record.tint : Color.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 3)
+        rec.id = UUID()
+        rec.sheet = record
+        rec.amount = NSDecimalNumber(decimal: target.amount)
+        rec.currencyCode = target.currencyCode
+        rec.fromProfileID = target.fromID
+        rec.toProfileID = target.toID
+        rec.date = .now
+        rec.createdAt = .now
+        #if !os(watchOS)
+        let share = ShareCoordinator.shared.existingShare(for: record)
+        rec.createdByProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+            ?? ""
+        #else
+        rec.createdByProfileID = UserProfileStore.shared.userRecordName ?? ""
+        #endif
+        PersistenceController.shared.save()
+        Haptics.success()
+        settlingTransfer = nil
+        recompute()
     }
 
     private var emptySection: some View {
@@ -477,9 +390,12 @@ struct SettlementView: View {
                 )
                 Spacer()
                 Button {
-                    settlingTransfer = TransferSettleTarget(
-                        from: transfer.fromProfileID,
-                        to: transfer.toProfileID,
+                    settlingTransfer = PendingTransferSettlement(
+                        fromID: transfer.fromProfileID,
+                        toID: transfer.toProfileID,
+                        fromName: from.name,
+                        toName: to.name,
+                        amount: transfer.amount,
                         currencyCode: currencyCode
                     )
                 } label: {
@@ -649,113 +565,3 @@ struct SettlementView: View {
     }
 }
 
-// MARK: - 送金プランから「支出を選んで精算」
-
-/// 送金プランの 1 行 (from が to に返す) について、to が立て替えた支出のうち
-/// from が未精算の受益者になっているものを一覧し、選んだ支出を from について精算済みにする。
-private struct TransferExpenseSettleView: View {
-    @ObservedObject var record: ExpenseSheet
-    let fromID: String
-    let toID: String
-    let currencyCode: String
-    var onDone: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var selected: Set<NSManagedObjectID> = []
-
-    /// to が支払い、from が未精算の受益者になっている支出 (= from が to に返すべき支出)。
-    private var candidates: [Expense] {
-        ((record.expenses as? Set<Expense>) ?? [])
-            .filter { e in
-                guard e.kind == .expense else { return false }
-                guard (e.payerProfileID ?? "") == toID else { return false }
-                let bens = e.resolvedBeneficiaryIDs()
-                return bens.contains(fromID) && !e.isBeneficiarySettled(fromID)
-            }
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-    }
-
-    private func share(of e: Expense) -> Decimal {
-        e.amountDecimal / Decimal(max(e.resolvedBeneficiaryIDs().count, 1))
-    }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if candidates.isEmpty {
-                    ContentUnavailableView("精算する支出がありません", systemImage: "checkmark.seal")
-                } else {
-                    Section {
-                        ForEach(candidates, id: \.objectID) { e in
-                            row(e)
-                        }
-                    } footer: {
-                        Text("選んだ支出を「\(record.memberDisplayInfo(for: fromID).name)」について精算済みにします。残高・送金プランに反映されます。")
-                    }
-                }
-            }
-            .navigationTitle("返す支出を選択")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("精算 (\(selected.count)件)") { settle() }
-                        .disabled(selected.isEmpty)
-                }
-            }
-        }
-        .tint(record.tint)
-        #if os(macOS)
-        .frame(minWidth: 420, minHeight: 480)
-        #endif
-    }
-
-    @ViewBuilder
-    private func row(_ e: Expense) -> some View {
-        let isOn = selected.contains(e.objectID)
-        // AX サイズでは横に収まらないので縦積みに切り替える。
-        let isAX = dynamicTypeSize.isAccessibilitySize
-        let layout: AnyLayout = isAX
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-            : AnyLayout(HStackLayout(spacing: 12))
-        return Button {
-            if isOn { selected.remove(e.objectID) } else { selected.insert(e.objectID) }
-        } label: {
-            layout {
-                HStack(spacing: 12) {
-                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isOn ? record.tint : Color.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle)
-                            .foregroundStyle(.primary)
-                        if let d = e.date {
-                            Text(d, format: .dateTime.year().month().day())
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if !isAX { Spacer(minLength: 8) }
-                Text(CurrencyCatalog.format(share(of: e), code: e.resolvedCurrencyCode))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func settle() {
-        for e in candidates where selected.contains(e.objectID) {
-            e.setBeneficiarySettled(true, for: fromID)
-        }
-        PersistenceController.shared.save()
-        Haptics.success()
-        onDone()
-        dismiss()
-    }
-}
