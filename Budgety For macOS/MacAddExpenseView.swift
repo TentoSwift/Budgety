@@ -183,7 +183,7 @@ struct MacAddExpenseView: View {
                 }
                 // 次にタイトルを入力する。
                 Section("タイトル") {
-                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
+                    TextField("タイトル", text: $title)
                         .labelsHidden()
                 }
                 Section("日付") {
