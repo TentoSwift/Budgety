@@ -21,6 +21,8 @@ struct SheetAIChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             messageList
+        }
+        .safeAreaInset(edge: .bottom) {
             inputBar
         }
         .background(Color.platformSystemBackground.ignoresSafeArea())
@@ -179,7 +181,7 @@ struct SheetAIChatView: View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
                 TextField(
-                    SheetAIChat.isAvailable ? "iMessage" : "AI が利用できません",
+                    SheetAIChat.isAvailable ? "" : "利用できません",
                     text: $chat.inputText,
                     axis: .vertical
                 )
@@ -189,25 +191,24 @@ struct SheetAIChatView: View {
                 .onSubmit { send() }
                 .disabled(!SheetAIChat.isAvailable)
 
-                Button {
-                    send()
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 26))
-                        .foregroundStyle(canSend ? Color.accentColor : Color.gray.opacity(0.5))
+                VStack {
+                    Spacer()
+                    Button {
+                        send()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 26))
+                            .foregroundStyle(canSend ? Color.accentColor : Color.gray.opacity(0.5))
+                    }
+                    .disabled(!canSend)
                 }
-                .disabled(!canSend)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .stroke(Color.gray.opacity(0.35), lineWidth: 0.5)
-            )
+            .glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 18))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.bar)
     }
 
     private var canSend: Bool {

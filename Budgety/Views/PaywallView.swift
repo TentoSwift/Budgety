@@ -28,7 +28,6 @@ struct PaywallView: View {
                         plansSection
                     }
                     actions
-                    legalFooter
                 }
                 .padding()
             }
@@ -45,12 +44,12 @@ struct PaywallView: View {
             .alert("ありがとうございます", isPresented: $showRestartAlert) {
                 Button("OK") { dismiss() }
             } message: {
-                Text("Premium 機能が有効になりました。")
+                Text("Premium が有効になりました。")
             }
             .alert("復元しました", isPresented: $showThanks) {
                 Button("OK") { dismiss() }
             } message: {
-                Text("Premium 機能が復元されました。")
+                Text("Premium が復元されました。")
             }
         }
     }
@@ -66,10 +65,6 @@ struct PaywallView: View {
                 .shadow(color: .yellow.opacity(0.45), radius: 14, y: 6)
             Text("Budgety Premium")
                 .font(.title.bold())
-                .multilineTextAlignment(.center)
-            Text("すべての機能を解放して、もっと自由に。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 8)
@@ -257,14 +252,6 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
-    }
-
-    private var legalFooter: some View {
-        Text("サブスクは期限 24 時間前までに解約しないと自動更新されます。")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.top, 4)
     }
 }
 
