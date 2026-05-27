@@ -11,6 +11,9 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct ClaudeIntegrationView: View {
     @State private var copiedKey: String? = nil
@@ -173,25 +176,37 @@ struct ClaudeIntegrationView: View {
             openShortcutsApp()
             return
         }
-        #if canImport(UIKit)
-        UIApplication.shared.open(url)
-        #endif
+        openExternal(url)
     }
 
     private func openShortcutsApp() {
-        #if canImport(UIKit)
         if let url = URL(string: "shortcuts://") {
-            UIApplication.shared.open(url)
+            openExternal(url)
         }
+    }
+
+    /// プラットフォーム共通の外部 URL オープン。
+    /// iOS は UIApplication 経由、macOS は NSWorkspace 経由。
+    private func openExternal(_ url: URL) {
+        #if canImport(UIKit)
+        UIApplication.shared.open(url)
+        #elseif canImport(AppKit)
+        NSWorkspace.shared.open(url)
         #endif
     }
 
     private func copy(_ text: String, key: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
         #endif
         copiedKey = key
+        #if canImport(UIKit)
+        // macOS では Haptics モジュールが含まれないので iOS でのみフィードバック。
         Haptics.success()
+        #endif
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             if copiedKey == key { copiedKey = nil }
         }

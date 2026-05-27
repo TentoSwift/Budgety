@@ -1045,6 +1045,23 @@ struct BudgetyMacSettingsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            Section {
+                NavigationLink {
+                    ClaudeIntegrationView()
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Claude と連携")
+                            Text("自然言語で支出を記録")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.purple.gradient)
+                    }
+                }
+            }
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
             }
