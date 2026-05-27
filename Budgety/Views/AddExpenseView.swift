@@ -239,6 +239,23 @@ struct AddExpenseView: View {
         Haptics.success()
     }
 
+    /// 保存直前に呼ぶ。`=` を押されないまま保存しようとした場合に、
+    /// 残っている計算 (例: `2 *` 入力中で右辺が 20) を自動で確定して
+    /// amountText を「結果値」に書き戻す。これを忘れると `2 * 20` の
+    /// つもりが右辺の `20` しか保存されない。
+    private func finalizePendingCalcIfNeeded() {
+        guard calcAccumulator != nil, calcPendingOp != nil else { return }
+        // amountText が空 (= 演算子押下後すぐ保存) の時は計算する右辺が
+        // 無いので、accumulator をそのまま結果として採用する。
+        if amountText.isEmpty, let acc = calcAccumulator {
+            amountText = formatCalc(acc)
+            calcAccumulator = nil
+            calcPendingOp = nil
+            return
+        }
+        calcEquals()
+    }
+
     /// 小数を持たない通貨 (JPY/KRW/VND/IDR 等) のときは整数に丸める。
     /// `÷` で割り切れない時に "333.3333..." のような値にならないようにする。
     private func roundedForCurrency(_ d: Decimal) -> Decimal {
@@ -1415,6 +1432,8 @@ struct AddExpenseView: View {
     /// 「変更の適用範囲」ダイアログから呼ばれる。
     private func performRecurringSave(scope: RecurringSaveScope) {
         guard case .edit(let expense) = mode else { return }
+        // save() と同じく、計算途中の状態は確定してから保存する。
+        finalizePendingCalcIfNeeded()
         viewContext.refresh(expense, mergeChanges: true)
 
         // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
@@ -1555,6 +1574,10 @@ struct AddExpenseView: View {
     }
 
     private func save() {
+        // `=` が押されないままユーザーが保存ボタンを押した時に、計算中の
+        // 状態 (= 2 * 20 の途中) を確定してから保存する。これを忘れると
+        // 右辺だけ (= 20) が保存されてしまう。
+        finalizePendingCalcIfNeeded()
         guard let amountDecimal else { return }
         let pc = PersistenceController.shared
         switch mode {
