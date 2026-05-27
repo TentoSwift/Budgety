@@ -20,22 +20,15 @@ struct ExpensoApp: App {
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
     /// DEBUG ビルドでは起動ごとにリセットして毎回表示する (オンボーディングのデバッグ用)。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
-    /// sheet 表示の状態。`@AppStorage` を直接 sheet の binding にすると
-    /// presentation lifecycle 中に setter が誤発火して即閉じすることがあるため、
-    /// 表示制御は `@State` で独立させて永続化用 AppStorage と分離する。
-    @State private var showOnboarding: Bool = false
-    /// オンボーディング完了直後に続けて表示するプロフィール編集シート。
-    /// (Settings からの再表示時は連鎖させない)
-    @State private var showProfileEditAfterOnboarding: Bool = false
+    /// オンボーディング / プロフィール編集の表示フロー。
+    /// 二つの `.sheet` を重ねると SwiftUI の挙動が不安定 (即閉じ) になり、
+    /// body の型推論も限界に達するので `.sheet(item:)` で単一の sheet にまとめる。
+    @State private var onboardingFlow: OnboardingFlow?
 
-    init() {
-        #if DEBUG
-        // デバッグビルドのみ、起動時に強制リセットしてオンボーディングを毎回出す。
-        UserDefaults.standard.set(false, forKey: "hasShownOnboarding")
-        _showOnboarding = State(initialValue: true)
-        #else
-        _showOnboarding = State(initialValue: !UserDefaults.standard.bool(forKey: "hasShownOnboarding"))
-        #endif
+    private enum OnboardingFlow: String, Identifiable {
+        case welcome
+        case profile
+        var id: String { rawValue }
     }
 
     var body: some Scene {
@@ -44,19 +37,8 @@ struct ExpensoApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .appUpdateGate()
-                .sheet(isPresented: $showOnboarding) {
-                    OnboardingView {
-                        hasShownOnboarding = true
-                        showOnboarding = false
-                        // sheet の dismiss アニメーションを待ってからプロフィール編集を出す
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                            showProfileEditAfterOnboarding = true
-                        }
-                    }
-                    .interactiveDismissDisabled()
-                }
-                .sheet(isPresented: $showProfileEditAfterOnboarding) {
-                    ProfileEditView()
+                .sheet(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
                 }
                 .overlay(alignment: .top) {
                     if let shareToast {
@@ -96,6 +78,17 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
+                    // オンボーディング表示判定。DEBUG では毎回出す。
+                    #if DEBUG
+                    if onboardingFlow == nil {
+                        hasShownOnboarding = false
+                        onboardingFlow = .welcome
+                    }
+                    #else
+                    if onboardingFlow == nil, !hasShownOnboarding {
+                        onboardingFlow = .welcome
+                    }
+                    #endif
                     #if DEBUG
                     // CloudKit Production デプロイ準備: Development スキーマを一括生成する。
                     // `EXPENSO_INIT_CK_SCHEMA=1` を付けて iCloud サインイン済みで一度だけ起動。
@@ -212,6 +205,26 @@ struct ExpensoApp: App {
         withAnimation { shareToast = message }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation { shareToast = nil }
+        }
+    }
+
+    /// オンボーディング flow に応じた sheet コンテンツ。
+    /// body の型推論コストを下げるため関数に分離している。
+    @ViewBuilder
+    private func onboardingSheetContent(for step: OnboardingFlow) -> some View {
+        switch step {
+        case .welcome:
+            OnboardingView {
+                hasShownOnboarding = true
+                // sheet の dismiss アニメーション完了を待ってからプロフィール編集を表示。
+                onboardingFlow = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    onboardingFlow = .profile
+                }
+            }
+            .interactiveDismissDisabled()
+        case .profile:
+            ProfileEditView()
         }
     }
 
