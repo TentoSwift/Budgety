@@ -599,8 +599,8 @@ struct MacAddExpenseView: View {
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
             // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ。複数ならオン。
-            // ※ 空フォールバックは resolvedBeneficiaryIDs() と同じく「支払者のみ」扱い。
-            //   全メンバーへの展開は行わず、後から追加されたメンバーを巻き込まない。
+            // ※ 空はそのまま「割り勘オフ (支払者単独負担)」として扱い、全メンバーへの
+            //   展開は行わない (= 後から追加されたメンバーを巻き込まない)。
             let loadedPayerID = e.payerProfileID ?? ""
             let isPayerOnly = selectedBeneficiaries.isEmpty
                 || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
@@ -639,7 +639,8 @@ struct MacAddExpenseView: View {
 
     /// 実際に保存する受益者 ID 配列。
     /// - 割り勘オン: 選択中の相手。
-    /// - 割り勘オフ: 空 (= 受益者未設定。resolvedBeneficiaryIDs() で支払者のみにフォールバック)。
+    /// - 割り勘オフ: 空 (= 受益者未設定。SettlementCalculator では支払者単独負担として
+    ///   残高変動なし、カテゴリ集計のみ計上)。
     private var effectiveBeneficiaryIDs: [String] {
         splitEnabled ? Array(selectedBeneficiaries) : []
     }

@@ -855,8 +855,8 @@ struct AddExpenseView: View {
     }
 
     /// 実際に保存する受益者 CSV。
-    /// - 割り勘オフ (UI 非表示含む): 空 (= 受益者未設定。`resolvedBeneficiaryIDs()` で
-    ///   支払者のみが受益者にフォールバックする)。
+    /// - 割り勘オフ (UI 非表示含む): 空 (= 受益者未設定。SettlementCalculator では
+    ///   「支払者単独負担」として残高変動なし、カテゴリ集計のみ計上)。
     /// - 割り勘オン: 選択中の相手。
     private var effectiveBeneficiaryCSV: String {
         guard shouldShowSharingFields, splitEnabled else { return "" }
@@ -1648,10 +1648,10 @@ struct AddExpenseView: View {
             note = expense.note ?? ""
             photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
-            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ (支払者のみの負担)。
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ (支払者単独負担)。
             // 複数なら割り勘オン。
-            // ※ 空フォールバックは resolvedBeneficiaryIDs() と同じく「支払者のみ」扱い。
-            //   全メンバー展開は行わない (= 後から追加されたメンバーを巻き込まない)。
+            // ※ 空はそのまま「割り勘オフ」と解釈し、全メンバー展開は行わない
+            //   (= 後から追加されたメンバーを巻き込まない)。
             let loadedPayerID = expense.payerProfileID ?? ""
             let isPayerOnly = selectedBeneficiaries.isEmpty
                 || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
