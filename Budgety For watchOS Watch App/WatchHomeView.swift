@@ -228,7 +228,9 @@ private struct WatchSheetPage: View {
             }
             if !expenses.isEmpty {
                 Section {
-                    ForEach(Array(expenses.prefix(6)), id: \.objectID) { expense in
+                    // 全支出を表示する (旧: prefix(6) で最近 6 件のみだった)。
+                    // List + Section なので watchOS でもスクロールで降りていける。
+                    ForEach(Array(expenses), id: \.objectID) { expense in
                         NavigationLink {
                             WatchExpenseDetailView(expense: expense, sheet: sheet)
                         } label: {
@@ -249,7 +251,7 @@ private struct WatchSheetPage: View {
                         }
                     }
                 } header: {
-                    Text("最近")
+                    Text("支出")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                 }
