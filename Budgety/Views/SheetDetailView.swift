@@ -601,9 +601,12 @@ struct SheetDetailView: View {
                     selectedPayerID = nil
                     searchPeriod = .all
                 }
+                .buttonStyle(.plain)
             }
+            .listSectionSeparator(.hidden)
         } else {
             ContentUnavailableView.search(text: searchText)
+                .listSectionSeparator(.hidden)
         }
     }
 
