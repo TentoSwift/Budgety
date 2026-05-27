@@ -395,9 +395,11 @@ struct BudgetyMacSheetView: View {
     }
 
     /// Premium ならロック設定画面を、未加入なら Paywall を開く。
-    /// (ロックは Premium 機能。オーナー判定は SetSheetPasswordView 側でも行う)
+    /// (ロックは Premium 機能。オーナー判定は SetSheetPasswordView 側でも行う)。
+    /// 既にロック済みのシートは Premium 解除後も編集 / 解除を許可する。
     private func presentLockSetup() {
-        if PurchaseManager.shared.isPremium {
+        if PurchaseManager.shared.isPremium
+            || SheetLockManager.shared.hasPassword(for: sheet) {
             showingSetPassword = true
         } else {
             showingLockPaywall = true

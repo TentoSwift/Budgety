@@ -405,7 +405,11 @@ struct SheetDetailView: View {
                     // パスワードを入れて閲覧することしかできない。
                     if record.isOwnedByCurrentUser {
                         Button {
-                            if PurchaseManager.shared.isPremium {
+                            // 既存のロックの編集 / 解除は Premium 解除後も許可する。
+                            // (Premium 無いから外せないバグの修正)。
+                            // 新規ロックの追加だけは Premium 必須。
+                            if PurchaseManager.shared.isPremium
+                                || SheetLockManager.shared.hasPassword(for: record) {
                                 showingSetPassword = true
                             } else {
                                 lockPaywall = true
