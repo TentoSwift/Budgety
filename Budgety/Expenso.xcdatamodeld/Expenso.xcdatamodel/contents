@@ -112,6 +112,8 @@
         <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="fromProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="fxConvertedAmount" optional="YES" attributeType="Decimal"/>
+        <attribute name="fxTargetCurrency" optional="YES" attributeType="String"/>
         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="toProfileID" optional="YES" attributeType="String" defaultValueString=""/>

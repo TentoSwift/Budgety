@@ -243,11 +243,25 @@ struct LogSettlementView: View {
         target.fromProfileID = fromProfileID
         target.toProfileID = toProfileID
         target.amount = NSDecimalNumber(decimal: amount)
-        target.currencyCode = currencyCode.isEmpty
+        let finalCurrency = currencyCode.isEmpty
             ? sheet.resolvedDefaultCurrencyCode
             : currencyCode
+        target.currencyCode = finalCurrency
         target.date = date
         target.note = note
+
+        // FX スナップショットを記録時に保存。為替変動で「精算済みの送金が
+        // 再び送金プランに現れる」のを防ぐため、target 通貨建ての値を凍結する。
+        let sheetTarget = sheet.resolvedDefaultCurrencyCode
+        if let converted = FXRatesService.shared.convert(amount, from: finalCurrency, to: sheetTarget) {
+            target.fxConvertedAmountDecimal = converted
+            target.fxTargetCurrency = sheetTarget
+        } else {
+            // 換算できなかった (= FX レート未取得) 場合は snapshot を持たない。
+            // SettlementCalculator は fallback で現行 FX を使う (= 旧挙動)。
+            target.fxConvertedAmountDecimal = nil
+            target.fxTargetCurrency = nil
+        }
 
         PersistenceController.shared.save()
         dismiss()
