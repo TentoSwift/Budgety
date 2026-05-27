@@ -47,6 +47,7 @@ struct SheetListView: View {
         animation: .default
     ) private var sheets: FetchedResults<ExpenseSheet>
 
+    @StateObject private var profile = UserProfileStore.shared
     @State private var showingAddSheet = false
     @State private var showingSettings = false
     @State private var showingPaywall = false
@@ -79,6 +80,26 @@ struct SheetListView: View {
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
     @ObservedObject private var lockManager = SheetLockManager.shared
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
+
+    /// topBarLeading に置く設定ボタン。歯車ではなく自分のプロフィール
+    /// アバターを表示し、タップで SettingsView を開く。
+    /// (SettingsView 自身が NavigationStack を持つため sheet 提示にする —
+    /// NavigationLink で push すると nested NavigationStack になり即 pop される)
+    @ViewBuilder
+    private var settingsAvatarButton: some View {
+        Button {
+            showingSettings = true
+        } label: {
+            AvatarView(
+                photoData: profile.photoData,
+                displayName: profile.resolvedDisplayName,
+                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                size: 28
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("設定")
+    }
 
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespaces)
@@ -169,16 +190,7 @@ struct SheetListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // SettingsView 自身が NavigationStack を持つため、ここを
-                    // NavigationLink で push すると nested NavigationStack に
-                    // なって 1 回目の push が即座に pop される。
-                    // sheet 提示なら SettingsView の内側 NavigationStack が
-                    // 独立したコンテキストになり問題なく動く。
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+                    settingsAvatarButton
                 }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarItem(placement: .topBarTrailing) {
