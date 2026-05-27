@@ -198,7 +198,7 @@ struct MacAddExpenseView: View {
                     }
                 }
                 aiCategorySuggestionSection
-                Section("支払い者") {
+                Section(kind == .income ? "受取者" : "支払い者") {
                     payerPicker
                 }
                 // 共有シート、またはバーチャルメンバー追加可能な Premium なら表示
