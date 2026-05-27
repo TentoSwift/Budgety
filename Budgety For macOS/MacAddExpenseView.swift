@@ -632,12 +632,11 @@ struct MacAddExpenseView: View {
     private var hasOtherMembers: Bool { allMemberIDs.count > 1 }
 
     /// 実際に保存する受益者 ID 配列。
-    /// - 共有していないシートでは従来どおり選択値 (既定は空 = 全員均等)。
-    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
-    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    /// - 割り勘オン: 選択中の相手。
+    /// - 割り勘オフ (UI 非表示含む): 支払者のみ (= 支払者の負担、精算で他者に割らない)。
     private var effectiveBeneficiaryIDs: [String] {
-        guard hasOtherMembers else { return Array(selectedBeneficiaries) }
-        return splitEnabled ? Array(selectedBeneficiaries) : (payerProfileID.isEmpty ? [] : [payerProfileID])
+        if splitEnabled { return Array(selectedBeneficiaries) }
+        return payerProfileID.isEmpty ? [] : [payerProfileID]
     }
 
     private func save() {

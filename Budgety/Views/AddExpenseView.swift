@@ -855,11 +855,11 @@ struct AddExpenseView: View {
     }
 
     /// 実際に保存する受益者 CSV。
-    /// - 共有していない (ソロ) シートでは従来どおり全員均等 (= 選択中、既定は空)。
-    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
+    /// - 割り勘 UI 非表示 (ソロ・非 Premium): 支払者のみ (= 単独負担で保存)。
+    /// - 割り勘オン: 選択中の相手。
     /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
     private var effectiveBeneficiaryCSV: String {
-        guard shouldShowSharingFields else { return selectedBeneficiaryCSV }
+        guard shouldShowSharingFields else { return selectedPayerProfileID ?? "" }
         return splitEnabled ? selectedBeneficiaryCSV : (selectedPayerProfileID ?? "")
     }
 
@@ -911,8 +911,12 @@ struct AddExpenseView: View {
     }
 
     /// 支払者 / 受益者セクションを表示するか。
+    /// 共有中・既存共有データあり・Premium (= バーチャルメンバーを足して割り勘可能) なら表示。
+    /// macOS 版 (MacAddExpenseView) と同じ判定にして solo シートでも割り勘トグルを出す。
     private var shouldShowSharingFields: Bool {
-        hasOtherParticipants || existingSharingInfo
+        if hasOtherParticipants || existingSharingInfo { return true }
+        if let sheet = contextSheet, PurchaseManager.hasPremiumAccess(to: sheet) { return true }
+        return false
     }
 
     /// 編集中の支出を削除する。確認ダイアログ経由でのみ呼ばれる。
