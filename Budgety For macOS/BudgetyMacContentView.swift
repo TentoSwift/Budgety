@@ -615,6 +615,8 @@ struct MacEditSheetView: View {
     @State private var colorHex: String = "#5B8DEF"
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    /// 編集ドラフト。「保存」を押すまで record には書かない。
+    @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
 
@@ -625,10 +627,7 @@ struct MacEditSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
-            archiveBinding: Binding(
-                get: { record.archived },
-                set: { record.setArchived($0) }
-            ),
+            archiveBinding: $archivedDraft,
             primaryActionLabel: "保存",
             destructiveAction: { showingDeleteConfirm = true },
             onCancel: { dismiss() },
@@ -658,6 +657,7 @@ struct MacEditSheetView: View {
         colorHex = record.colorHex ?? "#5B8DEF"
         symbol = record.symbol ?? "person.2.fill"
         currencyCode = record.resolvedDefaultCurrencyCode
+        archivedDraft = record.archived
     }
 
     private func save() {
@@ -667,6 +667,7 @@ struct MacEditSheetView: View {
         record.colorHex = colorHex
         record.symbol = symbol
         record.defaultCurrencyCode = currencyCode
+        if record.archived != archivedDraft { record.archived = archivedDraft }
         PersistenceController.shared.save()
         dismiss()
     }

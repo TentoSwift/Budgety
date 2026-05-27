@@ -28,6 +28,7 @@ struct EditSheetView: View {
     @State private var selectedSymbol: String = "person.2.fill"
     @State private var defaultCurrencyCode: String = CurrencyCatalog.defaultCode
     @State private var budgetText: String = ""
+    @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
     @State private var showingPaywall: Bool = false
@@ -64,6 +65,7 @@ struct EditSheetView: View {
     @State private var origSymbol: String = ""
     @State private var origCurrencyCode: String = ""
     @State private var origBudgetText: String = ""
+    @State private var origArchived: Bool = false
 
     /// JPY/KRW など最小単位のない通貨は decimalPad 不要
     private var decimalKeypadNeeded: Bool {
@@ -157,15 +159,12 @@ struct EditSheetView: View {
                 memberSection
 
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { record.archived },
-                        set: { record.setArchived($0) }
-                    )) {
+                    Toggle(isOn: $archivedDraft) {
                         Label("このシートをアーカイブ",
-                              systemImage: record.archived ? "archivebox.fill" : "archivebox")
+                              systemImage: archivedDraft ? "archivebox.fill" : "archivebox")
                     }
                 } footer: {
-                    Text("アーカイブしたシートはシート一覧の下部の「アーカイブ済み」セクションにまとまります。データは削除されず、トグルでいつでも戻せます。")
+                    Text("アーカイブしたシートはシート一覧の下部の「アーカイブ済み」セクションにまとまります。データは削除されず、トグルでいつでも戻せます。変更は「保存」で反映されます。")
                 }
 
                 Section {
@@ -435,6 +434,7 @@ struct EditSheetView: View {
         } else {
             budgetText = ""
         }
+        archivedDraft = record.archived
 
         origName = name
         origNote = note
@@ -442,6 +442,7 @@ struct EditSheetView: View {
         origSymbol = selectedSymbol
         origCurrencyCode = defaultCurrencyCode
         origBudgetText = budgetText
+        origArchived = archivedDraft
     }
 
     /// オーナー = ローカル削除 + CloudKit 伝搬で全員から消える。
@@ -477,6 +478,7 @@ struct EditSheetView: View {
         if selectedSymbol != origSymbol { record.symbol = selectedSymbol }
         if defaultCurrencyCode != origCurrencyCode { record.defaultCurrencyCode = defaultCurrencyCode }
         if budgetText != origBudgetText { record.monthlyBudgetDecimal = Decimal(string: budgetText) }
+        if archivedDraft != origArchived { record.archived = archivedDraft }
         PersistenceController.shared.save()
         Haptics.success()
         dismiss()
