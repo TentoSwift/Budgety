@@ -157,6 +157,18 @@ struct EditSheetView: View {
                 memberSection
 
                 Section {
+                    Toggle(isOn: Binding(
+                        get: { record.archived },
+                        set: { record.setArchived($0) }
+                    )) {
+                        Label("このシートをアーカイブ",
+                              systemImage: record.archived ? "archivebox.fill" : "archivebox")
+                    }
+                } footer: {
+                    Text("アーカイブしたシートはシート一覧の下部の「アーカイブ済み」セクションにまとまります。データは削除されず、トグルでいつでも戻せます。")
+                }
+
+                Section {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
