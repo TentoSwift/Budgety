@@ -288,15 +288,15 @@ private struct WatchSheetPage: View {
                 Image(systemName: sheet.displaySymbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text("今日")
+                Text("今月")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            Text(formatYen(todayTotal))
+            Text(formatYen(monthTotal))
                 .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .animation(.snappy, value: todayTotal)
+                .animation(.snappy, value: monthTotal)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if let p = budgetProgress {

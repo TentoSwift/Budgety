@@ -810,15 +810,21 @@ struct SheetDetailView: View {
         let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
             cal.startOfDay(for: exp.date ?? .now)
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy年M月d日 (E)"
+        // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
+        let currentYear = cal.component(.year, from: .now)
+        let shortFormatter = DateFormatter()
+        shortFormatter.locale = Locale(identifier: "ja_JP")
+        shortFormatter.dateFormat = "M月d日 (E)"
+        let longFormatter = DateFormatter()
+        longFormatter.locale = Locale(identifier: "ja_JP")
+        longFormatter.dateFormat = "yyyy年M月d日 (E)"
 
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
 
         let sections = dict.map { (day, items) -> DaySection in
-            let label = formatter.string(from: day)
+            let year = cal.component(.year, from: day)
+            let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
             var net: Decimal = 0
             for e in items {
                 let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
