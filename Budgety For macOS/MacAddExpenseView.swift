@@ -478,9 +478,20 @@ struct MacAddExpenseView: View {
 
     @ViewBuilder
     private var beneficiariesList: some View {
-        ForEach(allMemberIDs, id: \.self) { id in
+        ForEach(beneficiaryPickerIDs, id: \.self) { id in
             beneficiaryRow(id)
         }
+    }
+
+    /// 現メンバー + 受益者として保存済みだが現メンバーに居ない人 (退室済み等) を末尾に。
+    /// 編集中の支出を開いた時に「居ないメンバー」もチェック状態のまま表示するため。
+    private var beneficiaryPickerIDs: [String] {
+        var ids = allMemberIDs
+        var seen = Set(ids)
+        for sb in selectedBeneficiaries where !sb.isEmpty && seen.insert(sb).inserted {
+            ids.append(sb)
+        }
+        return ids
     }
 
     private func beneficiaryRow(_ id: String) -> some View {

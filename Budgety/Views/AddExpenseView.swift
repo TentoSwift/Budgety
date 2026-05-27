@@ -849,6 +849,18 @@ struct AddExpenseView: View {
         for id in sheet.acceptedMemberProfileIDs() { selectedBeneficiaries.insert(id) }
     }
 
+    /// 割り勘 picker に表示する ID 列。
+    /// 現メンバー + 既に保存されている受益者で現メンバーに居ない人 (退室済み等) を末尾に。
+    @MainActor
+    private func beneficiaryPickerIDs(sheet: ExpenseSheet) -> [String] {
+        var ids = sheet.acceptedMemberProfileIDs()
+        var seen = Set(ids)
+        for sb in selectedBeneficiaries where !sb.isEmpty && seen.insert(sb).inserted {
+            ids.append(sb)
+        }
+        return ids
+    }
+
     /// 永続化用のソート済み CSV (順序非依存で同値判定するため)。
     private var selectedBeneficiaryCSV: String {
         selectedBeneficiaries.sorted().joined(separator: ",")
@@ -1136,8 +1148,10 @@ struct AddExpenseView: View {
                         ))
                         if splitEnabled {
                             // 別画面に遷移せず、この場でメンバーを選ぶ (インライン)。
-                            // 候補は参加中 (受諾済み) のメンバー + バーチャルメンバー。
-                            ForEach(sheet.acceptedMemberProfileIDs(), id: \.self) { id in
+                            // 候補は参加中 (受諾済み) のメンバー + バーチャルメンバー
+                            // + 既に受益者として保存されているが現メンバーには居ない人
+                            //   (= 退室済み / 削除済みバーチャル等を編集中も表示するため)
+                            ForEach(beneficiaryPickerIDs(sheet: sheet), id: \.self) { id in
                                 beneficiaryInlineRow(id, sheet: sheet)
                             }
                             Button {
