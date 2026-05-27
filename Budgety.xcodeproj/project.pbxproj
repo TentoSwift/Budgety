@@ -155,6 +155,7 @@
 				Support/MarkdownHelper.swift,
 				Support/NetworkMonitor.swift,
 				Support/Notifications.swift,
+				Support/PDFReportView.swift,
 				Support/PublicProfileSync.swift,
 				Support/RecurringExpenseGenerator.swift,
 				Support/SampleDataGenerator.swift,
