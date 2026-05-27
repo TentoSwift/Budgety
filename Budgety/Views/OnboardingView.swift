@@ -2,11 +2,10 @@
 //  OnboardingView.swift
 //  Budgety
 //
-//  Apple の「新機能 (What's New)」画面風の初回オンボーディング。
-//  - 中央にアプリアイコン
-//  - 左寄せの小見出し (アクセント色) + 大きいタイトル
-//  - 機能ハイライト 4 つ (アクセント色の SF Symbol + 見出し + 説明、左寄せ)
-//  - 下部に「続ける」ボタン (アクセント色の capsule)
+//  初回起動時のオンボーディング。
+//  - ヘッダー (アクセント色のシンボル + 「ようこそ / Budgety へ」)
+//  - 機能ハイライト 4 件 (シート / 共有 / 多通貨 / AI・Siri)
+//  - 下部「はじめる」ボタン (Liquid Glass 効果)
 //
 
 import SwiftUI
@@ -15,116 +14,138 @@ struct OnboardingView: View {
     /// 完了時に呼ばれる。呼び出し側は `@AppStorage("hasShownOnboarding")` 等を true にする。
     var onContinue: () -> Void
 
-    /// 表示時に内容をフェード＋わずかにスライドインさせる (Apple 標準の登場演出)。
-    @State private var appeared = false
+    // Dynamic Type で拡大されるヘッダーアイコン
+    @ScaledMetric(relativeTo: .largeTitle) private var headerIconSize: CGFloat = 60
+    // FeatureRow のアイコン枠サイズ
+    @ScaledMetric(relativeTo: .title2) private var featureIconWidth: CGFloat = 38
+
+    @State private var appearOpacity: Double = 0
 
     var body: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
 
-        NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    
-                    // 小見出し + タイトル (左寄せ)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ようこそ")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                        Text("Budgetyへ")
-                            .font(.largeTitle.weight(.bold))
-                            .foregroundStyle(.primary)
+                VStack(spacing: 32) {
+                    // ヘッダー
+                    VStack(spacing: 12) {
+                        Image(systemName: "yensign.bank.building")
+                            .font(.system(size: headerIconSize, weight: .light))
+                            .foregroundStyle(.tint)
+                            .symbolEffect(.pulse, options: .repeat(1))
+
+                        VStack(spacing: 4) {
+                            Text("ようこそ")
+                                .font(.largeTitle.weight(.bold))
+                            Text("Budgety へ")
+                                .font(.largeTitle.weight(.bold))
+                                .foregroundStyle(.tint)
+                        }
+                        .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 28)
-                    
-                    // 機能ハイライト (左寄せ)
-                    featuresList
+                    .padding(.top, 24)
+                    .padding(.horizontal, 24)
+
+                    // 機能ハイライト
+                    VStack(alignment: .leading, spacing: 22) {
+                        FeatureRow(
+                            icon: "rectangle.stack.fill",
+                            title: "シートで分けて管理",
+                            description: "家計・旅行・サークルなど、用途ごとにシートを作って独立した家計簿として使えます。",
+                            iconWidth: featureIconWidth
+                        )
+                        FeatureRow(
+                            icon: "person.2.fill",
+                            title: "家族や友人と共有",
+                            description: "iCloud を通じてシートを共有。立て替えと精算プランも自動で計算します。",
+                            iconWidth: featureIconWidth
+                        )
+                        FeatureRow(
+                            icon: "globe",
+                            title: "多通貨対応",
+                            description: "海外旅行や外貨支出も同じシートで管理。為替レートで自動換算します。",
+                            iconWidth: featureIconWidth
+                        )
+                        FeatureRow(
+                            icon: "sparkles",
+                            title: "AI と Siri で簡単入力",
+                            description: "Apple Intelligence によるカテゴリ自動推測と、Siri ショートカットで素早く記録できます。",
+                            iconWidth: featureIconWidth
+                        )
+                    }
+                    .padding(.horizontal, 32)
                 }
+                .padding(.bottom, 24)
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .onAppear { appeared = true }
-            .toolbar {
-                ToolbarItem(placement: .bottomBar) {
-                    footer
-                }
+            .scrollIndicators(.hidden)
+            // 上下端を gradient mask でフェードアウト
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.06),
+                        .init(color: .black, location: 0.94),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .opacity(appearOpacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.5)) { appearOpacity = 1 }
             }
         }
-    }
-
-
-    // MARK: - Features
-
-    private struct Feature: Identifiable {
-        let id = UUID()
-        let symbol: String
-        let title: String
-        let body: String
-    }
-
-    private let features: [Feature] = [
-        .init(
-            symbol: "rectangle.stack.fill",
-            title: "シートで分けて管理",
-            body: "家計・旅行・サークルなど、用途ごとにシートを作って独立した家計簿として使えます。"
-        ),
-        .init(
-            symbol: "person.2.fill",
-            title: "家族や友人と共有",
-            body: "iCloud を通じてシートを共有。立て替えと精算プランも自動で計算します。"
-        ),
-        .init(
-            symbol: "globe",
-            title: "多通貨対応",
-            body: "海外旅行や外貨支出も同じシートで管理。為替レートで自動換算します。"
-        ),
-        .init(
-            symbol: "sparkles",
-            title: "AI と Siri で簡単入力",
-            body: "Apple Intelligence によるカテゴリ自動推測と、Siri ショートカットで素早く記録できます。"
-        )
-    ]
-
-    private var featuresList: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            ForEach(features) { f in
-                featureRow(f)
+        // フッター: はじめるボタン (Liquid Glass)
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                onContinue()
+            } label: {
+                Text("はじめる")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .contentShape(Rectangle())
             }
+            .glassEffect()
+            .tint(Color.accentColor)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
         }
     }
+}
 
-    private func featureRow(_ f: Feature) -> some View {
+private struct FeatureRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    let iconWidth: CGFloat
+
+    var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            // アイコンはすべてアクセント色のシンボル単体 (What's New 風)
-            Image(systemName: f.symbol)
+            Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 32, alignment: .center)
+                .foregroundStyle(.tint)
+                .frame(width: iconWidth)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(f.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(f.body)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-    }
-
-    // MARK: - Footer
-
-    private var footer: some View {
-        Button {
-            onContinue()
-        } label: {
-            Text("続ける")
-        }
-        .frame(maxWidth: .infinity)
-        .tint(Color.accentColor)
+        .accessibilityElement(children: .combine)
     }
 }
 
 #Preview {
     OnboardingView(onContinue: {})
+}
+
+#Preview("Accessibility XXXL") {
+    OnboardingView(onContinue: {})
+        .environment(\.dynamicTypeSize, .accessibility3)
 }
