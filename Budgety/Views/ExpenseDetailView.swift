@@ -133,41 +133,43 @@ struct ExpenseDetailView: View {
     }
 
     /// 受益者をアバター + 名前のチップで表示する (全員均等ならその旨も併記)。
+    /// 受益者が空 (= 割り勘オフ / 支払者単独負担) なら表示しない。
     @ViewBuilder
     private var beneficiaryRow: some View {
         if let sheet = expense.sheet {
             let ids = expense.resolvedBeneficiaryIDs()
-            let all = sheet.allMemberProfileIDs()
-            let isEveryone = ids.isEmpty || Set(ids) == Set(all)
-            let displayIDs = isEveryone ? all : ids
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(expense.kind == .income ? "受け取り対象" : "受益者")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if isEveryone {
-                        Text("全員均等").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(displayIDs, id: \.self) { id in
-                            let info = sheet.memberDisplayInfo(for: id)
-                            VStack(spacing: 4) {
-                                AvatarView(photoData: info.photoData,
-                                           displayName: info.name,
-                                           colorHex: info.colorHex, size: 36)
-                                Text(info.name)
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 56)
-                            }
+            if !ids.isEmpty {
+                let all = sheet.allMemberProfileIDs()
+                let isEveryone = Set(ids) == Set(all)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(expense.kind == .income ? "受け取り対象" : "受益者")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if isEveryone {
+                            Text("全員均等").font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 2)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(ids, id: \.self) { id in
+                                let info = sheet.memberDisplayInfo(for: id)
+                                VStack(spacing: 4) {
+                                    AvatarView(photoData: info.photoData,
+                                               displayName: info.name,
+                                               colorHex: info.colorHex, size: 36)
+                                    Text(info.name)
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 56)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
+                .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
         }
     }
 
