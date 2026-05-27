@@ -657,8 +657,11 @@ struct SheetDetailView: View {
     }
 
     /// Mac の `membersStrip` と同じ、シートに参加しているメンバーのアバター + 名前一覧。
+    /// 現在のメンバー (= 自分 + CKShare 受諾済み参加者 + アーカイブされていない
+    /// バーチャル) のみ表示する。退室済み参加者やアーカイブ済みバーチャルは
+    /// 表示しない (過去の支出には残るが、フィルタには出さない)。
     private var membersStrip: some View {
-        let ids = record.allMemberProfileIDs()
+        let ids = record.acceptedMemberProfileIDs()
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(ids, id: \.self) { id in
