@@ -86,9 +86,43 @@ enum SheetExporter {
 
     // MARK: - PDF (SwiftUI ImageRenderer ベース, iOS / macOS 共通)
 
+    /// 1 ブロック (= ヘッダーカード or 日セクション or フッター) を ImageRenderer で
+    /// 画像化した結果。`heightPt` は PDF ポイント単位での高さ。
+    private struct RenderedBlock {
+        let image: CGImage
+        let widthPt: CGFloat
+        let heightPt: CGFloat
+    }
+
+    /// 1 View を ImageRenderer で CGImage 化する。scale=2 で高解像度に。
+    /// 返値の寸法は PDF ポイント単位 (= pixel / scale)。
+    @MainActor
+    private static func renderBlock<V: View>(_ view: V, pageWidth: CGFloat) -> RenderedBlock? {
+        let renderer = ImageRenderer(content: view)
+        renderer.proposedSize = ProposedViewSize(width: pageWidth, height: nil)
+        renderer.scale = 2
+        #if canImport(AppKit)
+        guard let nsImg = renderer.nsImage,
+              let cg = nsImg.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        #elseif canImport(UIKit)
+        guard let uiImg = renderer.uiImage, let cg = uiImg.cgImage else { return nil }
+        #else
+        return nil
+        #endif
+        return RenderedBlock(
+            image: cg,
+            widthPt: CGFloat(cg.width) / renderer.scale,
+            heightPt: CGFloat(cg.height) / renderer.scale
+        )
+    }
+
     /// シートのレポート PDF を生成。
-    /// `PDFReportView` (SwiftUI) を ImageRenderer で A4 ページに分割描画する。
-    /// SheetDetailView と同じ見た目のサマリーカード + 日付セクション付き支出一覧。
+    /// ヘッダーカードと各日セクションを **ブロック単位** で ImageRenderer に通して
+    /// A4 ページに積み上げる。1 ブロックが切れて見切れることが無いように
+    /// 「ブロックがページ末尾に収まらなければ次ページの先頭から始める」方式で
+    /// 改ページする (= 単一ブロックがページより長い場合のみ強制スプリット)。
     @MainActor
     static func writePDF(for sheet: ExpenseSheet) -> URL? {
         let dir = FileManager.default.temporaryDirectory
@@ -97,58 +131,62 @@ enum SheetExporter {
             .joined()
         let url = dir.appendingPathComponent("Budgety-\(safe).pdf")
 
-        // A4 (72dpi 換算)
-        let pageWidth: CGFloat = 595.2
-        let pageHeight: CGFloat = 841.8
+        let pageWidth = PDFReport.pageWidth
+        let pageHeight = PDFReport.pageHeight
 
-        let report = PDFReportView(sheet: sheet, pageWidth: pageWidth)
-        let renderer = ImageRenderer(content: report)
-        renderer.proposedSize = ProposedViewSize(width: pageWidth, height: nil)
-
-        // まず view を画像に焼く (= 全高を確定)。長くなりすぎないように
-        // rasterizationScale=2 で描画して見栄えを良くする (テキストが鮮明)。
-        renderer.scale = 2
-
-        #if canImport(AppKit)
-        guard let nsImg = renderer.nsImage,
-              let cgImg = nsImg.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return nil
+        // 1) 描画するブロックを順に並べる
+        var blocks: [RenderedBlock] = []
+        if let header = renderBlock(
+            PDFHeaderCardView(sheet: sheet).padding(.top, 24),
+            pageWidth: pageWidth
+        ) {
+            blocks.append(header)
         }
-        #elseif canImport(UIKit)
-        guard let uiImg = renderer.uiImage, let cgImg = uiImg.cgImage else {
-            return nil
+        for section in PDFReport.daySections(for: sheet) {
+            if let block = renderBlock(
+                PDFDaySectionView(sheet: sheet, section: section),
+                pageWidth: pageWidth
+            ) {
+                blocks.append(block)
+            }
         }
-        #else
-        return nil
-        #endif
+        if let footer = renderBlock(PDFFooterView(), pageWidth: pageWidth) {
+            blocks.append(footer)
+        }
+        guard !blocks.isEmpty else { return nil }
 
-        // 画像のピクセルサイズ → PDF ポイントへの換算。
-        // renderer.scale = 2 なので画像ピクセル = ポイント × 2。
-        let imgW = CGFloat(cgImg.width) / renderer.scale
-        let imgH = CGFloat(cgImg.height) / renderer.scale
+        // 2) ページ組み: ブロックを順に積んで、収まらなければ次ページに送る
+        struct Placement { let block: RenderedBlock; let topY: CGFloat }
+        var pages: [[Placement]] = [[]]
+        var currentY: CGFloat = 0
+        for block in blocks {
+            let fits = currentY + block.heightPt <= pageHeight
+            if !fits, !pages[pages.count - 1].isEmpty {
+                pages.append([])
+                currentY = 0
+            }
+            pages[pages.count - 1].append(Placement(block: block, topY: currentY))
+            currentY += block.heightPt
+            // 単一ブロックが pageHeight 超の場合: そのページの後ろに何も置かないため
+            // 次の loop iteration で fits=false → 新ページ送り、で OK。
+        }
 
+        // 3) PDF 出力
         var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
         guard let consumer = CGDataConsumer(url: url as CFURL),
               let pdf = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
             return nil
         }
-
-        // ページごとに「画像のどの部分を表示するか」を計算しながら描画。
-        // PDF は左下原点 + Y 上向き、ImageRenderer の出力は左上原点なので、
-        // image 全体を「drawY を下げて」描画し、各ページが該当する垂直スライス
-        // (= y..y+pageHeight) を見せる。
-        // image 高さ imgH を 1 枚の長い縦長画像と考え、ページ 0 はその上端、
-        // ページ k は y=k*pageHeight..y=(k+1)*pageHeight 部分を表示する。
-        var y: CGFloat = 0
-        while y < imgH {
+        for page in pages {
             pdf.beginPDFPage(nil)
-            // 画像の origin は (0, drawY)。image top = drawY + imgH。
-            // 画像の y(image-top 基準) 位置が PDF y(=pageHeight) に来るには:
-            //   drawY + imgH - y = pageHeight  →  drawY = pageHeight - imgH + y
-            let drawY = pageHeight - imgH + y
-            pdf.draw(cgImg, in: CGRect(x: 0, y: drawY, width: imgW, height: imgH))
+            for placement in page {
+                let b = placement.block
+                // PDF は左下原点 + Y 上向き。topY (ページ上端からの距離) を
+                // CGRect.origin に変換するには pageHeight - topY - heightPt。
+                let originY = pageHeight - placement.topY - b.heightPt
+                pdf.draw(b.image, in: CGRect(x: 0, y: originY, width: b.widthPt, height: b.heightPt))
+            }
             pdf.endPDFPage()
-            y += pageHeight
         }
         pdf.closePDF()
         return url
