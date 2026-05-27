@@ -598,12 +598,16 @@ struct MacAddExpenseView: View {
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
-            // 受益者が「支払者ただ 1 人」なら割り勘オフ。空(=全員)や複数ならオン。
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ。複数ならオン。
+            // ※ 空フォールバックは resolvedBeneficiaryIDs() と同じく「支払者のみ」扱い。
+            //   全メンバーへの展開は行わず、後から追加されたメンバーを巻き込まない。
             let loadedPayerID = e.payerProfileID ?? ""
-            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
-            // 旧「全員均等」(空) の支出は現在のメンバーを明示選択に展開して保存可能にする。
-            if splitEnabled, selectedBeneficiaries.isEmpty {
-                selectedBeneficiaries = Set(allMemberIDs)
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
             }
 
             // CRDT 差分書き戻し用にスナップショット保存

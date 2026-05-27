@@ -1644,14 +1644,18 @@ struct AddExpenseView: View {
             note = expense.note ?? ""
             photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
-            // 受益者が「支払者ただ 1 人」なら割り勘オフ (支払者のみの負担)。
-            // 空 (=全員) や複数なら割り勘オン。
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ (支払者のみの負担)。
+            // 複数なら割り勘オン。
+            // ※ 空フォールバックは resolvedBeneficiaryIDs() と同じく「支払者のみ」扱い。
+            //   全メンバー展開は行わない (= 後から追加されたメンバーを巻き込まない)。
             let loadedPayerID = expense.payerProfileID ?? ""
-            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
-            // 旧「全員均等」(空) の支出を編集する場合は、現在のメンバーを明示選択に展開して
-            // 保存できるようにする (空のままだと保存不可のため)。
-            if splitEnabled, selectedBeneficiaries.isEmpty {
-                selectedBeneficiaries = Set(expense.sheet?.acceptedMemberProfileIDs() ?? [])
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化しておく
+            // (= 割り勘オンに切り替えた時の自然な開始状態)。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
             }
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
