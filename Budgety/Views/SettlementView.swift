@@ -229,7 +229,7 @@ struct SettlementView: View {
     private func summarySection(result: SettlementResult) -> some View {
         card(
             title: "サマリ",
-            footer: "収入は精算対象外です。受益者が指定されていない支出はシート全員で均等割りとして扱います。"
+            footer: "収入は精算対象外です。"
         ) {
             HStack(alignment: .firstTextBaseline) {
                 Text("通貨")
