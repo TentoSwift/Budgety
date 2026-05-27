@@ -21,15 +21,22 @@ struct SettlementView: View {
     @State private var editingRecord: SettlementRecord?
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
-    /// 送金プランから「支出を選んで精算」する対象。
-    @State private var settlingTransfer: TransferSettleTarget?
+    /// 送金プランの 1 行を「精算済み」として SettlementRecord 化する対象。
+    /// nil 解除でアラート閉じ。
+    @State private var settlingTransfer: PendingTransferSettlement?
 
-    /// 送金プランの 1 行から「返す支出を選んで精算」する対象。
-    private struct TransferSettleTarget: Identifiable {
+    /// 送金プランの 1 行 = これから SettlementRecord として記録する送金。
+    /// per-expense フラグは触らず、SettlementRecord 1 件で精算を完了させる
+    /// (= greedy で集約された金額をそのまま記録できるので残高が一致する)。
+    private struct PendingTransferSettlement: Identifiable {
         let id = UUID()
-        let from: String   // 返す人 (債務者)
-        let to: String     // 受け取る人 (立て替えた人)
+        let fromID: String
+        let toID: String
+        let fromName: String
+        let toName: String
+        let amount: Decimal
         let currencyCode: String
+        var formattedAmount: String { CurrencyCatalog.format(amount, code: currencyCode) }
     }
 
     var body: some View {
@@ -77,14 +84,18 @@ struct SettlementView: View {
             recompute()
         }
         .onChange(of: fx.lastUpdated) { _, _ in recompute() }
-        .sheet(item: $settlingTransfer) { target in
-            TransferExpenseSettleView(
-                record: record,
-                fromID: target.from,
-                toID: target.to,
-                currencyCode: target.currencyCode,
-                onDone: { recompute() }
-            )
+        .alert(
+            "送金を記録しますか？",
+            isPresented: Binding(
+                get: { settlingTransfer != nil },
+                set: { if !$0 { settlingTransfer = nil } }
+            ),
+            presenting: settlingTransfer
+        ) { target in
+            Button("精算済みにする") { confirmSettleTransfer(target) }
+            Button("キャンセル", role: .cancel) { settlingTransfer = nil }
+        } message: { target in
+            Text("\(target.fromName) → \(target.toName)\n\(target.formattedAmount)")
         }
         .sheet(item: $editingRecord) { rec in
             LogSettlementView(sheet: record, record: rec)
@@ -149,6 +160,38 @@ struct SettlementView: View {
     @MainActor
     private func recompute() {
         result = SettlementCalculator.calculate(for: record, in: nil)
+    }
+
+    /// 送金プランの 1 行を SettlementRecord として永続化。
+    /// per-expense フラグは触らない (= greedy で集約された金額をそのまま記録)。
+    /// 削除・編集は settlementHistorySection (送金履歴) から行える。
+    @MainActor
+    private func confirmSettleTransfer(_ target: PendingTransferSettlement) {
+        let ctx = PersistenceController.shared.container.viewContext
+        let rec = SettlementRecord(context: ctx)
+        if let store = record.objectID.persistentStore {
+            ctx.assign(rec, to: store)
+        }
+        rec.id = UUID()
+        rec.sheet = record
+        rec.amount = NSDecimalNumber(decimal: target.amount)
+        rec.currencyCode = target.currencyCode
+        rec.fromProfileID = target.fromID
+        rec.toProfileID = target.toID
+        rec.date = .now
+        rec.createdAt = .now
+        #if !os(watchOS)
+        let share = ShareCoordinator.shared.existingShare(for: record)
+        rec.createdByProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+            ?? ""
+        #else
+        rec.createdByProfileID = UserProfileStore.shared.userRecordName ?? ""
+        #endif
+        PersistenceController.shared.save()
+        Haptics.success()
+        settlingTransfer = nil
+        recompute()
     }
 
     // MARK: - 支出ごとの精算 (相手ごと)
@@ -477,9 +520,12 @@ struct SettlementView: View {
                 )
                 Spacer()
                 Button {
-                    settlingTransfer = TransferSettleTarget(
-                        from: transfer.fromProfileID,
-                        to: transfer.toProfileID,
+                    settlingTransfer = PendingTransferSettlement(
+                        fromID: transfer.fromProfileID,
+                        toID: transfer.toProfileID,
+                        fromName: from.name,
+                        toName: to.name,
+                        amount: transfer.amount,
                         currencyCode: currencyCode
                     )
                 } label: {
