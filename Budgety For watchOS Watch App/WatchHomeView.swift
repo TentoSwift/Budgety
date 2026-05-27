@@ -42,10 +42,21 @@ struct WatchHomeView: View {
                         description: Text("iPhone でシートを作成すると同期されます。")
                     )
                 } else {
+                    let activeSheets = sheets.filter { !$0.archived }
+                    let archivedSheets = sheets.filter { $0.archived }
                     List {
-                        ForEach(sheets, id: \.objectID) { sheet in
+                        ForEach(activeSheets, id: \.objectID) { sheet in
                             NavigationLink(value: sheet.objectID) {
                                 sheetRow(sheet)
+                            }
+                        }
+                        if !archivedSheets.isEmpty {
+                            Section("アーカイブ済み") {
+                                ForEach(archivedSheets, id: \.objectID) { sheet in
+                                    NavigationLink(value: sheet.objectID) {
+                                        sheetRow(sheet)
+                                    }
+                                }
                             }
                         }
                     }
