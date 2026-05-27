@@ -1541,8 +1541,6 @@ struct AddExpenseView: View {
         if effectiveBeneficiaryCSV != origBeneficiaryCSV {
             expense.beneficiaryProfileIDs = effectiveBeneficiaryCSV
         }
-        // 受益者から外した人の精算済みフラグを掃除する。
-        expense.pruneSettledBeneficiaries()
     }
 
     /// RecurringRule に同じ差分を適用する (date / sheet は触らない)。
