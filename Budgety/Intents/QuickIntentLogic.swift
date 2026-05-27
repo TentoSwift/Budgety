@@ -421,6 +421,67 @@ enum QuickIntentLogic {
         return result
     }
 
+    // MARK: - Members (シートのメンバー一覧)
+
+    /// シートのメンバー一覧を返す。MCP add_expense の payer / beneficiaries
+    /// 指定時に有効な名前を事前に取得するために使う。
+    /// 入力: { "op": "members", "sheet": "京都旅行" }  (sheet 省略時は最古シート)
+    /// 出力: { "ok": true, "sheet": "...", "members": [
+    ///         { "name": "てん", "profileID": "...", "isSelf": true, "isVirtual": false }, ...
+    ///       ] }
+    @MainActor
+    static func members(parsed: [String: Any]) -> [String: Any] {
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        let sheetName = (parsed["sheet"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // シート決定 (add/get と同じく最古シートフォールバック)
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        sheetReq.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: true)]
+        let sheet: ExpenseSheet
+        if !sheetName.isEmpty {
+            sheetReq.predicate = NSPredicate(format: "name == %@", sheetName)
+            if let s = (try? ctx.fetch(sheetReq))?.first {
+                sheet = s
+            } else {
+                sheetReq.predicate = nil
+                sheetReq.fetchLimit = 1
+                guard let fallback = (try? ctx.fetch(sheetReq))?.first else {
+                    return ["ok": false, "error": "no sheet found"]
+                }
+                sheet = fallback
+            }
+        } else {
+            sheetReq.fetchLimit = 1
+            guard let s = (try? ctx.fetch(sheetReq))?.first else {
+                return ["ok": false, "error": "no sheet found"]
+            }
+            sheet = s
+        }
+
+        let profile = UserProfileStore.shared
+        let share = ShareCoordinator.shared.existingShare(for: sheet)
+        let selfIDs = profile.canonicalSelfIDs(forShare: share)
+
+        var members: [[String: Any]] = []
+        for pid in sheet.allMemberProfileIDs() {
+            let info = sheet.memberDisplayInfo(for: pid)
+            members.append([
+                "name": info.name,
+                "profileID": pid,
+                "isSelf": selfIDs.contains(pid),
+                "isVirtual": UserProfileStore.isVirtualRecordName(pid)
+            ])
+        }
+        return [
+            "ok": true,
+            "sheet": sheet.displayName,
+            "count": members.count,
+            "members": members
+        ]
+    }
+
     // MARK: - Helpers
 
     static func parseJSON(_ s: String) -> [String: Any] {
