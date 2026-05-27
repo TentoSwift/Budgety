@@ -806,11 +806,8 @@ struct MacModalSheet<Content: View>: View {
             content()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button {
+                        Button("閉じる") {
                             dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .accessibilityLabel("閉じる")
                         }
                     }
                 }
