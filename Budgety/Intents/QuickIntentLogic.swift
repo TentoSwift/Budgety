@@ -197,11 +197,15 @@ enum QuickIntentLogic {
         }
         // 受益者 (beneficiaries): 名前配列 / 単一文字列 / "all" を許容。
         // 未指定なら空のままで「割り勘オフ (= 支払者単独負担)」扱い。
+        // 指定されたが解決後 0 人 (例: 存在しない名前のみ / 空配列) はエラーで弾く。
         var beneficiaryIDs: [String] = []
+        var beneficiariesProvided: Bool = false
         let benInput = parsed["beneficiaries"]
         if let arr = benInput as? [String] {
+            beneficiariesProvided = true
             beneficiaryIDs = Self.resolveBeneficiaries(names: arr, in: sheet, selfPID: selfPID)
         } else if let str = benInput as? String {
+            beneficiariesProvided = true
             if str.lowercased() == "all" || str == "全員" {
                 beneficiaryIDs = sheet.allMemberProfileIDs()
             } else if !str.isEmpty {
@@ -209,6 +213,13 @@ enum QuickIntentLogic {
                 let parts = str.split(separator: ",").map { String($0) }
                 beneficiaryIDs = Self.resolveBeneficiaries(names: parts, in: sheet, selfPID: selfPID)
             }
+        }
+        if beneficiariesProvided && beneficiaryIDs.isEmpty {
+            ctx.delete(expense)
+            return [
+                "ok": false,
+                "error": "beneficiaries was specified but resolved to 0 members. Select at least one valid sheet member, or omit beneficiaries to record as the payer's sole burden."
+            ]
         }
         if !beneficiaryIDs.isEmpty {
             expense.beneficiaryProfileIDs = beneficiaryIDs.joined(separator: ",")
