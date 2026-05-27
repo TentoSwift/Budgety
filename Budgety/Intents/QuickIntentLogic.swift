@@ -178,13 +178,43 @@ enum QuickIntentLogic {
 
         let profile = UserProfileStore.shared
         let share = ShareCoordinator.shared.existingShare(for: sheet)
-        if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
-            expense.payerProfileID = pid
+
+        // 支払者 (payer): 名前指定があれば解決、無ければ自分。
+        // "self" / "自分" は明示的に自分を表す。
+        let selfPID = profile.canonicalSelfID(forShare: share) ?? ""
+        let payerInput = (parsed["payer"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var resolvedPayerID: String = selfPID
+        if !payerInput.isEmpty {
+            if payerInput.lowercased() == "self" || payerInput == "自分" {
+                resolvedPayerID = selfPID
+            } else if let mid = Self.resolveMemberID(name: payerInput, in: sheet, selfPID: selfPID) {
+                resolvedPayerID = mid
+            }
         }
-        // ショートカット / MCP からの追加は割り勘にしない (受益者未設定 = 支払者単独負担)。
-        // beneficiaryProfileIDs は明示的にセットしない (resolvedBeneficiaryIDs() で
-        // 空のままになり、SettlementCalculator では残高変動なしの扱い)。
-        if let memberID = profile.selfMemberID {
+        if !resolvedPayerID.isEmpty {
+            expense.payerProfileID = resolvedPayerID
+        }
+        // 受益者 (beneficiaries): 名前配列 / 単一文字列 / "all" を許容。
+        // 未指定なら空のままで「割り勘オフ (= 支払者単独負担)」扱い。
+        var beneficiaryIDs: [String] = []
+        let benInput = parsed["beneficiaries"]
+        if let arr = benInput as? [String] {
+            beneficiaryIDs = Self.resolveBeneficiaries(names: arr, in: sheet, selfPID: selfPID)
+        } else if let str = benInput as? String {
+            if str.lowercased() == "all" || str == "全員" {
+                beneficiaryIDs = sheet.allMemberProfileIDs()
+            } else if !str.isEmpty {
+                // CSV 形式も受ける ("Emma, Liam, Sofia")
+                let parts = str.split(separator: ",").map { String($0) }
+                beneficiaryIDs = Self.resolveBeneficiaries(names: parts, in: sheet, selfPID: selfPID)
+            }
+        }
+        if !beneficiaryIDs.isEmpty {
+            expense.beneficiaryProfileIDs = beneficiaryIDs.joined(separator: ",")
+        }
+        // payerMemberID は自分が支払者の時のみセット (denormalized キャッシュ)。
+        if resolvedPayerID == selfPID, let memberID = profile.selfMemberID {
             expense.payerMemberID = memberID
         }
 
@@ -203,10 +233,56 @@ enum QuickIntentLogic {
             "kind": kind == .income ? "income" : "expense",
             "category": firstCategory?.name ?? ""
         ]
+        // 割り勘設定したものは確認のためレスポンスに名前を入れる
+        if !payerInput.isEmpty, resolvedPayerID != selfPID {
+            summary["payer"] = sheet.memberDisplayInfo(for: resolvedPayerID).name
+        }
+        if !beneficiaryIDs.isEmpty {
+            summary["beneficiaries"] = beneficiaryIDs.map { sheet.memberDisplayInfo(for: $0).name }
+        }
         if nameCollisionCount > 1 {
             summary["warning"] = "name_collision: \(nameCollisionCount) sheets named \"\(sheet.displayName)\". Using oldest by createdAt."
         }
         return summary
+    }
+
+    /// 名前 (displayName) から sheet 内のメンバー profileID を解決する。
+    /// "self" / "自分" は selfPID にマップ。完全一致 (大小無視) で探す。
+    @MainActor
+    private static func resolveMemberID(name: String, in sheet: ExpenseSheet, selfPID: String) -> String? {
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if target.isEmpty { return nil }
+        if target.lowercased() == "self" || target == "自分" {
+            return selfPID.isEmpty ? nil : selfPID
+        }
+        let lowered = target.lowercased()
+        for id in sheet.allMemberProfileIDs() {
+            let info = sheet.memberDisplayInfo(for: id)
+            if info.name.lowercased() == lowered { return id }
+        }
+        return nil
+    }
+
+    /// 名前の配列を beneficiaries profileID 配列に解決する。重複は dedup。
+    /// 解決できなかった名前は無視 (= 部分的な指定でも保存は通す)。
+    @MainActor
+    private static func resolveBeneficiaries(names: [String], in sheet: ExpenseSheet, selfPID: String) -> [String] {
+        var ids: [String] = []
+        var seen = Set<String>()
+        for rawName in names {
+            let n = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if n.lowercased() == "all" || n == "全員" {
+                for id in sheet.allMemberProfileIDs() where seen.insert(id).inserted {
+                    ids.append(id)
+                }
+                continue
+            }
+            if let id = resolveMemberID(name: n, in: sheet, selfPID: selfPID),
+               seen.insert(id).inserted {
+                ids.append(id)
+            }
+        }
+        return ids
     }
 
     // MARK: - Get (支出 / 収入の取得)
@@ -277,7 +353,16 @@ enum QuickIntentLogic {
         }
 
         let payloadOut: [[String: Any]] = expenses.map { e in
-            [
+            // 支払者 / 受益者の名前を解決 (空 = 未指定)。
+            let payerName: String = {
+                guard let s = e.sheet, let pid = e.payerProfileID, !pid.isEmpty else { return "" }
+                return s.memberDisplayInfo(for: pid).name
+            }()
+            let beneficiaryNames: [String] = {
+                guard let s = e.sheet else { return [] }
+                return e.beneficiaryIDList.map { s.memberDisplayInfo(for: $0).name }
+            }()
+            return [
                 "date": ISO8601DateFormatter().string(from: e.date ?? Date()),
                 "title": e.displayTitle,
                 "amount": NSDecimalNumber(decimal: e.amountDecimal).doubleValue,
@@ -287,6 +372,11 @@ enum QuickIntentLogic {
                 "categoryColor": e.category?.colorHex ?? "",
                 "sheet": e.sheet?.name ?? "",
                 "paidBy": e.displayPaidBy,
+                // 支払者名 (sheet 内 memberDisplayInfo 経由)。
+                // payerProfileID が空 (= 未設定) の時は "" 。
+                "payer": payerName,
+                // 割り勘の受益者名配列。空 (= 未設定 / 割り勘オフ) なら []。
+                "beneficiaries": beneficiaryNames,
                 "note": e.note ?? ""
             ]
         }
