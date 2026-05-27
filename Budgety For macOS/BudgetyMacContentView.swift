@@ -946,6 +946,7 @@ struct BudgetyMacSettingsView: View {
     @State private var acceptMessage: String?
     @State private var showingPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
+    @State private var showingClaudeIntegration: Bool = false
 
     var body: some View {
         Form {
@@ -1046,21 +1047,27 @@ struct BudgetyMacSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section {
-                NavigationLink {
-                    ClaudeIntegrationView()
+                Button {
+                    showingClaudeIntegration = true
                 } label: {
-                    Label {
+                    HStack(spacing: 12) {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.purple.gradient)
+                            .font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Claude と連携")
+                                .foregroundStyle(.primary)
                             Text("自然言語で支出を記録")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } icon: {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(.purple.gradient)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
                 }
+                .buttonStyle(.plain)
             }
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
@@ -1072,6 +1079,9 @@ struct BudgetyMacSettingsView: View {
         }
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
+        }
+        .sheet(isPresented: $showingClaudeIntegration) {
+            MacModalSheet { ClaudeIntegrationView() }
         }
     }
 
