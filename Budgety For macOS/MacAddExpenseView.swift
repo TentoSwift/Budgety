@@ -203,7 +203,8 @@ struct MacAddExpenseView: View {
                 }
                 // 共有シート、またはバーチャルメンバー追加可能な Premium なら表示
                 // (ソロシートでも Premium はバーチャルメンバーを足して割り勘できる)。
-                if hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
+                // 収入には割り勘の概念がないので支出時のみ表示。
+                if kind == .expense, hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
                     Section {
                         Toggle("割り勘", isOn: Binding(
                             get: { splitEnabled },
