@@ -604,9 +604,11 @@ struct SheetDetailView: View {
                 .buttonStyle(.plain)
             }
             .listSectionSeparator(.hidden)
+            .listRowSeparator(.hidden)
         } else {
             ContentUnavailableView.search(text: searchText)
                 .listSectionSeparator(.hidden)
+                .listRowSeparator(.hidden)
         }
     }
 
