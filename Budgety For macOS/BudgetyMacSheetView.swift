@@ -845,6 +845,11 @@ struct ExportFileDocument: FileDocument {
 /// Mac で sheet を出した時に、iOS の swipe-down に相当する閉じるボタンを
 /// 強制的に出すための wrapper。NavigationStack で包んで cancellation
 /// placement に xmark を置く。
+///
+/// 高さの上限を明示的に指定して、コンテンツが長い (= 例: 精算 View の
+/// メンバー残高タイル + 送金プラン + 送金履歴) 時にシートが親ウィンドウを
+/// 突き抜けて画面外まで広がるのを防ぐ。NSWindow の sheet は親に自動で
+/// クリップされないので、bound を切らないと無限に伸びる。
 struct MacModalSheet<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     @ViewBuilder let content: () -> Content
@@ -860,6 +865,9 @@ struct MacModalSheet<Content: View>: View {
                     }
                 }
         }
-        .frame(minWidth: 600, minHeight: 600)
+        .frame(
+            minWidth: 600, idealWidth: 720, maxWidth: 900,
+            minHeight: 500, idealHeight: 720, maxHeight: 820
+        )
     }
 }
