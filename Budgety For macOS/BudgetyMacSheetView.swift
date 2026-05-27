@@ -258,10 +258,8 @@ struct BudgetyMacSheetView: View {
         .navigationTitle(isScrolledPastHero ? sheet.displayName : "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
+                Button("支出を追加") {
                     showingAdd = true
-                } label: {
-                    Label("支出を追加", systemImage: "plus")
                 }
                 .help("支出を追加")
             }
@@ -315,9 +313,8 @@ struct BudgetyMacSheetView: View {
                         }
                     }
                 } label: {
-                    Label("その他", systemImage: "ellipsis")
+                    Text("その他")
                 }
-                .menuIndicator(.hidden)
                 .help("その他")
             }
         }
@@ -802,11 +799,8 @@ struct MacModalSheet<Content: View>: View {
             content()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button {
+                        Button("閉じる") {
                             dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .accessibilityLabel("閉じる")
                         }
                     }
                 }

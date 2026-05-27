@@ -149,10 +149,8 @@ struct BudgetyMacContentView: View {
 
             }
             ToolbarItem {
-                Button {
+                Button("シートを追加") {
                     tryShowAddSheet()
-                } label: {
-                    Image(systemName: "plus")
                 }
                 .help("シートを追加")
             }
