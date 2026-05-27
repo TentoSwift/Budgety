@@ -106,26 +106,8 @@ struct SettlementView: View {
         .sheet(isPresented: $showingNewLog) {
             LogSettlementView(sheet: record, record: nil)
         }
-        .confirmationDialog(
-            "この送金記録を削除しますか？",
-            isPresented: Binding(
-                get: { deletingRecord != nil },
-                set: { if !$0 { deletingRecord = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("削除", role: .destructive) {
-                if let r = deletingRecord {
-                    viewContext.delete(r)
-                    PersistenceController.shared.save()
-                    deletingRecord = nil
-                    recompute()
-                }
-            }
-            Button("キャンセル", role: .cancel) { deletingRecord = nil }
-        } message: {
-            Text("この記録を取り消すと、精算残高が元に戻ります。")
-        }
+        // 削除確認ダイアログは各送金履歴行に個別に attach する
+        // (settlementHistorySection 内の ForEach 参照)。
     }
 
     // MARK: - Card
@@ -424,7 +406,7 @@ struct SettlementView: View {
             .minimumScaleFactor(0.7)
             Text(CurrencyCatalog.format(transfer.amount, code: currencyCode))
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(record.tint)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -455,31 +437,53 @@ struct SettlementView: View {
                 if !records.isEmpty {
                     Divider()
                     ForEach(Array(records.enumerated()), id: \.element.objectID) { idx, r in
-                        HStack(spacing: 0) {
-                            settlementRecordRow(r)
-                                .contentShape(Rectangle())
-                                .onTapGesture { editingRecord = r }
-                            Button(role: .destructive) {
-                                deletingRecord = r
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                                    .padding(.leading, 6)
+                        settlementRecordRow(r)
+                            .contentShape(Rectangle())
+                            .onTapGesture { editingRecord = r }
+                            // swipeActions は Form/List 配下でしか効かないので、
+                            // VStack 配下では使えない。代わりに contextMenu で
+                            // 編集/削除を提供し、削除は確認ダイアログ付き。
+                            // (UX 要望: 削除タップ → 確認ダイアログ)
+                            .contextMenu {
+                                Button {
+                                    editingRecord = r
+                                } label: {
+                                    Label("編集", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) {
+                                    deletingRecord = r
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
-                            .buttonStyle(.plain)
-                        }
-                        .contextMenu {
-                            Button {
-                                editingRecord = r
-                            } label: {
-                                Label("編集", systemImage: "pencil")
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    deletingRecord = r
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
-                            Button(role: .destructive) {
-                                deletingRecord = r
-                            } label: {
-                                Label("削除", systemImage: "trash")
+                            // 確認ダイアログを各行に付ける。 isPresented は
+                            // deletingRecord がこの行 (= r) かで判定するので、
+                            // ダイアログは「この記録」固有のものとして開く。
+                            .confirmationDialog(
+                                "この送金記録を削除しますか？",
+                                isPresented: Binding(
+                                    get: { deletingRecord?.objectID == r.objectID },
+                                    set: { if !$0 { deletingRecord = nil } }
+                                ),
+                                titleVisibility: .visible
+                            ) {
+                                Button("削除", role: .destructive) {
+                                    viewContext.delete(r)
+                                    PersistenceController.shared.save()
+                                    deletingRecord = nil
+                                    recompute()
+                                }
+                                Button("キャンセル", role: .cancel) { deletingRecord = nil }
+                            } message: {
+                                Text("この記録を取り消すと、精算残高が元に戻ります。")
                             }
-                        }
                         if idx < records.count - 1 {
                             Divider()
                         }
