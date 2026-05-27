@@ -677,7 +677,14 @@ struct SheetDetailView: View {
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
     /// CKShare 未ロード時は PP の存在で判定。
+    /// 共有していなくてもバーチャルメンバーが居れば「他メンバーあり」扱いにする
+    /// (= メンバーフィルタ・支払者表示を出すため)。
     private var hasAcceptedOtherMembers: Bool {
+        let profilesAll = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+        let hasVirtual = profilesAll.contains {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }
+        if hasVirtual { return true }
         if let share = ShareCoordinator.shared.existingShare(for: record) {
             // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
@@ -688,9 +695,8 @@ struct SheetDetailView: View {
                 return !selfIDs.contains(rn)
             }
         }
-        guard let profiles = record.participantProfiles as? Set<ParticipantProfile> else { return false }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
-        return profiles.contains { p in
+        return profilesAll.contains { p in
             let rn = p.recordName ?? ""
             return !rn.isEmpty && rn != myRN
         }
@@ -1490,8 +1496,15 @@ private struct ExpenseRowView: View {
     /// 個人専用シート (= 参加済の他メンバーが居ない) かどうか。
     /// CKShare ロード済なら `acceptanceStatus == .accepted` の他メンバーが居るかで判定。
     /// 未ロード時のみ PP フォールバック。
+    /// 共有していなくても (アーカイブされていない) バーチャルメンバーが居れば
+    /// solo ではない扱いにして、支払者表示を出す。
     private var isSoloSheet: Bool {
         guard let sheet = expense.sheet else { return true }
+        let profilesAll = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+        let hasVirtual = profilesAll.contains {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }
+        if hasVirtual { return false }
         if let share = ShareCoordinator.shared.existingShare(for: sheet) {
             // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
@@ -1503,9 +1516,8 @@ private struct ExpenseRowView: View {
             }
             return !hasAcceptedOthers
         }
-        guard let profiles = sheet.participantProfiles as? Set<ParticipantProfile> else { return true }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
-        return !profiles.contains { p in
+        return !profilesAll.contains { p in
             let rn = p.recordName ?? ""
             return !rn.isEmpty && rn != myRN
         }

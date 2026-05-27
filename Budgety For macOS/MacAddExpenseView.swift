@@ -598,12 +598,16 @@ struct MacAddExpenseView: View {
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
-            // 受益者が「支払者ただ 1 人」なら割り勘オフ。空(=全員)や複数ならオン。
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ。複数ならオン。
+            // ※ 空はそのまま「割り勘オフ (支払者単独負担)」として扱い、全メンバーへの
+            //   展開は行わない (= 後から追加されたメンバーを巻き込まない)。
             let loadedPayerID = e.payerProfileID ?? ""
-            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
-            // 旧「全員均等」(空) の支出は現在のメンバーを明示選択に展開して保存可能にする。
-            if splitEnabled, selectedBeneficiaries.isEmpty {
-                selectedBeneficiaries = Set(allMemberIDs)
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
             }
 
             // CRDT 差分書き戻し用にスナップショット保存
@@ -615,7 +619,13 @@ struct MacAddExpenseView: View {
             origPayerProfileID = e.payerProfileID ?? ""
             origDate = date
             origNote = note
-            origBeneficiaryCSV = e.beneficiaryProfileIDs ?? ""
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = e.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(e.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
         } else {
             selectedCategory = nil
             payerProfileID = selfProfileID
@@ -628,12 +638,11 @@ struct MacAddExpenseView: View {
     private var hasOtherMembers: Bool { allMemberIDs.count > 1 }
 
     /// 実際に保存する受益者 ID 配列。
-    /// - 共有していないシートでは従来どおり選択値 (既定は空 = 全員均等)。
-    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
-    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    /// - 割り勘オン: 選択中の相手。
+    /// - 割り勘オフ: 空 (= 受益者未設定。SettlementCalculator では支払者単独負担として
+    ///   残高変動なし、カテゴリ集計のみ計上)。
     private var effectiveBeneficiaryIDs: [String] {
-        guard hasOtherMembers else { return Array(selectedBeneficiaries) }
-        return splitEnabled ? Array(selectedBeneficiaries) : (payerProfileID.isEmpty ? [] : [payerProfileID])
+        splitEnabled ? Array(selectedBeneficiaries) : []
     }
 
     private func save() {

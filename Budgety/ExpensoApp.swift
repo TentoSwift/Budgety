@@ -18,7 +18,18 @@ struct ExpensoApp: App {
     @State private var shareToast: String?
     @State private var premiumExpiredAlertShown: Bool = false
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
+    /// DEBUG ビルドでは起動ごとにリセットして毎回表示する (オンボーディングのデバッグ用)。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
+    /// オンボーディング / プロフィール編集の表示フロー。
+    /// 二つの `.sheet` を重ねると SwiftUI の挙動が不安定 (即閉じ) になり、
+    /// body の型推論も限界に達するので `.sheet(item:)` で単一の sheet にまとめる。
+    @State private var onboardingFlow: OnboardingFlow?
+
+    private enum OnboardingFlow: String, Identifiable {
+        case welcome
+        case profile
+        var id: String { rawValue }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -26,12 +37,20 @@ struct ExpensoApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .appUpdateGate()
-                .sheet(isPresented: Binding(
-                    get: { !hasShownOnboarding },
-                    set: { if !$0 { hasShownOnboarding = true } }
-                )) {
-                    OnboardingView { hasShownOnboarding = true }
-                        .interactiveDismissDisabled()
+                #if os(iOS)
+                .fullScreenCover(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
+                }
+                #else
+                .sheet(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
+                }
+                #endif
+                .onChange(of: onboardingFlow) { old, new in
+                    AppUpdateChecker.shared.suppressOptionalAlert = (new != nil)
+                    #if DEBUG
+                    NSLog("🟡 onboardingFlow: \(old.map { $0.rawValue } ?? "nil") → \(new.map { $0.rawValue } ?? "nil")")
+                    #endif
                 }
                 .overlay(alignment: .top) {
                     if let shareToast {
@@ -71,6 +90,22 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
+                    NSLog("🟡 .task started, onboardingFlow=\(String(describing: onboardingFlow))")
+                    // オンボーディング表示判定。DEBUG では毎回出す。
+                    #if DEBUG
+                    if onboardingFlow == nil {
+                        hasShownOnboarding = false
+                        onboardingFlow = .welcome
+                        NSLog("🟡 set onboardingFlow=.welcome (DEBUG)")
+                    }
+                    #else
+                    if onboardingFlow == nil, !hasShownOnboarding {
+                        onboardingFlow = .welcome
+                    }
+                    #endif
+                    // オンボーディング表示中は任意更新アラートを抑制
+                    // (alert が fullScreenCover を蹴り出して閉じてしまうのを防ぐ)
+                    AppUpdateChecker.shared.suppressOptionalAlert = (onboardingFlow != nil)
                     #if DEBUG
                     // CloudKit Production デプロイ準備: Development スキーマを一括生成する。
                     // `EXPENSO_INIT_CK_SCHEMA=1` を付けて iCloud サインイン済みで一度だけ起動。
@@ -86,7 +121,9 @@ struct ExpensoApp: App {
                     #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
-                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)
+                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)。
+                    // オンボーディング/プロフィール編集を表示中はダイアログが sheet を蹴り出すので延期。
+                    await waitUntilOnboardingFlowEnds()
                     await UserProfileStore.shared.refreshAppleIDName()
                     let ctx = persistenceController.container.viewContext
                     if BuildInfo.profileFeatureEnabled {
@@ -116,7 +153,9 @@ struct ExpensoApp: App {
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
                     SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
-                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)
+                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)。
+                    // 同上、通知許可ダイアログも onboarding 終了後に。
+                    await waitUntilOnboardingFlowEnds()
                     await SplitNotificationManager.shared.requestAuthorizationIfNeeded()
                     SplitNotificationManager.shared.processChanges(in: ctx)
                 }
@@ -188,6 +227,43 @@ struct ExpensoApp: App {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation { shareToast = nil }
         }
+    }
+
+    /// オンボーディング/プロフィール編集 sheet が閉じるまで待機。
+    /// Apple ID 名・通知許可など、システムダイアログを伴う処理は
+    /// オンボーディング表示中に走ると sheet を蹴り出してしまうため、これで保留する。
+    @MainActor
+    private func waitUntilOnboardingFlowEnds() async {
+        while onboardingFlow != nil {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+    }
+
+    /// オンボーディング flow に応じた sheet コンテンツ。
+    /// body の型推論コストを下げるため関数に分離している。
+    /// 注: fullScreenCover の content は parent の environment を継承しないので、
+    /// `managedObjectContext` / `locale` を明示的に渡す必要がある (= ProfileEditView が
+    /// 内部で `@Environment(\.managedObjectContext)` を使うため、欠落すると CoreData クラッシュ)。
+    @ViewBuilder
+    private func onboardingSheetContent(for step: OnboardingFlow) -> some View {
+        Group {
+            switch step {
+            case .welcome:
+                OnboardingView {
+                    hasShownOnboarding = true
+                    // sheet の dismiss アニメーション完了を待ってからプロフィール編集を表示。
+                    onboardingFlow = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        onboardingFlow = .profile
+                    }
+                }
+                .interactiveDismissDisabled()
+            case .profile:
+                ProfileEditView()
+            }
+        }
+        .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        .environment(\.locale, Locale(identifier: "ja_JP"))
     }
 
     /// 全シートの ParticipantProfile.recordName (= 共有相手の URN を含む) を集めて

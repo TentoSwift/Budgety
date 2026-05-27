@@ -133,41 +133,43 @@ struct ExpenseDetailView: View {
     }
 
     /// 受益者をアバター + 名前のチップで表示する (全員均等ならその旨も併記)。
+    /// 受益者が空 (= 割り勘オフ / 支払者単独負担) なら表示しない。
     @ViewBuilder
     private var beneficiaryRow: some View {
         if let sheet = expense.sheet {
             let ids = expense.resolvedBeneficiaryIDs()
-            let all = sheet.allMemberProfileIDs()
-            let isEveryone = ids.isEmpty || Set(ids) == Set(all)
-            let displayIDs = isEveryone ? all : ids
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(expense.kind == .income ? "受け取り対象" : "受益者")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if isEveryone {
-                        Text("全員均等").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(displayIDs, id: \.self) { id in
-                            let info = sheet.memberDisplayInfo(for: id)
-                            VStack(spacing: 4) {
-                                AvatarView(photoData: info.photoData,
-                                           displayName: info.name,
-                                           colorHex: info.colorHex, size: 36)
-                                Text(info.name)
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 56)
-                            }
+            if !ids.isEmpty {
+                let all = sheet.allMemberProfileIDs()
+                let isEveryone = Set(ids) == Set(all)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(expense.kind == .income ? "受け取り対象" : "割り勘")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if isEveryone {
+                            Text("全員均等").font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 2)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(ids, id: \.self) { id in
+                                let info = sheet.memberDisplayInfo(for: id)
+                                VStack(spacing: 4) {
+                                    AvatarView(photoData: info.photoData,
+                                               displayName: info.name,
+                                               colorHex: info.colorHex, size: 36)
+                                    Text(info.name)
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 56)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
+                .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
         }
     }
 
@@ -226,37 +228,50 @@ struct ExpenseDetailView: View {
 
     @ViewBuilder
     private func settleRow(id: String, sheet: ExpenseSheet, share: Decimal, code: String) -> some View {
-        let info = sheet.memberDisplayInfo(for: id)
+        let from = sheet.memberDisplayInfo(for: id)
+        let payerID = expense.payerProfileID ?? ""
+        let to = sheet.memberDisplayInfo(for: payerID)
         let settled = expense.isBeneficiarySettled(id)
-        // AX サイズでは横に収まらないので縦積みに切り替える。
-        let isAX = dynamicTypeSize.isAccessibilitySize
-        let layout: AnyLayout = isAX
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 12))
-        return Button {
+        Button {
             expense.setBeneficiarySettled(!settled, for: id)
             PersistenceController.shared.save()
             Haptics.success()
         } label: {
-            layout {
-                HStack(spacing: 12) {
-                    AvatarView(photoData: info.photoData, displayName: info.name,
-                               colorHex: info.colorHex, size: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(info.name).foregroundStyle(.primary)
-                        Text(CurrencyCatalog.format(share, code: code))
-                            .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                // アバター行: 受益者 → 支払者 + 精算済みトグル
+                HStack(spacing: 10) {
+                    AvatarView(photoData: from.photoData, displayName: from.name,
+                               colorHex: from.colorHex, size: 32)
+                    Image(systemName: "arrow.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    AvatarView(photoData: to.photoData, displayName: to.name,
+                               colorHex: to.colorHex, size: 32)
+                    Spacer()
+                    if settled {
+                        Label("精算済み", systemImage: "checkmark.seal.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(sheet.tint)
+                    } else {
+                        Image(systemName: "circle").foregroundStyle(.secondary)
                     }
                 }
-                if !isAX { Spacer(minLength: 8) }
-                if settled {
-                    Label("精算済み", systemImage: "checkmark.seal.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(sheet.tint)
-                } else {
-                    Image(systemName: "circle").foregroundStyle(.secondary)
+                // 名前行: <from> → <to>
+                HStack(spacing: 6) {
+                    Text(from.name).font(.subheadline.weight(.medium))
+                    Text("→").foregroundStyle(.secondary)
+                    Text(to.name).font(.subheadline.weight(.medium))
                 }
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                // 金額
+                Text(CurrencyCatalog.format(share, code: code))
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(sheet.tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
+            .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)

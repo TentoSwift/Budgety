@@ -223,7 +223,8 @@ struct BudgetyMacSheetView: View {
             VStack(spacing: 20) {
                 summaryHero
                 // 参加者が自分だけ (solo) のときはメンバー表示を出さない。
-                if currentMemberIDs.count > 1 {
+                // バーチャルメンバーがいれば iCloud 未ログイン時でも表示する。
+                if hasAcceptedOtherParticipants {
                     membersStrip
                 }
                 if !usedCategories.isEmpty {
@@ -725,8 +726,15 @@ struct BudgetyMacSheetView: View {
     }
 
     /// このシートに自分以外のメンバー (受諾済み参加者 or バーチャルメンバー) が居るか。
+    /// iCloud 未ログイン時は self がカウントされないため、バーチャルメンバーの存在で
+    /// 直接判定する分岐を追加 (= 共有していなくてもバーチャルメンバーが居れば支払者表示)。
     private var hasAcceptedOtherParticipants: Bool {
-        sheet.acceptedMemberProfileIDs().count > 1
+        let profilesAll = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+        let hasVirtual = profilesAll.contains {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }
+        if hasVirtual { return true }
+        return sheet.acceptedMemberProfileIDs().count > 1
     }
 
     private func dayHeader(_ d: Date) -> String {

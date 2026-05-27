@@ -287,13 +287,17 @@ enum SettlementCalculator {
             // 2) 受益者の正規化 + 現参加者フィルタ + dedup
             // dedup は必須: 旧 URN と canonical が同じ人物にマップされる場合に
             // 同じ人を 2 回カウントしないため。
+            // 受益者が空 (= 割り勘オフ / 支払者単独負担) はスキップせず、
+            // カテゴリ集計だけ行う (= 残高は変動させない)。
             do {
                 var seen = Set<String>()
                 normalizedBeneficiaries = rawBeneficiaries
                     .map(normalize)
                     .filter { memberSet.contains($0) && seen.insert($0).inserted }
             }
-            guard !normalizedBeneficiaries.isEmpty else {
+            if !rawBeneficiaries.isEmpty && normalizedBeneficiaries.isEmpty {
+                // 明示的に受益者がセットされていたが、現在の参加者に居ない
+                // (= 退室済み or 別 ID にマイグレート) → 集計対象外
                 skipReason = "受益者が現参加者に居ない"
                 debugRows.append(.init(
                     id: e.objectID.uriRepresentation().absoluteString,
@@ -334,17 +338,21 @@ enum SettlementCalculator {
             }
 
             // 4) 集計
-            let count = Decimal(normalizedBeneficiaries.count)
-            let perShare = roundToCurrency(converted / count, code: target)
-            perShareOpt = perShare
-            // 相手ごとの精算: 精算済みの受益者は負担を消し、payer もそのぶんは
-            // 受け取らない (= 返済済みとして残高から除外)。perShare 自体は元の頭割り。
-            let settledSet = Set(e.settledBeneficiaryIDList.map { normalize($0) })
-            let unsettledBeneficiaries = normalizedBeneficiaries.filter { !settledSet.contains($0) }
-            let allocatedTotal = perShare * Decimal(unsettledBeneficiaries.count)
-            balances[payer, default: 0] += allocatedTotal
-            for b in unsettledBeneficiaries {
-                balances[b, default: 0] -= perShare
+            // 受益者が空 (= 割り勘オフ / 支払者単独負担) は残高変動なし。
+            // カテゴリ集計のみ続行する。
+            if !normalizedBeneficiaries.isEmpty {
+                let count = Decimal(normalizedBeneficiaries.count)
+                let perShare = roundToCurrency(converted / count, code: target)
+                perShareOpt = perShare
+                // 相手ごとの精算: 精算済みの受益者は負担を消し、payer もそのぶんは
+                // 受け取らない (= 返済済みとして残高から除外)。perShare 自体は元の頭割り。
+                let settledSet = Set(e.settledBeneficiaryIDList.map { normalize($0) })
+                let unsettledBeneficiaries = normalizedBeneficiaries.filter { !settledSet.contains($0) }
+                let allocatedTotal = perShare * Decimal(unsettledBeneficiaries.count)
+                balances[payer, default: 0] += allocatedTotal
+                for b in unsettledBeneficiaries {
+                    balances[b, default: 0] -= perShare
+                }
             }
             included = true
             includedCount += 1

@@ -855,12 +855,12 @@ struct AddExpenseView: View {
     }
 
     /// 実際に保存する受益者 CSV。
-    /// - 共有していない (ソロ) シートでは従来どおり全員均等 (= 選択中、既定は空)。
-    /// - 割り勘オン: 選択中の相手 (空 = 全員均等)。
-    /// - 割り勘オフ: 支払者のみ (= 支払者の負担、精算で他者に割らない)。
+    /// - 割り勘オフ (UI 非表示含む): 空 (= 受益者未設定。SettlementCalculator では
+    ///   「支払者単独負担」として残高変動なし、カテゴリ集計のみ計上)。
+    /// - 割り勘オン: 選択中の相手。
     private var effectiveBeneficiaryCSV: String {
-        guard shouldShowSharingFields else { return selectedBeneficiaryCSV }
-        return splitEnabled ? selectedBeneficiaryCSV : (selectedPayerProfileID ?? "")
+        guard shouldShowSharingFields, splitEnabled else { return "" }
+        return selectedBeneficiaryCSV
     }
 
     /// `selectedPayer` (Member) に対応する ParticipantProfile を同シートから引く。
@@ -911,8 +911,12 @@ struct AddExpenseView: View {
     }
 
     /// 支払者 / 受益者セクションを表示するか。
+    /// 共有中・既存共有データあり・Premium (= バーチャルメンバーを足して割り勘可能) なら表示。
+    /// macOS 版 (MacAddExpenseView) と同じ判定にして solo シートでも割り勘トグルを出す。
     private var shouldShowSharingFields: Bool {
-        hasOtherParticipants || existingSharingInfo
+        if hasOtherParticipants || existingSharingInfo { return true }
+        if let sheet = contextSheet, PurchaseManager.hasPremiumAccess(to: sheet) { return true }
+        return false
     }
 
     /// 編集中の支出を削除する。確認ダイアログ経由でのみ呼ばれる。
@@ -1644,14 +1648,18 @@ struct AddExpenseView: View {
             note = expense.note ?? ""
             photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
-            // 受益者が「支払者ただ 1 人」なら割り勘オフ (支払者のみの負担)。
-            // 空 (=全員) や複数なら割り勘オン。
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ (支払者単独負担)。
+            // 複数なら割り勘オン。
+            // ※ 空はそのまま「割り勘オフ」と解釈し、全メンバー展開は行わない
+            //   (= 後から追加されたメンバーを巻き込まない)。
             let loadedPayerID = expense.payerProfileID ?? ""
-            splitEnabled = !(!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
-            // 旧「全員均等」(空) の支出を編集する場合は、現在のメンバーを明示選択に展開して
-            // 保存できるようにする (空のままだと保存不可のため)。
-            if splitEnabled, selectedBeneficiaries.isEmpty {
-                selectedBeneficiaries = Set(expense.sheet?.acceptedMemberProfileIDs() ?? [])
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化しておく
+            // (= 割り勘オンに切り替えた時の自然な開始状態)。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
             }
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
@@ -1677,7 +1685,14 @@ struct AddExpenseView: View {
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
             origPhotoByteCount = expense.photoData?.count ?? 0
-            origBeneficiaryCSV = selectedBeneficiaryCSV
+            // 保存値そのものを基準にする (UI 正規化に引きずられない)。
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = expense.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(expense.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
             origIsRecurring = isRecurring
             origFrequencyRaw = frequency.rawValue
             origRecurringInterval = Int32(recurringInterval)
