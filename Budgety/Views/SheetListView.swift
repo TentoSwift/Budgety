@@ -99,6 +99,12 @@ struct SheetListView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("設定")
+        // 長押し時の Large Content Viewer に「設定」を表示する。
+        // (アバターだけだと何のボタンか分かりづらいので、AX 拡大表示で
+        //  ラベルが大きく出るようにする)
+        .accessibilityShowsLargeContentViewer {
+            Label("設定", systemImage: "gearshape")
+        }
     }
 
     private var trimmedQuery: String {
