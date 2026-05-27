@@ -138,6 +138,12 @@ final class ShareCoordinator {
     /// 参加者として共有シートから退出する。CloudKit Sharing zone をローカルでだけ purge し、
     /// オーナーや他の参加者の側のデータには影響を与えない。
     /// (ctx.delete(record) を使うと共有レコードの削除としてオーナーにも伝搬してしまう)
+    ///
+    /// purge の前に自分が書いた ParticipantProfile を共有ゾーンから削除する。
+    /// PP は自分の URN 名義レコードなので削除が許可されており、CloudKit 経由で
+    /// 他参加者 (オーナーや watchOS) からも消える。
+    /// これをしないと watchOS など CKShare API が使えないクライアントには
+    /// 「退出済みのはずの自分」が picker や精算 View に残り続けてしまう。
     @MainActor
     func leaveSharedSheet(_ sheet: ExpenseSheet) async throws {
         let pc = PersistenceController.shared
@@ -154,6 +160,14 @@ final class ShareCoordinator {
 
         guard let zoneID else { throw ShareError.storeNotReady }
 
+        // STEP 1: 自分の PP を先に削除して共有ゾーンへ delete を伝搬。
+        // CloudKit のアップロードを待つため少し sleep を挟んでから purge する
+        // (= purge は local zone を即時に剥がすので、アップロード前に走ると
+        //  delete 操作が失われる可能性がある)。
+        deleteOwnParticipantProfile(in: sheet)
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+        // STEP 2: 自分のローカルから共有ゾーンを剥がす。
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             pc.container.purgeObjectsAndRecordsInZone(with: zoneID, in: sharedStore) { _, error in
                 if let error { cont.resume(throwing: error) }
@@ -165,6 +179,23 @@ final class ShareCoordinator {
         // の @FetchRequest が再起動まで該当シートを表示し続けることがある。
         // 明示的にメモリキャッシュをリフレッシュして @FetchRequest を即時更新させる。
         pc.container.viewContext.refreshAllObjects()
+    }
+
+    /// 自分の URN にマッチする ParticipantProfile を指定シートから削除する。
+    /// 自己所有レコードなので CloudKit 上でも削除が伝搬する。
+    @MainActor
+    private func deleteOwnParticipantProfile(in sheet: ExpenseSheet) {
+        let myURN = UserProfileStore.shared.userRecordName ?? ""
+        guard !myURN.isEmpty else { return }
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+        var didChange = false
+        for pp in pps where pp.recordName == myURN {
+            ctx.delete(pp)
+            didChange = true
+        }
+        if didChange { pc.save() }
     }
 
     /// 自分が所有する CKShare のうち、参加者がいる/公開リンクが有効なものが残っているか。
