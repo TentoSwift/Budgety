@@ -37,9 +37,20 @@ struct ExpensoApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .appUpdateGate()
+                #if os(iOS)
+                .fullScreenCover(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
+                }
+                #else
                 .sheet(item: $onboardingFlow) { step in
                     onboardingSheetContent(for: step)
                 }
+                #endif
+                #if DEBUG
+                .onChange(of: onboardingFlow) { old, new in
+                    print("🟡 onboardingFlow: \(old.map { $0.rawValue } ?? "nil") → \(new.map { $0.rawValue } ?? "nil")")
+                }
+                #endif
                 .overlay(alignment: .top) {
                     if let shareToast {
                         Text(shareToast)
