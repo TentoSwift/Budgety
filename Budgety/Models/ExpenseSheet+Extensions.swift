@@ -235,6 +235,19 @@ extension ExpenseSheet {
         return rn
     }
 
+    /// シートが「アーカイブ済み」か。Core Data 上は Bool (scalar) なので
+    /// `archived` を直接参照すれば良いが、命名統一のため computed property も用意。
+    /// 既存データには `archived` が無いため Core Data の default (NO) が返る。
+    var isArchived: Bool { archived }
+
+    /// アーカイブ状態をトグルする。CloudKit にも同期される。
+    @MainActor
+    func setArchived(_ value: Bool) {
+        guard archived != value else { return }
+        archived = value
+        PersistenceController.shared.save()
+    }
+
     /// バーチャルメンバーを削除する (バーチャル以外は無視)。
     /// 支出 (受益者 or 支払者) で使われている場合は、過去の精算を壊さないよう
     /// アーカイブ (= 新規候補・メンバー一覧から隠すが履歴・精算には残す)。

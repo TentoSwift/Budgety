@@ -13,6 +13,7 @@
         <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" renamingIdentifier="group" destinationEntity="ExpenseSheet" inverseName="categories" inverseEntity="ExpenseSheet"/>
     </entity>
     <entity name="ExpenseSheet" representedClassName="ExpenseSheet" renamingIdentifier="ExpenseGroup" syncable="YES" codeGenerationType="class">
+        <attribute name="archived" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="defaultCurrencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
