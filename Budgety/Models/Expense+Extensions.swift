@@ -300,7 +300,7 @@ extension Expense {
     }
 
     var categoryDisplayName: String {
-        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : "未分類")
+        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : "カテゴリなし")
     }
 
     var categoryTint: Color {

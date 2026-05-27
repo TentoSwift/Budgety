@@ -8,7 +8,7 @@ import CoreData
 import SwiftUI
 
 extension ExpenseCategory {
-    var displayName: String { name?.isEmpty == false ? name! : "未分類" }
+    var displayName: String { name?.isEmpty == false ? name! : "カテゴリなし" }
     var displayColorHex: String { colorHex ?? "#888888" }
     var displaySymbol: String { symbol?.isEmpty == false ? symbol! : "list.bullet" }
     var tint: Color { Color(hex: displayColorHex) ?? .gray }
