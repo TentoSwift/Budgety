@@ -197,6 +197,7 @@ enum QuickIntentLogic {
         var summary: [String: Any] = [
             "ok": true,
             "amount": amount,
+            "currency": expense.currencyCode ?? "",
             "title": title,
             "sheet": sheet.displayName,
             "kind": kind == .income ? "income" : "expense",
