@@ -368,14 +368,18 @@ private struct WatchSheetPage: View {
                     // 未分類は灰色。カテゴリ背景はグラデーションに。
                     Circle().fill((Color(hex: e.category?.colorHex ?? "#8E8E93") ?? .gray).gradient)
                 )
-            Text(displayTitle(e))
-                .font(.caption2)
-                .foregroundStyle(.white)
-                .lineLimit(1)
+            // タイトルと金額を縦並びに (狭い画面で折り返しが起きないよう)。
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle(e))
+                    .font(.caption2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(formatYen(e.amountDecimal))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
             Spacer()
-            Text(formatYen(e.amountDecimal))
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
         }
         .padding(.horizontal, 8)
     }
