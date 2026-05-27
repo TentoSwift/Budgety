@@ -178,35 +178,34 @@ struct SheetAIChatView: View {
     // MARK: - Input
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                TextField(
-                    SheetAIChat.isAvailable ? "" : "利用できません",
-                    text: $chat.inputText,
-                    axis: .vertical
-                )
-                .lineLimit(1...5)
-                .focused($inputFocused)
-                .submitLabel(.send)
-                .onSubmit { send() }
-                .disabled(!SheetAIChat.isAvailable)
+        // 送信ボタンは複数行入力時に下寄せ。
+        // ※ 旧実装で VStack { Spacer(); Button } を使うと Spacer が縦方向に
+        //   無限に広がり HStack 全体が画面いっぱいに伸びていた。
+        //   `HStack(alignment: .bottom)` で素直に下揃えする。
+        HStack(alignment: .bottom, spacing: 6) {
+            TextField(
+                SheetAIChat.isAvailable ? "" : "利用できません",
+                text: $chat.inputText,
+                axis: .vertical
+            )
+            .lineLimit(1...5)
+            .focused($inputFocused)
+            .submitLabel(.send)
+            .onSubmit { send() }
+            .disabled(!SheetAIChat.isAvailable)
 
-                VStack {
-                    Spacer()
-                    Button {
-                        send()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundStyle(canSend ? Color.accentColor : Color.gray.opacity(0.5))
-                    }
-                    .disabled(!canSend)
-                }
+            Button {
+                send()
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(canSend ? Color.accentColor : Color.gray.opacity(0.5))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 18))
+            .disabled(!canSend)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 18))
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }
