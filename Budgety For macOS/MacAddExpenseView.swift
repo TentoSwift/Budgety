@@ -170,7 +170,6 @@ struct MacAddExpenseView: View {
                                     .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
                                 if allowed != new { amountText = allowed }
                             }
-                        Spacer()
                         Picker("通貨", selection: $currencyCode) {
                             ForEach(CurrencyCatalog.all) { opt in
                                 Text("\(opt.symbol)  \(opt.code)").tag(opt.code)
@@ -178,7 +177,9 @@ struct MacAddExpenseView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(maxWidth: 160)
+                        // 内容に合わせて picker をシュリンクし、TextField 右隣に
+                        // 自然に並ぶようにする (= 160pt 固定では行内で浮いて見えた)。
+                        .fixedSize()
                     }
                 }
                 // 次にタイトルを入力する。
