@@ -381,12 +381,6 @@ struct WatchSplitPicker: View {
                             memberRow(id)
                         }
                     }
-                } else {
-                    Section {
-                        Text("この支出はあなたの負担として記録します")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
             .navigationTitle("割り勘")
