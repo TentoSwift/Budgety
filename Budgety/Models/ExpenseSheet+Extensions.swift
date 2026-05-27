@@ -215,6 +215,11 @@ extension ExpenseSheet {
     ]
 
     /// バーチャルメンバーを追加し、その profileID (recordName) を返す。
+    ///
+    /// 既存の支出が「受益者未指定 (= 空)」だと `resolvedBeneficiaryIDs()` は
+    /// 現在のメンバー全員にフォールバックする。そのままバーチャルメンバーを足すと、
+    /// 過去に作った支出が新メンバーも負担している扱いになってしまうため、
+    /// 追加前に「現時点のメンバー集合」を全支出に明示的にスナップショットしておく。
     @MainActor
     @discardableResult
     func addVirtualMember(name: String, colorHex: String? = nil) -> String? {
@@ -222,6 +227,8 @@ extension ExpenseSheet {
         guard !trimmed.isEmpty,
               let ctx = managedObjectContext,
               let store = objectID.persistentStore else { return nil }
+        // バーチャルメンバー追加前に、空 (= 全員均等割り) の支出に現メンバー集合を固定。
+        snapshotImplicitBeneficiariesIfNeeded()
         let rn = UserProfileStore.virtualRecordPrefix + UUID().uuidString
         let pp = ParticipantProfile(context: ctx)
         ctx.assign(pp, to: store)
@@ -233,6 +240,18 @@ extension ExpenseSheet {
         pp.updatedAt = .now
         PersistenceController.shared.save()
         return rn
+    }
+
+    /// 受益者が未指定の既存支出に、現メンバー集合を明示的に書き込む。
+    /// 新規メンバー追加で過去の支出が巻き込まれないようにするための one-shot snapshot。
+    @MainActor
+    private func snapshotImplicitBeneficiariesIfNeeded() {
+        let currentMembers = allMemberProfileIDs()
+        guard !currentMembers.isEmpty else { return }
+        let expensesSet = (expenses as? Set<Expense>) ?? []
+        for e in expensesSet where (e.beneficiaryProfileIDs ?? "").isEmpty {
+            e.beneficiaryIDList = currentMembers
+        }
     }
 
     /// バーチャルメンバーを削除する (バーチャル以外は無視)。
