@@ -83,12 +83,27 @@ struct LogSettlementView: View {
                       seen.insert(rn).inserted else { continue }
                 ids.append(rn)
             }
+            // バーチャルメンバーは CKShare に出ないので PP から追加する。
+            // (SettlementCalculator の memberOrder 構築と挙動を揃える)
+            let virtualPPs = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in virtualPPs.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName,
+                      UserProfileStore.isVirtualRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                ids.append(rn)
+            }
         } else {
-            // CKShare 未ロード時のみ PP フォールバック
+            // CKShare 未ロード時はバーチャルメンバーのみ PP から追加する。
+            // 非バーチャルの PP は「共有していたが抜けた参加者」の残骸であることが
+            // あるため含めない (SettlementCalculator と挙動を揃える)。
             let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-                guard let rn = pp.recordName, !rn.isEmpty,
-                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+            for pp in pps.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName,
+                      UserProfileStore.isVirtualRecordName(rn),
                       seen.insert(rn).inserted else { continue }
                 ids.append(rn)
             }
