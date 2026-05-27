@@ -258,8 +258,10 @@ struct BudgetyMacSheetView: View {
         .navigationTitle(isScrolledPastHero ? sheet.displayName : "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("支出を追加") {
+                Button {
                     showingAdd = true
+                } label: {
+                    Label("支出を追加", systemImage: "plus")
                 }
                 .help("支出を追加")
             }
