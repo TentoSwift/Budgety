@@ -211,12 +211,16 @@ extension Expense {
     }
 
     /// 精算計算で使う実効受益者リスト。
-    /// 空 (= 未指定 / 旧データ) ならシートの全メンバー、設定済ならそのまま返す。
+    /// 受益者が明示的に設定されていればそれをそのまま返す。
+    /// 空 (= 未指定 / 旧データ / solo シートで作成) の場合は支払者のみが受益者
+    /// (= 後から共有相手やバーチャルメンバーを足しても過去の支出は巻き込まない)。
+    /// 支払者も特定できない場合は空リストを返す。
     @MainActor
     func resolvedBeneficiaryIDs() -> [String] {
         let list = beneficiaryIDList
         if !list.isEmpty { return list }
-        return sheet?.allMemberProfileIDs() ?? []
+        if let pid = payerProfileID, !pid.isEmpty { return [pid] }
+        return []
     }
 
     /// 精算済みにした受益者の profileID リスト (支出ごと・相手ごとの精算)。
