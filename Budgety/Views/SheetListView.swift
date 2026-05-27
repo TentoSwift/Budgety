@@ -157,8 +157,7 @@ struct SheetListView: View {
                     }
                 }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                ToolbarSpacer(.fixed, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .confirm) {
                         tryShowAddSheet()
                     } label: {

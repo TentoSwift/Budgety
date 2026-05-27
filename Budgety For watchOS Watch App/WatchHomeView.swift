@@ -288,15 +288,15 @@ private struct WatchSheetPage: View {
                 Image(systemName: sheet.displaySymbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text("今日")
+                Text("今月")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            Text(formatYen(todayTotal))
+            Text(formatYen(monthTotal))
                 .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .animation(.snappy, value: todayTotal)
+                .animation(.snappy, value: monthTotal)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if let p = budgetProgress {
@@ -362,20 +362,25 @@ private struct WatchSheetPage: View {
         HStack(spacing: 8) {
             Image(systemName: e.category?.symbol ?? "yensign.circle.fill")
                 .foregroundStyle(.white)
-                .font(.body.weight(.semibold))
+                // Dynamic Type で巨大化しないよう固定サイズに。
+                .font(.system(size: 16, weight: .semibold))
                 .frame(width: 32, height: 32)
                 .background(
                     // 未分類は灰色。カテゴリ背景はグラデーションに。
                     Circle().fill((Color(hex: e.category?.colorHex ?? "#8E8E93") ?? .gray).gradient)
                 )
-            Text(displayTitle(e))
-                .font(.caption2)
-                .foregroundStyle(.white)
-                .lineLimit(1)
+            // タイトルと金額を縦並びに (狭い画面で折り返しが起きないよう)。
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle(e))
+                    .font(.caption2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(formatYen(e.amountDecimal))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
             Spacer()
-            Text(formatYen(e.amountDecimal))
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
         }
         .padding(.horizontal, 8)
     }

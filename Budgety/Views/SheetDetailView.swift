@@ -810,15 +810,21 @@ struct SheetDetailView: View {
         let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
             cal.startOfDay(for: exp.date ?? .now)
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy年M月d日 (E)"
+        // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
+        let currentYear = cal.component(.year, from: .now)
+        let shortFormatter = DateFormatter()
+        shortFormatter.locale = Locale(identifier: "ja_JP")
+        shortFormatter.dateFormat = "M月d日 (E)"
+        let longFormatter = DateFormatter()
+        longFormatter.locale = Locale(identifier: "ja_JP")
+        longFormatter.dateFormat = "yyyy年M月d日 (E)"
 
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
 
         let sections = dict.map { (day, items) -> DaySection in
-            let label = formatter.string(from: day)
+            let year = cal.component(.year, from: day)
+            let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
             var net: Decimal = 0
             for e in items {
                 let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
@@ -1603,27 +1609,20 @@ private struct ExpenseRowView: View {
             Text(expense.categoryDisplayName)
                 .font(.body)
                 .foregroundStyle(.primary)
-            // サブタイトル: 入力タイトル · 支払者 (アバターはアイコン右下に重ねるので
-            // ここでは出さない)
+            // サブタイトル: 入力タイトルと支払者を縦に積む。
+            // (アバターはアイコン右下に重ねるのでここでは出さない)
             let titleText = expense.displayTitle
             let rawName = expense.displayPaidBy
             let payerText = (isSoloSheet && payerIsSelf) ? "" : rawName
-            if !titleText.isEmpty || !payerText.isEmpty {
-                HStack(spacing: 4) {
-                    if !titleText.isEmpty {
-                        Text(titleText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !titleText.isEmpty && !payerText.isEmpty {
-                        Text("·").font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !payerText.isEmpty {
-                        Text(payerText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            if !titleText.isEmpty {
+                Text(titleText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !payerText.isEmpty {
+                Text(payerText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
