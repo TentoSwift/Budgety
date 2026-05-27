@@ -46,8 +46,10 @@ struct QuickBudgetIntent: AppIntent {
             result = await QuickIntentLogic.add(parsed: parsed)
         case "recurring":
             result = await QuickIntentLogic.addRecurring(parsed: parsed)
+        case "members":
+            result = QuickIntentLogic.members(parsed: parsed)
         default:
-            result = ["ok": false, "error": "unknown op '\(op)'. Use 'add', 'get', or 'recurring'."]
+            result = ["ok": false, "error": "unknown op '\(op)'. Use 'add', 'get', 'recurring', or 'members'."]
         }
         return .result(value: QuickIntentLogic.encodeJSON(result))
     }
