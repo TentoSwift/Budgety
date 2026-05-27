@@ -113,9 +113,33 @@ struct SheetListView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 } else {
+                    let activeSheets = sheets.filter { !$0.archived }
+                    let archivedSheets = sheets.filter { $0.archived }
                     List {
-                        ForEach(sheets) { sheet in
-                            sheetListRow(sheet)
+                        if activeSheets.isEmpty {
+                            // 全件アーカイブ済みの場合のヒント
+                            ContentUnavailableView(
+                                "アクティブなシートがありません",
+                                systemImage: "archivebox",
+                                description: Text("下の「アーカイブ済み」セクションから戻すか、新しいシートを作成してください。")
+                            )
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        } else {
+                            ForEach(activeSheets) { sheet in
+                                sheetListRow(sheet)
+                            }
+                        }
+                        if !archivedSheets.isEmpty {
+                            Section {
+                                ForEach(archivedSheets) { sheet in
+                                    sheetListRow(sheet)
+                                }
+                            } header: {
+                                Label("アーカイブ済み", systemImage: "archivebox")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
