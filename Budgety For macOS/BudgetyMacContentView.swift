@@ -132,11 +132,23 @@ struct BudgetyMacContentView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(sheets) { sheet in
+                let activeSheets = sheets.filter { !$0.archived }
+                let archivedSheets = sheets.filter { $0.archived }
+                ForEach(activeSheets) { sheet in
                     NavigationLink(value: sheet) {
                         sheetRow(sheet)
                     }
                     .tag(sheet)
+                }
+                if !archivedSheets.isEmpty {
+                    Section("アーカイブ済み") {
+                        ForEach(archivedSheets) { sheet in
+                            NavigationLink(value: sheet) {
+                                sheetRow(sheet)
+                            }
+                            .tag(sheet)
+                        }
+                    }
                 }
             }
         }
@@ -613,6 +625,10 @@ struct MacEditSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
+            archiveBinding: Binding(
+                get: { record.archived },
+                set: { record.setArchived($0) }
+            ),
             primaryActionLabel: "保存",
             destructiveAction: { showingDeleteConfirm = true },
             onCancel: { dismiss() },
@@ -665,6 +681,9 @@ private struct MacSheetFormDialog: View {
     @Binding var colorHex: String
     @Binding var symbol: String
     @Binding var currencyCode: String
+    /// nil でない時のみアーカイブ Toggle 行を出す (= Edit のみ)。
+    /// Add 時はシートがまだ存在しないので非表示。
+    var archiveBinding: Binding<Bool>? = nil
     let primaryActionLabel: String
     var destructiveAction: (() -> Void)? = nil
     let onCancel: () -> Void
@@ -744,6 +763,17 @@ private struct MacSheetFormDialog: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 320, alignment: .leading)
                         Spacer(minLength: 0)
+                    }
+
+                    if let archiveBinding {
+                        Divider().padding(.top, 4)
+                        formRow(label: "アーカイブ:") {
+                            Toggle(isOn: archiveBinding) {
+                                Text("このシートをアーカイブ")
+                            }
+                            .toggleStyle(.switch)
+                            Spacer(minLength: 0)
+                        }
                     }
 
                     Divider().padding(.top, 4)
