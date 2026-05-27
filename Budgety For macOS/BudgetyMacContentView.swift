@@ -1081,7 +1081,10 @@ struct BudgetyMacSettingsView: View {
             ProfileEditView()
         }
         .sheet(isPresented: $showingClaudeIntegration) {
-            MacModalSheet { ClaudeIntegrationView() }
+            MacModalSheet {
+                ClaudeIntegrationView()
+                    .padding()
+            }
         }
     }
 
