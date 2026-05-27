@@ -70,57 +70,41 @@ struct WatchExpenseDetailView: View {
 
     @ViewBuilder
     private var splitSection: some View {
+        // 割り勘オフ (受益者が空 or 支払者ただ 1 人) のときはセクション全体を非表示。
+        // iOS / macOS の挙動に揃えた。
         if isShared {
             let payer = expense.payerProfileID ?? ""
             let beneficiaries = expense.resolvedBeneficiaryIDs()
-            // 受益者が「支払者ただ1人」= 割り勘なし (支払者のみの負担)。
-            let isSplit = !(!payer.isEmpty && Set(expense.beneficiaryIDList) == Set([payer]))
-            let share = expense.amountDecimal / Decimal(max(beneficiaries.count, 1))
-            let shareText = CurrencyCatalog.format(share, code: expense.resolvedCurrencyCode)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label("割り勘", systemImage: isSplit ? "person.2.fill" : "person.fill")
-                        .font(.caption2.weight(.semibold))
-                    Spacer()
-                    Button { showingSplitPicker = true } label: {
-                        Text("編集").font(.caption2.weight(.semibold))
+            let isSplit = !beneficiaries.isEmpty
+                && !(!payer.isEmpty && Set(beneficiaries) == Set([payer]))
+            if isSplit {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("割り勘", systemImage: "person.2.fill")
+                            .font(.caption2.weight(.semibold))
+                        Spacer()
+                        Button { showingSplitPicker = true } label: {
+                            Text("編集").font(.caption2.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                }
-                .foregroundStyle(.white)
+                    .foregroundStyle(.white)
 
-                // 支払者
-                let payerInfo = sheet.memberDisplayInfo(for: payer)
-                HStack(spacing: 6) {
-                    Text("支払").font(.caption2).foregroundStyle(.white.opacity(0.6))
-                    avatar(payerInfo)
-                    Text(payerInfo.name)
-                        .font(.caption.weight(.medium)).foregroundStyle(.white).lineLimit(1)
-                }
-
-                if isSplit {
-                    Text("1人あたり \(shareText)")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.85))
                     ForEach(beneficiaries, id: \.self) { id in
                         let info = sheet.memberDisplayInfo(for: id)
                         HStack(spacing: 6) {
                             avatar(info)
-                            Text(info.name).font(.caption2).foregroundStyle(.white).lineLimit(1)
-                            Spacer()
-                            Text(shareText)
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.85))
+                            Text(info.name)
+                                .font(.caption2)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
                         }
                     }
-                } else {
-                    Text("割り勘なし（全額の負担）")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.6))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(0.12)))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.white.opacity(0.12)))
         }
     }
 
