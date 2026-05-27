@@ -31,6 +31,10 @@ final class AppUpdateChecker: ObservableObject {
     @Published private(set) var status: Status = .unknown
     /// 任意更新の案内を一度閉じたら、同セッション中は再表示しない。
     @Published var optionalDismissed: Bool = false
+    /// 任意更新アラートを抑制するフラグ。
+    /// オンボーディングなど別の modal 表示中に有効化することで、
+    /// alert がそちらを蹴り出して閉じてしまうのを防ぐ。
+    @Published var suppressOptionalAlert: Bool = false
 
     /// gh-pages にホストした設定 JSON。
     private let configURL = URL(string: "https://tentoswift.github.io/Budgety/version.json")!
@@ -127,6 +131,7 @@ private struct AppUpdateGate: ViewModifier {
     private var optionalBinding: Binding<Bool> {
         Binding(
             get: {
+                if checker.suppressOptionalAlert { return false }
                 if case .optional = checker.status { return !checker.optionalDismissed }
                 return false
             },

@@ -46,11 +46,12 @@ struct ExpensoApp: App {
                     onboardingSheetContent(for: step)
                 }
                 #endif
-                #if DEBUG
                 .onChange(of: onboardingFlow) { old, new in
-                    print("🟡 onboardingFlow: \(old.map { $0.rawValue } ?? "nil") → \(new.map { $0.rawValue } ?? "nil")")
+                    AppUpdateChecker.shared.suppressOptionalAlert = (new != nil)
+                    #if DEBUG
+                    NSLog("🟡 onboardingFlow: \(old.map { $0.rawValue } ?? "nil") → \(new.map { $0.rawValue } ?? "nil")")
+                    #endif
                 }
-                #endif
                 .overlay(alignment: .top) {
                     if let shareToast {
                         Text(shareToast)
@@ -89,17 +90,22 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
+                    NSLog("🟡 .task started, onboardingFlow=\(String(describing: onboardingFlow))")
                     // オンボーディング表示判定。DEBUG では毎回出す。
                     #if DEBUG
                     if onboardingFlow == nil {
                         hasShownOnboarding = false
                         onboardingFlow = .welcome
+                        NSLog("🟡 set onboardingFlow=.welcome (DEBUG)")
                     }
                     #else
                     if onboardingFlow == nil, !hasShownOnboarding {
                         onboardingFlow = .welcome
                     }
                     #endif
+                    // オンボーディング表示中は任意更新アラートを抑制
+                    // (alert が fullScreenCover を蹴り出して閉じてしまうのを防ぐ)
+                    AppUpdateChecker.shared.suppressOptionalAlert = (onboardingFlow != nil)
                     #if DEBUG
                     // CloudKit Production デプロイ準備: Development スキーマを一括生成する。
                     // `EXPENSO_INIT_CK_SCHEMA=1` を付けて iCloud サインイン済みで一度だけ起動。
@@ -235,22 +241,29 @@ struct ExpensoApp: App {
 
     /// オンボーディング flow に応じた sheet コンテンツ。
     /// body の型推論コストを下げるため関数に分離している。
+    /// 注: fullScreenCover の content は parent の environment を継承しないので、
+    /// `managedObjectContext` / `locale` を明示的に渡す必要がある (= ProfileEditView が
+    /// 内部で `@Environment(\.managedObjectContext)` を使うため、欠落すると CoreData クラッシュ)。
     @ViewBuilder
     private func onboardingSheetContent(for step: OnboardingFlow) -> some View {
-        switch step {
-        case .welcome:
-            OnboardingView {
-                hasShownOnboarding = true
-                // sheet の dismiss アニメーション完了を待ってからプロフィール編集を表示。
-                onboardingFlow = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    onboardingFlow = .profile
+        Group {
+            switch step {
+            case .welcome:
+                OnboardingView {
+                    hasShownOnboarding = true
+                    // sheet の dismiss アニメーション完了を待ってからプロフィール編集を表示。
+                    onboardingFlow = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        onboardingFlow = .profile
+                    }
                 }
+                .interactiveDismissDisabled()
+            case .profile:
+                ProfileEditView()
             }
-            .interactiveDismissDisabled()
-        case .profile:
-            ProfileEditView()
         }
+        .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        .environment(\.locale, Locale(identifier: "ja_JP"))
     }
 
     /// 全シートの ParticipantProfile.recordName (= 共有相手の URN を含む) を集めて
