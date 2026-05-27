@@ -231,8 +231,32 @@ struct WatchExpenseDetailView: View {
             Text(formatDate(expense.date ?? Date()))
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.85))
+            payerRow
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// 支払い者 (支出) / 受取者 (収入) を 1 行で表示する。共有シートで他メンバー
+    /// がいない (ソロ + 自分払い) 時は冗長なので隠す。
+    @ViewBuilder
+    private var payerRow: some View {
+        let pid = expense.payerProfileID ?? ""
+        if !pid.isEmpty {
+            let info = sheet.memberDisplayInfo(for: pid)
+            let label = expense.kind == .income ? "受取者" : "支払い者"
+            // ソロかつ自分払いの時は省略 (= シート詳細と同じ判定)
+            let hideForSoloSelf = !isShared && pid == (UserProfileStore.shared.userRecordName ?? "")
+            if !hideForSoloSelf {
+                HStack(spacing: 6) {
+                    avatar(info)
+                    Text("\(label): \(info.name)")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.95))
+                        .lineLimit(1)
+                }
+                .padding(.top, 2)
+            }
+        }
     }
 
     private func noteCard(_ note: String) -> some View {
