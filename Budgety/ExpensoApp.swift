@@ -18,7 +18,6 @@ struct ExpensoApp: App {
     @State private var shareToast: String?
     @State private var premiumExpiredAlertShown: Bool = false
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
-    /// DEBUG ビルドでは起動ごとにリセットして毎回表示する (オンボーディングのデバッグ用)。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
     /// オンボーディング / プロフィール編集の表示フロー。
     /// 二つの `.sheet` を重ねると SwiftUI の挙動が不安定 (即閉じ) になり、
@@ -90,19 +89,10 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
-                    NSLog("🟡 .task started, onboardingFlow=\(String(describing: onboardingFlow))")
-                    // オンボーディング表示判定。DEBUG では毎回出す。
-                    #if DEBUG
-                    if onboardingFlow == nil {
-                        hasShownOnboarding = false
-                        onboardingFlow = .welcome
-                        NSLog("🟡 set onboardingFlow=.welcome (DEBUG)")
-                    }
-                    #else
+                    // オンボーディングは初回起動時のみ表示。
                     if onboardingFlow == nil, !hasShownOnboarding {
                         onboardingFlow = .welcome
                     }
-                    #endif
                     // オンボーディング表示中は任意更新アラートを抑制
                     // (alert が fullScreenCover を蹴り出して閉じてしまうのを防ぐ)
                     AppUpdateChecker.shared.suppressOptionalAlert = (onboardingFlow != nil)
