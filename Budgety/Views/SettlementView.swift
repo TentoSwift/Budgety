@@ -19,6 +19,8 @@ struct SettlementView: View {
 
     /// 編集対象の SettlementRecord (= シート再表示)
     @State private var editingRecord: SettlementRecord?
+    /// 新規送金記録のシート表示フラグ (送金プラン以外のタイミングで自由に記録するため)。
+    @State private var showingNewLog: Bool = false
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
     /// 送金プランの 1 行を「精算済み」として SettlementRecord 化する対象。
@@ -47,9 +49,11 @@ struct SettlementView: View {
                         emptySection
                     } else {
                         summarySection(result: result)
-                        // 共有していない (= 自分しかいない) シートでは
+                        // 自分しかいない (= 共有もバーチャルメンバーも無い) シートでは
                         // 残高 / 送金プラン / 送金履歴を出しても意味がないので隠す。
-                        if result.balances.count > 1 {
+                        // バーチャルメンバーがいる時は notSharedSection を出さない
+                        // (= 「共有されていません」というメッセージは不正確になるため)。
+                        if result.balances.count > 1 || record.hasAcceptedOtherMembers() {
                             balancesSection(result: result)
                             transfersSection(result: result)
                             settlementHistorySection
@@ -98,6 +102,9 @@ struct SettlementView: View {
         }
         .sheet(item: $editingRecord) { rec in
             LogSettlementView(sheet: record, record: rec)
+        }
+        .sheet(isPresented: $showingNewLog) {
+            LogSettlementView(sheet: record, record: nil)
         }
         .confirmationDialog(
             "この送金記録を削除しますか？",
@@ -424,18 +431,29 @@ struct SettlementView: View {
         .padding(.vertical, 2)
     }
 
-    /// 過去に記録された送金履歴 (旧バージョン / 他端末で手動記録されたもの)。
-    /// 新規の精算は「送金プラン」から支出を選んで行うため、ここは記録がある時だけ
-    /// 表示する読み取り専用 (編集 / 削除のみ) のセクション。
+    /// 送金履歴 + 「送金を記録」ボタン。
+    /// 送金プラン経由でなくても任意のタイミングで送金を記録できるよう、
+    /// ヘッダーに「+ 送金を記録」を置く。記録があれば一覧表示、無ければ空表示。
     @ViewBuilder
     private var settlementHistorySection: some View {
         let records = settlementsInCurrentRange
-        if !records.isEmpty {
-            card(
-                title: "送金履歴",
-                footer: "以前に記録した送金です。残高に反映されます。"
-            ) {
-                VStack(spacing: 12) {
+        card(title: "送金履歴", footer: records.isEmpty ? "" : "以前に記録した送金です。残高に反映されます。") {
+            VStack(spacing: 12) {
+                Button {
+                    showingNewLog = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("送金を記録")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(record.tint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                if !records.isEmpty {
+                    Divider()
                     ForEach(Array(records.enumerated()), id: \.element.objectID) { idx, r in
                         HStack(spacing: 0) {
                             settlementRecordRow(r)
