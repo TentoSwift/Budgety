@@ -257,7 +257,7 @@ struct MacAddExpenseView: View {
                         }
                     }
                 }
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
                         .labelsHidden()
                         .lineLimit(2...4)
