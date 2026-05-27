@@ -29,12 +29,38 @@ final class AppUpdateChecker: ObservableObject {
     }
 
     @Published private(set) var status: Status = .unknown
-    /// 任意更新の案内を一度閉じたら、同セッション中は再表示しない。
-    @Published var optionalDismissed: Bool = false
     /// 任意更新アラートを抑制するフラグ。
     /// オンボーディングなど別の modal 表示中に有効化することで、
     /// alert がそちらを蹴り出して閉じてしまうのを防ぐ。
     @Published var suppressOptionalAlert: Bool = false
+
+    /// 「後で」を押したバージョン (UserDefaults 永続化)。
+    /// 同じ latestVersion ではもう再表示しない。新しいバージョンが出ると再度通知。
+    private static let dismissedKey = "appUpdate.optionalDismissedVersion"
+    /// `status` 変更時に View 側へ再評価を促すための counter。
+    /// (dismissedVersion 自体は @Published に出さず、optionalBinding 経由で参照)
+    @Published private(set) var dismissTick: Int = 0
+
+    private var dismissedVersion: String? {
+        get { UserDefaults.standard.string(forKey: Self.dismissedKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.dismissedKey)
+            dismissTick &+= 1
+        }
+    }
+
+    /// 現在の任意更新が「後で」で却下済みか。
+    var isCurrentOptionalDismissed: Bool {
+        guard case let .optional(latest, _, _) = status else { return false }
+        return dismissedVersion == latest
+    }
+
+    /// 「後で」ボタンの処理: 現在の latestVersion を dismiss として記録。
+    func dismissCurrentOptional() {
+        if case let .optional(latest, _, _) = status {
+            dismissedVersion = latest
+        }
+    }
 
     /// gh-pages にホストした設定 JSON。
     private let configURL = URL(string: "https://tentoswift.github.io/Budgety/version.json")!
@@ -116,7 +142,7 @@ private struct AppUpdateGate: ViewModifier {
                 Button("App Store を開く") {
                     if case let .optional(_, _, url) = checker.status { openURL(url) }
                 }
-                Button("後で", role: .cancel) { checker.optionalDismissed = true }
+                Button("後で", role: .cancel) { checker.dismissCurrentOptional() }
             } message: {
                 if case let .optional(latest, message, _) = checker.status {
                     Text(message ?? "新しいバージョン \(latest) が利用できます。")
@@ -132,10 +158,10 @@ private struct AppUpdateGate: ViewModifier {
         Binding(
             get: {
                 if checker.suppressOptionalAlert { return false }
-                if case .optional = checker.status { return !checker.optionalDismissed }
+                if case .optional = checker.status { return !checker.isCurrentOptionalDismissed }
                 return false
             },
-            set: { newValue in if !newValue { checker.optionalDismissed = true } }
+            set: { newValue in if !newValue { checker.dismissCurrentOptional() } }
         )
     }
 }

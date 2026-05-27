@@ -22,7 +22,8 @@ struct BudgetyMacApp: App {
             BudgetyMacContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .frame(minWidth: 900, minHeight: 600)
-                .appUpdateGate()
+                // macOS は Mac App Store が更新通知を管理するので独自の
+                // 「アップデートがあります」ダイアログは出さない。
                 .overlay(alignment: .top) {
                     if let toast {
                         Text(toast)

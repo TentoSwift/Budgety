@@ -44,18 +44,28 @@ struct ExpenseDetailView: View {
             }
         }
         .navigationTitle("詳細")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Button("編集") { showingEdit = true }
             }
         }
         .sheet(isPresented: $showingEdit) {
+            #if os(macOS)
+            if let sheet = expense.sheet {
+                MacAddExpenseView(sheet: sheet, expense: expense)
+            }
+            #else
             AddExpenseView(expense: expense)
+            #endif
         }
+        #if os(iOS)
         // 親シートが再ロックされたら詳細画面にロックを重ねる。overlay 方式なので
         // 編集シート表示中でも再ホストせず、編集内容を壊さない。
         .lockOverlay(expense.sheet)
+        #endif
     }
 
     // MARK: - Header
