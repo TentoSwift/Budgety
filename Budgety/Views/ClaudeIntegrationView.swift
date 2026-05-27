@@ -19,7 +19,7 @@ struct ClaudeIntegrationView: View {
     @State private var copiedKey: String? = nil
 
     /// バンドル同梱の Shortcut ファイル (要事前 export & Xcode 追加)
-    private static let shortcutFileName = "クイック支出追加"
+    private static let shortcutFileName = "Budgety MCP"
 
     private static let npmCommand = "npm install -g budgety-mcp"
     private static let claudeMCPAddCommand = "claude mcp add budgety -s user -- budgety-mcp"
@@ -46,7 +46,7 @@ struct ClaudeIntegrationView: View {
                 stepRow(
                     number: 1,
                     title: "ショートカットを追加",
-                    detail: "Budgety 用の Shortcut「クイック支出追加」を Shortcuts.app に追加します。"
+                    detail: "Budgety 用の Shortcut「Budgety MCP」を Shortcuts.app に追加します。"
                 ) {
                     Button {
                         installShortcut()
