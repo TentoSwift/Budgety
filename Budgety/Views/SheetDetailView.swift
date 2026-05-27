@@ -1603,27 +1603,20 @@ private struct ExpenseRowView: View {
             Text(expense.categoryDisplayName)
                 .font(.body)
                 .foregroundStyle(.primary)
-            // サブタイトル: 入力タイトル · 支払者 (アバターはアイコン右下に重ねるので
-            // ここでは出さない)
+            // サブタイトル: 入力タイトルと支払者を縦に積む。
+            // (アバターはアイコン右下に重ねるのでここでは出さない)
             let titleText = expense.displayTitle
             let rawName = expense.displayPaidBy
             let payerText = (isSoloSheet && payerIsSelf) ? "" : rawName
-            if !titleText.isEmpty || !payerText.isEmpty {
-                HStack(spacing: 4) {
-                    if !titleText.isEmpty {
-                        Text(titleText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !titleText.isEmpty && !payerText.isEmpty {
-                        Text("·").font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !payerText.isEmpty {
-                        Text(payerText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            if !titleText.isEmpty {
+                Text(titleText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !payerText.isEmpty {
+                Text(payerText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
