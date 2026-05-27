@@ -53,7 +53,9 @@ struct VirtualMemberEditView: View {
             .frame(minWidth: 480, minHeight: 560)
             #endif
             .navigationTitle("メンバー")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
