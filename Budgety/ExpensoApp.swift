@@ -18,7 +18,15 @@ struct ExpensoApp: App {
     @State private var shareToast: String?
     @State private var premiumExpiredAlertShown: Bool = false
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
+    /// DEBUG ビルドでは起動ごとにリセットして毎回表示する (オンボーディングのデバッグ用)。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
+
+    init() {
+        #if DEBUG
+        // デバッグビルドのみ、起動時に強制リセットしてオンボーディングを毎回出す。
+        UserDefaults.standard.set(false, forKey: "hasShownOnboarding")
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
