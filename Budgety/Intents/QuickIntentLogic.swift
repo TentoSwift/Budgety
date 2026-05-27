@@ -180,9 +180,10 @@ enum QuickIntentLogic {
         let share = ShareCoordinator.shared.existingShare(for: sheet)
         if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
             expense.payerProfileID = pid
-            // ショートカット / MCP からの追加は割り勘にしない (支払者=自分のみの負担)。
-            expense.beneficiaryProfileIDs = pid
         }
+        // ショートカット / MCP からの追加は割り勘にしない (受益者未設定 = 支払者単独負担)。
+        // beneficiaryProfileIDs は明示的にセットしない (resolvedBeneficiaryIDs() で
+        // 空のままになり、SettlementCalculator では残高変動なしの扱い)。
         if let memberID = profile.selfMemberID {
             expense.payerMemberID = memberID
         }
