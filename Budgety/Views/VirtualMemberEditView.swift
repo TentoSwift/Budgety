@@ -22,6 +22,9 @@ import UIKit
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(ImagePlayground)
+import ImagePlayground
+#endif
 
 struct VirtualMemberEditView: View {
     @ObservedObject var profile: ParticipantProfile
@@ -36,11 +39,16 @@ struct VirtualMemberEditView: View {
     #if canImport(PhotosUI)
     @State private var pickerItem: PhotosPickerItem? = nil
     @State private var isLoadingPhoto: Bool = false
+    /// アバターメニューから「写真を選択」を選んだ時に PhotosPicker を開く。
+    @State private var showPhotoPicker: Bool = false
     #endif
 
     #if canImport(MemojiView)
     @State private var showingMemojiEditor: Bool = false
     #endif
+
+    /// Image Playground (iOS 18.2+ / macOS 15.2+) で画像生成を行うシート表示用。
+    @State private var showingImagePlayground: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -67,6 +75,7 @@ struct VirtualMemberEditView: View {
             }
             .onAppear { loadIfNeeded() }
             #if canImport(PhotosUI)
+            .photosPicker(isPresented: $showPhotoPicker, selection: $pickerItem, matching: .images)
             .onChange(of: pickerItem) { _, _ in loadPhotoFromPicker() }
             #endif
             #if canImport(MemojiView)
@@ -78,6 +87,22 @@ struct VirtualMemberEditView: View {
                 }
             }
             #endif
+            // concept は渡さずに開く。人物 (PhotosLibrary) 選択を必須にせず、
+            // テキスト/絵文字/テーマなど何からでも生成できるようにするため。
+            // ユーザーが Playground 内で自由に concept を組み立てられる。
+            .imagePlaygroundSheet(
+                isPresented: $showingImagePlayground,
+                onCompletion: { url in
+                    Task { @MainActor in
+                        if let data = try? Data(contentsOf: url) {
+                            draftPhoto = downsize(data, maxDimension: 512)
+                            #if canImport(PhotosUI)
+                            pickerItem = nil
+                            #endif
+                        }
+                    }
+                }
+            )
         }
     }
 
@@ -88,49 +113,79 @@ struct VirtualMemberEditView: View {
         Section {
             HStack {
                 Spacer()
-                VStack(spacing: 12) {
-                    avatarPreview
-                    #if canImport(PhotosUI)
-                    if isLoadingPhoto {
+                #if canImport(PhotosUI)
+                if isLoadingPhoto {
+                    VStack(spacing: 12) {
+                        avatarPreview
                         ProgressView().controlSize(.small)
-                    } else {
-                        VStack(spacing: 10) {
-                            HStack(spacing: 16) {
-                                PhotosPicker(selection: $pickerItem, matching: .images) {
-                                    Label("写真を選択", systemImage: "photo")
-                                        .font(.callout)
-                                }
-                                #if canImport(MemojiView)
-                                Button {
-                                    showingMemojiEditor = true
-                                } label: {
-                                    Label("Memoji・絵文字", systemImage: "face.smiling")
-                                        .font(.callout)
-                                }
-                                .buttonStyle(.borderless)
-                                #endif
-                            }
-                            if draftPhoto != nil {
-                                Button(role: .destructive) {
-                                    draftPhoto = nil
-                                    pickerItem = nil
-                                } label: {
-                                    Label("削除", systemImage: "trash")
-                                        .font(.callout)
-                                }
-                                .buttonStyle(.borderless)
-                                #if os(macOS)
-                                .tint(.red)
-                                #endif
-                            }
-                        }
                     }
-                    #endif
+                } else {
+                    // アバターをタップすると写真選択 / Memoji / Image Playground /
+                    // 写真を削除 を選べるメニューを開く (ProfileEditView と同じ UX)。
+                    Menu {
+                        avatarMenuContent
+                    } label: {
+                        avatarPreviewWithBadge
+                    }
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
                 }
+                #else
+                avatarPreview
+                #endif
                 Spacer()
             }
             .padding(.vertical, 8)
         }
+    }
+
+    /// アバターのメニュー項目 (写真を選択 / Memoji・絵文字 / Image Playground / 写真を削除)。
+    /// 「削除」だとシートのメンバーごと消すと誤解されやすいので「写真を削除」と明示する。
+    @ViewBuilder
+    private var avatarMenuContent: some View {
+        #if canImport(PhotosUI)
+        Button {
+            showPhotoPicker = true
+        } label: {
+            Label("写真を選択", systemImage: "photo")
+        }
+        #endif
+        #if canImport(MemojiView)
+        Button {
+            showingMemojiEditor = true
+        } label: {
+            Label("Memoji・絵文字", systemImage: "face.smiling")
+        }
+        #endif
+        Button {
+            showingImagePlayground = true
+        } label: {
+            Label("Image Playground で生成", systemImage: "sparkles")
+        }
+        if draftPhoto != nil {
+            Divider()
+            Button(role: .destructive) {
+                draftPhoto = nil
+                #if canImport(PhotosUI)
+                pickerItem = nil
+                #endif
+            } label: {
+                Label("写真を削除", systemImage: "trash")
+            }
+        }
+    }
+
+    /// プレビュー + 右下にカメラバッジ (= タップで編集メニュー が開くことを示唆)。
+    private var avatarPreviewWithBadge: some View {
+        avatarPreview
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(Circle().fill(Color.accentColor))
+                    .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 2))
+            }
     }
 
     @ViewBuilder

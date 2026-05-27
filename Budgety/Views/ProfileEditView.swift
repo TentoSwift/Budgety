@@ -22,6 +22,9 @@ import UIKit
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(ImagePlayground)
+import ImagePlayground
+#endif
 
 struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -45,6 +48,9 @@ struct ProfileEditView: View {
     #if canImport(MemojiView)
     @State private var showingMemojiEditor: Bool = false
     #endif
+
+    /// Image Playground (iOS 18.2+ / macOS 15.2+) で画像生成を行うシート表示用。
+    @State private var showingImagePlayground: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -88,6 +94,20 @@ struct ProfileEditView: View {
                 }
             }
             #endif
+            // concept は渡さない (= 人物 / テキスト / テーマ何からでも生成可能に)。
+            .imagePlaygroundSheet(
+                isPresented: $showingImagePlayground,
+                onCompletion: { url in
+                    Task { @MainActor in
+                        if let data = try? Data(contentsOf: url) {
+                            draftPhoto = downsize(data, maxDimension: 512)
+                            #if canImport(PhotosUI)
+                            pickerItem = nil
+                            #endif
+                        }
+                    }
+                }
+            )
         }
     }
 
@@ -140,6 +160,11 @@ struct ProfileEditView: View {
             Label("Memoji・絵文字", systemImage: "face.smiling")
         }
         #endif
+        Button {
+            showingImagePlayground = true
+        } label: {
+            Label("Image Playground で生成", systemImage: "sparkles")
+        }
         if draftPhoto != nil {
             Divider()
             Button(role: .destructive) {
