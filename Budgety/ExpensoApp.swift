@@ -24,6 +24,9 @@ struct ExpensoApp: App {
     /// presentation lifecycle 中に setter が誤発火して即閉じすることがあるため、
     /// 表示制御は `@State` で独立させて永続化用 AppStorage と分離する。
     @State private var showOnboarding: Bool = false
+    /// オンボーディング完了直後に続けて表示するプロフィール編集シート。
+    /// (Settings からの再表示時は連鎖させない)
+    @State private var showProfileEditAfterOnboarding: Bool = false
 
     init() {
         #if DEBUG
@@ -45,8 +48,15 @@ struct ExpensoApp: App {
                     OnboardingView {
                         hasShownOnboarding = true
                         showOnboarding = false
+                        // sheet の dismiss アニメーションを待ってからプロフィール編集を出す
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                            showProfileEditAfterOnboarding = true
+                        }
                     }
                     .interactiveDismissDisabled()
+                }
+                .sheet(isPresented: $showProfileEditAfterOnboarding) {
+                    ProfileEditView()
                 }
                 .overlay(alignment: .top) {
                     if let shareToast {
