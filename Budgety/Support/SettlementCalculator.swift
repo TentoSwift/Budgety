@@ -352,9 +352,12 @@ enum SettlementCalculator {
                 for b in normalizedBeneficiaries {
                     balances[b, default: 0] -= perShare
                 }
+                // 精算対象としてカウントするのは「割り勘設定された (= 受益者がいる)」
+                // 支出のみ。割り勘オフ (= 支払者単独負担) は残高に影響しないので
+                // 「対象支出」の件数には数えない。
+                includedCount += 1
             }
             included = true
-            includedCount += 1
 
             // 5) カテゴリ別集計 (期間フィルタ適用後の支出のみ加算)
             let catName = e.resolvedCategory?.displayName
