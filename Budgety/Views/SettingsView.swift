@@ -184,6 +184,21 @@ struct SettingsView: View {
                     } label: {
                         Label("ライセンス", systemImage: "doc.text")
                     }
+                    Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/")!) {
+                        Label {
+                            HStack {
+                                Text("プライバシーポリシー")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "hand.raised.fill")
+                                .foregroundStyle(.blue)
+                        }
+                    }
                 }
 
                 Section {
