@@ -373,7 +373,7 @@ private struct WatchSheetPage: View {
 
     private func recentRow(_ e: Expense) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: e.category?.symbol ?? "yensign.circle.fill")
+            Image(systemName: e.category?.symbol ?? (e.kind == .income ? "plus.circle.fill" : "yensign.circle.fill"))
                 .foregroundStyle(.white)
                 // Dynamic Type で巨大化しないよう固定サイズに。
                 .font(.system(size: 16, weight: .semibold))
@@ -388,7 +388,8 @@ private struct WatchSheetPage: View {
                     .font(.caption2)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(formatYen(e.amountDecimal))
+                // 支出は "-", 収入は "+" を符号として表示。
+                Text(e.formattedSignedAmount)
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -401,7 +402,7 @@ private struct WatchSheetPage: View {
     private func displayTitle(_ e: Expense) -> String {
         if let t = e.title, !t.isEmpty { return t }
         if let c = e.category, let n = c.name, !n.isEmpty { return n }
-        return "支出"
+        return e.kind == .income ? "収入" : "支出"
     }
 
     private func formatYen(_ d: Decimal) -> String {
