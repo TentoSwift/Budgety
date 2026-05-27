@@ -87,10 +87,52 @@ final class ShareCoordinator {
 
     @MainActor
     func remove(participant: CKShare.Participant, from share: CKShare) async throws {
+        // 参加者の URN を先に控えてから removeParticipant する。後で PP を
+        // 探すのに使う。
+        let removedURN = participant.userIdentity.userRecordID?.recordName
+
         share.removeParticipant(participant)
         let pc = PersistenceController.shared
         guard let store = pc.privateStore else { throw ShareError.storeNotReady }
         try await pc.container.persistUpdatedShare(share, in: store)
+
+        // CKShare からの除名だけでは ParticipantProfile (= 表示用名前/写真) が
+        // 共有ゾーンに残り続けるため、特に CKShare API が無い watchOS では
+        // 退室済みのはずのメンバーが picker や精算 View に出続けてしまう。
+        // 該当 URN の PP を削除して CloudKit 経由で全クライアントから消す。
+        // PP は表示用キャッシュなので、過去 Expense.payerProfileID は文字列で
+        // 残っており、displayPaidBy は他の resolver (Apple ID 名 / "メンバー")
+        // にフォールバックする。
+        if let urn = removedURN, !urn.isEmpty {
+            deleteParticipantProfile(forRecordName: urn, inShareWith: share)
+        }
+    }
+
+    /// 指定 URN の ParticipantProfile を、その CKShare が持つシート (= 共有
+    /// ゾーン内) から削除する。
+    @MainActor
+    private func deleteParticipantProfile(forRecordName urn: String, inShareWith share: CKShare) {
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        // CKShare の zoneID にあるシートを探し、その PP リストから urn と一致
+        // するものを削除する。複数シートにまたがる場合もあるので全部見る。
+        let zoneID = share.recordID.zoneID
+        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        guard let sheets = try? ctx.fetch(req) else { return }
+        var didChange = false
+        for sheet in sheets {
+            guard sheet.objectID.persistentStore == pc.sharedStore
+                    || sheet.objectID.persistentStore == pc.privateStore else { continue }
+            // CKShare が同じ zone のシートだけ対象にする (= 別シートを誤爆しない)
+            if let sheetShare = existingShare(for: sheet),
+               sheetShare.recordID.zoneID != zoneID { continue }
+            let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in pps where pp.recordName == urn {
+                ctx.delete(pp)
+                didChange = true
+            }
+        }
+        if didChange { pc.save() }
     }
 
     /// 参加者として共有シートから退出する。CloudKit Sharing zone をローカルでだけ purge し、
