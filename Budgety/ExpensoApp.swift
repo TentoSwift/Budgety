@@ -20,11 +20,18 @@ struct ExpensoApp: App {
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
     /// DEBUG ビルドでは起動ごとにリセットして毎回表示する (オンボーディングのデバッグ用)。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
+    /// sheet 表示の状態。`@AppStorage` を直接 sheet の binding にすると
+    /// presentation lifecycle 中に setter が誤発火して即閉じすることがあるため、
+    /// 表示制御は `@State` で独立させて永続化用 AppStorage と分離する。
+    @State private var showOnboarding: Bool = false
 
     init() {
         #if DEBUG
         // デバッグビルドのみ、起動時に強制リセットしてオンボーディングを毎回出す。
         UserDefaults.standard.set(false, forKey: "hasShownOnboarding")
+        _showOnboarding = State(initialValue: true)
+        #else
+        _showOnboarding = State(initialValue: !UserDefaults.standard.bool(forKey: "hasShownOnboarding"))
         #endif
     }
 
@@ -34,12 +41,12 @@ struct ExpensoApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
                 .appUpdateGate()
-                .sheet(isPresented: Binding(
-                    get: { !hasShownOnboarding },
-                    set: { if !$0 { hasShownOnboarding = true } }
-                )) {
-                    OnboardingView { hasShownOnboarding = true }
-                        .interactiveDismissDisabled()
+                .sheet(isPresented: $showOnboarding) {
+                    OnboardingView {
+                        hasShownOnboarding = true
+                        showOnboarding = false
+                    }
+                    .interactiveDismissDisabled()
                 }
                 .overlay(alignment: .top) {
                     if let shareToast {
