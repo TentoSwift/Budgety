@@ -313,8 +313,9 @@ struct BudgetyMacSheetView: View {
                         }
                     }
                 } label: {
-                    Text("その他")
+                    Label("その他", systemImage: "ellipsis")
                 }
+                .menuIndicator(.hidden)
                 .help("その他")
             }
         }
