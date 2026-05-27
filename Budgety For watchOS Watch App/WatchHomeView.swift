@@ -362,7 +362,8 @@ private struct WatchSheetPage: View {
         HStack(spacing: 8) {
             Image(systemName: e.category?.symbol ?? "yensign.circle.fill")
                 .foregroundStyle(.white)
-                .font(.body.weight(.semibold))
+                // Dynamic Type で巨大化しないよう固定サイズに。
+                .font(.system(size: 16, weight: .semibold))
                 .frame(width: 32, height: 32)
                 .background(
                     // 未分類は灰色。カテゴリ背景はグラデーションに。
