@@ -186,6 +186,13 @@ struct SettlementView: View {
         rec.toProfileID = target.toID
         rec.date = .now
         rec.createdAt = .now
+        // FX スナップショット: 送金プランから記録した時点での target 換算額を
+        // 凍結する。送金プランは元々 target 通貨で出ているのでそのまま使える。
+        let sheetTarget = record.resolvedDefaultCurrencyCode
+        if let converted = fx.convert(target.amount, from: target.currencyCode, to: sheetTarget) {
+            rec.fxConvertedAmountDecimal = converted
+            rec.fxTargetCurrency = sheetTarget
+        }
         #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: record)
         rec.createdByProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)

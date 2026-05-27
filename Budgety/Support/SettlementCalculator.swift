@@ -401,10 +401,20 @@ enum SettlementCalculator {
             let from = normalize(rawFrom)
             let to = normalize(rawTo)
             guard memberSet.contains(from), memberSet.contains(to), from != to else { continue }
-            // 送金時の通貨を target に換算 (= Expense と同様)
+            // 1) FX スナップショット (= 記録時に解決された target 換算額) があれば
+            //    それを優先する。為替変動で「精算済みのはずなのに送金プランに
+            //    再表示される」現象を防ぐため。
+            // 2) スナップショット非対応の古い記録 (= 旧バージョンで作成) は
+            //    fallback で現行 FX レートを使って換算する。
             let amt = s.amountDecimal
             guard amt > 0 else { continue }
-            guard let converted = fx.convert(amt, from: s.resolvedCurrencyCode, to: target) else {
+            let convertedOpt: Decimal? = {
+                if let snap = s.snapshotConvertedAmount(forTarget: target) {
+                    return snap
+                }
+                return fx.convert(amt, from: s.resolvedCurrencyCode, to: target)
+            }()
+            guard let converted = convertedOpt else {
                 missing.insert(s.resolvedCurrencyCode)
                 continue
             }
