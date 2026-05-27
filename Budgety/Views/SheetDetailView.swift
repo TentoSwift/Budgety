@@ -127,6 +127,9 @@ struct SheetDetailView: View {
     /// 検索専用の期間。普段の表示の `period` とは独立で、検索開始時は常に全期間。
     @State private var searchPeriod: Period = .all
     @State private var selectedCategory: ExpenseCategory?
+    /// 「カテゴリなし」(= category == nil の支出) でフィルタ中か。
+    /// `selectedCategory` と相互排他。
+    @State private var filterUncategorized: Bool = false
     /// 支払い者で絞り込む時の profileID（membersStrip のタップで設定）。nil = 全員。
     @State private var selectedPayerID: String?
     @State private var exportPaywall: Bool = false
@@ -213,6 +216,8 @@ struct SheetDetailView: View {
         var list = Array(allExpenses)
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
+        } else if filterUncategorized {
+            list = list.filter { $0.category == nil }
         }
         if let payerID = selectedPayerID {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
@@ -575,13 +580,14 @@ struct SheetDetailView: View {
 
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
-        selectedCategory != nil || selectedPayerID != nil || (isSearchActive && searchPeriod.isFiltering)
+        selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+            || (isSearchActive && searchPeriod.isFiltering)
     }
 
     private var filterDescription: String {
         var parts: [String] = []
         if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
-        if selectedCategory != nil { parts.append("カテゴリ") }
+        if selectedCategory != nil || filterUncategorized { parts.append("カテゴリ") }
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
@@ -602,6 +608,7 @@ struct SheetDetailView: View {
             } actions: {
                 Button("フィルタをオフにする") {
                     selectedCategory = nil
+                    filterUncategorized = false
                     selectedPayerID = nil
                     searchPeriod = .all
                 }
@@ -712,10 +719,13 @@ struct SheetDetailView: View {
     }
 
     private var categoryPills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let isAllSelected = selectedCategory == nil && !filterUncategorized
+        let uncategorizedTint = Color.gray
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Button {
                     selectedCategory = nil
+                    filterUncategorized = false
                 } label: {
                     Text("すべて")
                         .font(.caption.weight(.semibold))
@@ -723,16 +733,21 @@ struct SheetDetailView: View {
                         .padding(.vertical, 6)
                         .background(
                             Capsule()
-                                .fill(selectedCategory == nil ? record.tint : Color.platformSecondarySystemFill)
+                                .fill(isAllSelected ? record.tint : Color.platformSecondarySystemFill)
                         )
                         // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
+                        .foregroundStyle(isAllSelected ? Color.platformSystemBackground : .primary)
                 }
                 .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
                     Button {
-                        selectedCategory = (selectedCategory?.objectID == cat.objectID) ? nil : cat
+                        if selectedCategory?.objectID == cat.objectID {
+                            selectedCategory = nil
+                        } else {
+                            selectedCategory = cat
+                            filterUncategorized = false
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: cat.displaySymbol)
@@ -750,8 +765,35 @@ struct SheetDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                // カテゴリなしの支出が 1 件でもあれば「カテゴリなし」ピルを出す。
+                if hasUncategorizedExpenses {
+                    Button {
+                        filterUncategorized.toggle()
+                        if filterUncategorized { selectedCategory = nil }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.bullet")
+                            Text("カテゴリなし")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(filterUncategorized ? uncategorizedTint : Color.platformSecondarySystemFill)
+                        )
+                        .foregroundStyle(filterUncategorized ? Color.platformSystemBackground : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
+    }
+
+    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。
+    private var hasUncategorizedExpenses: Bool {
+        allExpenses.contains { $0.category == nil }
     }
 
     // MARK: - Helpers
