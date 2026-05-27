@@ -91,18 +91,28 @@ struct OnboardingView: View {
                 withAnimation(.easeOut(duration: 0.5)) { appearOpacity = 1 }
             }
         }
-        // フッター: はじめるボタン (Liquid Glass)
+        // フッター: はじめるボタン (Liquid Glass) + プライバシーポリシー同意の表記
         .safeAreaInset(edge: .bottom) {
-            Button {
-                onContinue()
-            } label: {
-                Text("はじめる")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .contentShape(Rectangle())
+            VStack(spacing: 8) {
+                // 「はじめる」を押すと同意したものとみなす旨と、ポリシーへのリンク。
+                Text(.init("「はじめる」を押すと [プライバシーポリシー](https://tentoswift.github.io/budgety-privacy/) に同意したものとみなされます。"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .tint(Color.accentColor)
+                    .padding(.horizontal, 24)
+
+                Button {
+                    onContinue()
+                } label: {
+                    Text("はじめる")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .contentShape(Rectangle())
+                }
+                .glassEffect()
+                .tint(Color.accentColor)
             }
-            .glassEffect()
-            .tint(Color.accentColor)
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
