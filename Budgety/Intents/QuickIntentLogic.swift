@@ -353,7 +353,16 @@ enum QuickIntentLogic {
         }
 
         let payloadOut: [[String: Any]] = expenses.map { e in
-            [
+            // 支払者 / 受益者の名前を解決 (空 = 未指定)。
+            let payerName: String = {
+                guard let s = e.sheet, let pid = e.payerProfileID, !pid.isEmpty else { return "" }
+                return s.memberDisplayInfo(for: pid).name
+            }()
+            let beneficiaryNames: [String] = {
+                guard let s = e.sheet else { return [] }
+                return e.beneficiaryIDList.map { s.memberDisplayInfo(for: $0).name }
+            }()
+            return [
                 "date": ISO8601DateFormatter().string(from: e.date ?? Date()),
                 "title": e.displayTitle,
                 "amount": NSDecimalNumber(decimal: e.amountDecimal).doubleValue,
@@ -363,6 +372,11 @@ enum QuickIntentLogic {
                 "categoryColor": e.category?.colorHex ?? "",
                 "sheet": e.sheet?.name ?? "",
                 "paidBy": e.displayPaidBy,
+                // 支払者名 (sheet 内 memberDisplayInfo 経由)。
+                // payerProfileID が空 (= 未設定) の時は "" 。
+                "payer": payerName,
+                // 割り勘の受益者名配列。空 (= 未設定 / 割り勘オフ) なら []。
+                "beneficiaries": beneficiaryNames,
                 "note": e.note ?? ""
             ]
         }
