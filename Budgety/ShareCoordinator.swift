@@ -118,6 +118,11 @@ final class ShareCoordinator {
                 else { cont.resume() }
             }
         }
+        // purgeObjectsAndRecordsInZone は持続ストアから記録を削除するが、viewContext に
+        // キャッシュされた ExpenseSheet などの管理オブジェクトはそのまま残り、SheetListView
+        // の @FetchRequest が再起動まで該当シートを表示し続けることがある。
+        // 明示的にメモリキャッシュをリフレッシュして @FetchRequest を即時更新させる。
+        pc.container.viewContext.refreshAllObjects()
     }
 
     /// 自分が所有する CKShare のうち、参加者がいる/公開リンクが有効なものが残っているか。

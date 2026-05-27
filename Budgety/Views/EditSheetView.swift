@@ -39,9 +39,16 @@ struct EditSheetView: View {
     @State private var editingMemberID: String?
     /// 編集中のバーチャルメンバー (プロフィール編集シート提示用)。
     @State private var editingVirtualMember: EditingVirtualMember?
+    /// 削除確認アラート対象のバーチャルメンバー。
+    @State private var pendingVirtualDelete: PendingVirtualDelete?
 
     /// `.sheet(item:)` 用の recordName ラッパー。
     private struct EditingVirtualMember: Identifiable { let id: String }
+    /// 削除確認用 (recordName + 表示名スナップショット)。
+    private struct PendingVirtualDelete: Identifiable {
+        let id: String  // recordName
+        let displayName: String
+    }
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
     private var selfParticipantProfile: ParticipantProfile? {
@@ -220,6 +227,21 @@ struct EditSheetView: View {
                     VirtualMemberEditView(profile: pp)
                 }
             }
+            .alert(
+                "「\(pendingVirtualDelete?.displayName ?? "")」を削除しますか?",
+                isPresented: Binding(
+                    get: { pendingVirtualDelete != nil },
+                    set: { if !$0 { pendingVirtualDelete = nil } }
+                ),
+                presenting: pendingVirtualDelete
+            ) { target in
+                Button("削除", role: .destructive) {
+                    record.deleteVirtualMember(profileID: target.id)
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: { _ in
+                Text("過去の支出で使われている場合、履歴を保つためアーカイブされ、新規の割り勘候補から外れます。使われていなければ完全に削除されます。")
+            }
         }
     }
 
@@ -347,7 +369,12 @@ struct EditSheetView: View {
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
-                        if let rn = pp.recordName { record.deleteVirtualMember(profileID: rn) }
+                        if let rn = pp.recordName {
+                            pendingVirtualDelete = PendingVirtualDelete(
+                                id: rn,
+                                displayName: pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty
+                            )
+                        }
                     } label: { Label("削除", systemImage: "trash") }
                 }
             }

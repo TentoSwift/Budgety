@@ -22,6 +22,8 @@ struct CloudSharingView: View {
     @State private var participantsRefresh: Int = 0
     /// swipeAction で削除しようとしている参加者。nil 解除でアラート閉じ。
     @State private var pendingRemove: ParticipantRemoveTarget?
+    /// 「シートから退出」ボタンの確認アラート表示用。
+    @State private var showLeaveConfirm: Bool = false
     @State private var mailData: MailData?
     @State private var showMailUnavailable: Bool = false
     @State private var showCopiedToast: Bool = false
@@ -148,7 +150,7 @@ struct CloudSharingView: View {
 
             Section {
                 Button(role: .destructive) {
-                    Task { await leaveSharedSheet() }
+                    showLeaveConfirm = true
                 } label: {
                     HStack {
                         if isProcessing { ProgressView() }
@@ -168,6 +170,14 @@ struct CloudSharingView: View {
         .task {
             await checkICloudStatus()
             await refreshShareAsync()
+        }
+        .alert("シートから退出しますか?", isPresented: $showLeaveConfirm) {
+            Button("退出", role: .destructive) {
+                Task { await leaveSharedSheet() }
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
         }
     }
 
