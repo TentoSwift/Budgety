@@ -191,9 +191,6 @@ struct ExpensoApp: App {
                             }
                         }
                     case .background:
-                        // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。
-                        // iOS は背景時にしか走らせないので、この瞬間がチャンス。
-                        AppDelegate.scheduleAppRefresh()
                         // バックグラウンドに移ったらシートロックを全て再要求 (= 次回フォアグラウンドで再入力)
                         Task { @MainActor in
                             SheetLockManager.shared.lockAll()
