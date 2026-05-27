@@ -143,7 +143,7 @@ struct ExpenseDetailView: View {
                 let isEveryone = Set(ids) == Set(all)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text(expense.kind == .income ? "受け取り対象" : "受益者")
+                        Text(expense.kind == .income ? "受け取り対象" : "割り勘")
                             .foregroundStyle(.secondary)
                         Spacer()
                         if isEveryone {
