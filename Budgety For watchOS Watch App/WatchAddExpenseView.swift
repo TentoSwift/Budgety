@@ -227,7 +227,7 @@ struct WatchAddExpenseView: View {
             WKInterfaceDevice.current().play(.click)
         } label: {
             Text("+\(step)")
-                .font(.caption.weight(.bold).monospacedDigit())
+                .font(.system(.caption, design: .rounded).weight(.bold).monospacedDigit())
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: 32)
                 .background(
