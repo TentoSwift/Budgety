@@ -373,14 +373,15 @@ private struct WatchSheetPage: View {
 
     private func recentRow(_ e: Expense) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: e.category?.symbol ?? (e.kind == .income ? "plus.circle.fill" : "yensign.circle.fill"))
+            // iOS と同じ resolver を使う。カテゴリが無い時は list.bullet +
+            // 灰色になり、無カテゴリでも一貫した見た目に。
+            Image(systemName: e.categorySymbol)
                 .foregroundStyle(.white)
                 // Dynamic Type で巨大化しないよう固定サイズに。
                 .font(.system(size: 16, weight: .semibold))
                 .frame(width: 32, height: 32)
                 .background(
-                    // 未分類は灰色。カテゴリ背景はグラデーションに。
-                    Circle().fill((Color(hex: e.category?.colorHex ?? "#8E8E93") ?? .gray).gradient)
+                    Circle().fill(e.categoryTint.gradient)
                 )
             // タイトルと金額を縦並びに (狭い画面で折り返しが起きないよう)。
             VStack(alignment: .leading, spacing: 2) {
@@ -399,10 +400,11 @@ private struct WatchSheetPage: View {
         .padding(.horizontal, 8)
     }
 
+    /// 表示用タイトル。title が空ならカテゴリ名 (= iOS と同じ `categoryDisplayName`
+    /// を使うので、カテゴリも無ければ「カテゴリなし」になる)。
     private func displayTitle(_ e: Expense) -> String {
         if let t = e.title, !t.isEmpty { return t }
-        if let c = e.category, let n = c.name, !n.isEmpty { return n }
-        return e.kind == .income ? "収入" : "支出"
+        return e.categoryDisplayName
     }
 
     private func formatYen(_ d: Decimal) -> String {
