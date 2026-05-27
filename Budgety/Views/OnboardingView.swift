@@ -29,11 +29,6 @@ struct OnboardingView: View {
                 VStack(spacing: 32) {
                     // ヘッダー
                     VStack(spacing: 12) {
-                        Image(systemName: "yensign.bank.building")
-                            .font(.system(size: headerIconSize, weight: .light))
-                            .foregroundStyle(.tint)
-                            .symbolEffect(.pulse, options: .repeat(1))
-
                         VStack(spacing: 4) {
                             Text("ようこそ")
                                 .font(.largeTitle.weight(.bold))
