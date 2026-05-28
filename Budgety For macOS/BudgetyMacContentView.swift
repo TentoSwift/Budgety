@@ -1040,7 +1040,7 @@ struct BudgetyMacSettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(profile.resolvedDisplayName)
                                 .foregroundStyle(.primary)
-                            Text("名前・写真・背景色を編集")
+                            Text("名前・写真を編集")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

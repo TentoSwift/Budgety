@@ -67,7 +67,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(profile.resolvedDisplayName)
                                     .foregroundStyle(.primary)
-                                Text("名前・写真・背景色を編集")
+                                Text("名前・写真を編集")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -158,6 +158,21 @@ struct SettingsView: View {
                         LicenseListScreen()
                     } label: {
                         Label("ライセンス", systemImage: "doc.text")
+                    }
+                    Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/support.html")!) {
+                        Label {
+                            HStack {
+                                Text("サポート")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "questionmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
                     }
                     Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/")!) {
                         Label {
