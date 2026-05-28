@@ -112,8 +112,7 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .contentShape(Rectangle())
                 }
-                .glassEffect()
-                .tint(Color.accentColor)
+                .glassEffect(.regular.interactive().tint(.accentColor))
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
