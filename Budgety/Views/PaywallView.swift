@@ -81,6 +81,14 @@ struct PaywallView: View {
                        color: Color(red: 0.36, green: 0.55, blue: 0.94),
                        title: "シートを共有",
                        detail: "家族やパートナーを招待して、ひとつの家計簿を一緒に管理。")
+            featureRow("person.crop.circle.badge.plus",
+                       color: Color(red: 0.00, green: 0.70, blue: 0.69),
+                       title: "バーチャルメンバー",
+                       detail: "アプリを使っていない人も追加して、旅行や食事会の割り勘対象にできる。")
+            featureRow("sparkles",
+                       color: Color(red: 0.69, green: 0.32, blue: 0.87),
+                       title: "Claude / MCP と連携",
+                       detail: "自然言語で支出を記録。「コーヒー 350 円」と話しかけるだけ。")
             featureRow("lock.fill",
                        color: Color(red: 0.96, green: 0.26, blue: 0.33),
                        title: "パスワードでロック",
@@ -101,6 +109,10 @@ struct PaywallView: View {
                        color: Color(red: 0.93, green: 0.35, blue: 0.62),
                        title: "プレミアムアイコン",
                        detail: "シートとカテゴリで使える特別なアイコンを解放。")
+            featureRow("figure.2.and.child.holdinghands",
+                       color: Color(red: 0.30, green: 0.69, blue: 0.31),
+                       title: "ファミリー共有対応",
+                       detail: "ひとつの購入で家族 (最大 6 人) と Premium を共有できる。")
         }
     }
 
