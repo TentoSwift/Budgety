@@ -467,8 +467,10 @@ enum QuickIntentLogic {
         let share = ShareCoordinator.shared.existingShare(for: sheet)
         let selfIDs = profile.canonicalSelfIDs(forShare: share)
 
+        // CKShare を抜けた参加者 (= 受諾済みでない PP) を含めないよう
+        // acceptedMemberProfileIDs() を使う。archived 済み virtual も自動的に除外される。
         var members: [[String: Any]] = []
-        for pid in sheet.allMemberProfileIDs() {
+        for pid in sheet.acceptedMemberProfileIDs() {
             let info = sheet.memberDisplayInfo(for: pid)
             members.append([
                 "name": info.name,
