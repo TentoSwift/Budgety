@@ -259,6 +259,8 @@ struct AAAddExpenseView: View {
         if let store = sheet.objectID.persistentStore {
             ctx.assign(expense, to: store)
         }
+        // FX スナップショット
+        expense.captureFXSnapshot()
         do {
             try ctx.save()
             Haptics.success()

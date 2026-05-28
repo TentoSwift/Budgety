@@ -913,6 +913,8 @@ struct SheetDetailView: View {
            cat.objectID.persistentStore == parentStore {
             copy.category = cat
         }
+        // FX スナップショット (複製時の current FX を凍結)
+        copy.captureFXSnapshot()
         pc.save()
         Haptics.success()
     }

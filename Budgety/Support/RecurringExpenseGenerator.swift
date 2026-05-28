@@ -73,6 +73,8 @@ enum RecurringExpenseGenerator {
                cat.objectID.persistentStore == sheetStore {
                 expense.category = cat
             }
+            // FX スナップショット (定期生成時の current FX を凍結)
+            expense.captureFXSnapshot()
 
             rule.lastGeneratedDate = date
             generated += 1

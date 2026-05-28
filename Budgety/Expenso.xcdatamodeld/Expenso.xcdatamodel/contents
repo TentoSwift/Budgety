@@ -83,6 +83,8 @@
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fxConvertedAmount" optional="YES" attributeType="Decimal"/>
+        <attribute name="fxTargetCurrency" optional="YES" attributeType="String"/>
         <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="generatedFromRuleID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
