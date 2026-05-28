@@ -243,9 +243,16 @@ struct SettingsView: View {
 }
 
 private extension Bundle {
+    /// App Store 配布版 (= 製品版) は短い "1.0" のみ。
+    /// Debug ビルド / TestFlight (sandboxReceipt) はビルド番号付き "1.0 (2026052804)"。
     var versionDisplay: String {
         let v = infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let b = infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        #if DEBUG
         return "\(v) (\(b))"
+        #else
+        let isTestFlight = appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        return isTestFlight ? "\(v) (\(b))" : v
+        #endif
     }
 }
