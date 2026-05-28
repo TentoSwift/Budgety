@@ -343,7 +343,7 @@ struct CloudSharingView: View {
         } header: {
             Text("メールで招待")
         } footer: {
-            Text("Apple ID のメールアドレスを入力して招待を送ります。相手はメールに届いたリンクをタップして参加できます。")
+            Text("招待したい人の Apple Account のメールアドレスを入力して招待を送ります。")
         }
     }
 
@@ -383,13 +383,9 @@ struct CloudSharingView: View {
                 .disabled(isProcessing)
             }
         } header: {
-            Text("リンクを送って参加してもらう")
+            Text("リンクを送る")
         } footer: {
-            if resolvedURL == nil {
-                Text("リンクを作成したら、AirDrop・メッセージ・LINE などで自分で送ってください。リンクは Budgety から自動的には送られません。")
-            } else {
-                Text("下のボタンから AirDrop・メッセージなどで相手にリンクを送ってください。受け取った相手はリンクをタップして参加できます。")
-            }
+            Text("招待済みの人にリンクを送ってください。受け取った相手はリンクをタップして参加できます。")
         }
     }
 
