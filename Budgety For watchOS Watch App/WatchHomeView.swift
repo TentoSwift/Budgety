@@ -260,7 +260,7 @@ private struct WatchSheetPage: View {
         .listStyle(.plain)
         .containerBackground(sheet.tint.gradient, for: .navigation)
         .navigationTitle {
-            (Text(Image(systemName: sheet.displaySymbol)) + Text(" \(sheet.displayName)"))
+            Text(sheet.displayName)
                 .foregroundStyle(sheet.tint)
         }
         .navigationBarTitleDisplayMode(.inline)
