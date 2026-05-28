@@ -26,6 +26,7 @@ struct EditCategoryView: View {
     @State private var kind: TransactionKind = .expense
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
+    @State private var showingMoreIcons: Bool = false
 
     @State private var origName: String = ""
     @State private var origColor: String = ""
@@ -41,6 +42,15 @@ struct EditCategoryView: View {
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// iOS の confirmation ボタン文言。新規は「追加」、編集は「保存」。
+    /// 他のシート (EditSheetView 等) のラベル運用に揃える。
+    private var saveButtonLabel: String {
+        switch mode {
+        case .create: "追加"
+        case .edit:   "保存"
+        }
     }
 
     /// このカテゴリが属する (新規作成なら作成先の) シート。
@@ -88,11 +98,7 @@ struct EditCategoryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    #if os(macOS)
-                    Button("キャンセル") { dismiss() }
-                    #else
-                    circleToolbarButton(systemImage: "xmark") { dismiss() }
-                    #endif
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     #if os(macOS)
@@ -100,9 +106,8 @@ struct EditCategoryView: View {
                         .disabled(!canSave)
                         .keyboardShortcut(.return)
                     #else
-                    circleToolbarButton(systemImage: "checkmark") { save() }
+                    Button(saveButtonLabel, systemImage: "checkmark") { save() }
                         .disabled(!canSave)
-                        .opacity(canSave ? 1 : 0.4)
                     #endif
                 }
             }
@@ -238,14 +243,11 @@ struct EditCategoryView: View {
                     iconButton(sym)
                 }
             }
-            // その他カテゴリは別画面で選択
-            NavigationLink {
-                CategoryIconPickerView(
-                    selectedSymbol: $selectedSymbol,
-                    tint: previewColor,
-                    origSymbol: origSymbol,
-                    premiumUnlocked: premiumUnlocked
-                )
+            // その他カテゴリは別画面で選択。Form 内の NavigationLink は行に
+            // 自動でシェブロンが付き、カード内の手動シェブロンと二重になるため、
+            // Button + navigationDestination でカスタムカードのまま遷移する。
+            Button {
+                showingMoreIcons = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -265,6 +267,14 @@ struct EditCategoryView: View {
                 )
             }
             .buttonStyle(.plain)
+            .navigationDestination(isPresented: $showingMoreIcons) {
+                CategoryIconPickerView(
+                    selectedSymbol: $selectedSymbol,
+                    tint: previewColor,
+                    origSymbol: origSymbol,
+                    premiumUnlocked: premiumUnlocked
+                )
+            }
         }
         .padding(16)
         .background(Color.platformSecondarySystemGroupedBackground, in: RoundedRectangle(cornerRadius: 18))

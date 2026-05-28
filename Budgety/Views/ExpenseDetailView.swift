@@ -43,18 +43,28 @@ struct ExpenseDetailView: View {
             }
         }
         .navigationTitle("詳細")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Button("編集") { showingEdit = true }
             }
         }
         .sheet(isPresented: $showingEdit) {
+            #if os(macOS)
+            if let sheet = expense.sheet {
+                MacAddExpenseView(sheet: sheet, expense: expense)
+            }
+            #else
             AddExpenseView(expense: expense)
+            #endif
         }
+        #if os(iOS)
         // 親シートが再ロックされたら詳細画面にロックを重ねる。overlay 方式なので
         // 編集シート表示中でも再ホストせず、編集内容を壊さない。
         .lockOverlay(expense.sheet)
+        #endif
     }
 
     // MARK: - Header
@@ -66,7 +76,7 @@ struct ExpenseDetailView: View {
                 Text(expense.formattedSignedAmount)
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(expense.kind == .income ? Color.green : Color.primary)
+                    .foregroundStyle(Color.primary)
                 let title = expense.displayTitle.isEmpty
                     ? expense.categoryDisplayName : expense.displayTitle
                 Text(title)
@@ -127,9 +137,47 @@ struct ExpenseDetailView: View {
     private var participantsSection: some View {
         Section {
             payerRow
-            if let sheet = expense.sheet {
-                detailRow(expense.kind == .income ? "受け取り対象" : "受益者",
-                          beneficiaryText(in: sheet))
+            beneficiaryRow
+        }
+    }
+
+    /// 受益者をアバター + 名前のチップで表示する (全員均等ならその旨も併記)。
+    /// 受益者が空 (= 割り勘オフ / 支払者単独負担) なら表示しない。
+    @ViewBuilder
+    private var beneficiaryRow: some View {
+        if let sheet = expense.sheet {
+            let ids = expense.resolvedBeneficiaryIDs()
+            if !ids.isEmpty {
+                let all = sheet.allMemberProfileIDs()
+                let isEveryone = Set(ids) == Set(all)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(expense.kind == .income ? "受け取り対象" : "割り勘")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if isEveryone {
+                            Text("全員均等").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(ids, id: \.self) { id in
+                                let info = sheet.memberDisplayInfo(for: id)
+                                VStack(spacing: 4) {
+                                    AvatarView(photoData: info.photoData,
+                                               displayName: info.name,
+                                               colorHex: info.colorHex, size: 36)
+                                    Text(info.name)
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 56)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(.vertical, 2)
             }
         }
     }
@@ -159,15 +207,6 @@ struct ExpenseDetailView: View {
         }
     }
 
-    private func beneficiaryText(in sheet: ExpenseSheet) -> String {
-        let ids = expense.resolvedBeneficiaryIDs()
-        let all = sheet.allMemberProfileIDs()
-        if ids.isEmpty || Set(ids) == Set(all) {
-            return "全員均等"
-        }
-        let names = ids.map { sheet.memberDisplayInfo(for: $0).name }
-        return names.joined(separator: ", ")
-    }
 
     // MARK: - Photo
 

@@ -11,12 +11,15 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct ClaudeIntegrationView: View {
     @State private var copiedKey: String? = nil
 
     /// バンドル同梱の Shortcut ファイル (要事前 export & Xcode 追加)
-    private static let shortcutFileName = "クイック支出追加"
+    private static let shortcutFileName = "Budgety MCP"
 
     private static let npmCommand = "npm install -g budgety-mcp"
     private static let claudeMCPAddCommand = "claude mcp add budgety -s user -- budgety-mcp"
@@ -43,7 +46,7 @@ struct ClaudeIntegrationView: View {
                 stepRow(
                     number: 1,
                     title: "ショートカットを追加",
-                    detail: "Budgety 用の Shortcut「クイック支出追加」を Shortcuts.app に追加します。"
+                    detail: "Budgety 用の Shortcut「Budgety MCP」を Shortcuts.app に追加します。"
                 ) {
                     Button {
                         installShortcut()
@@ -173,25 +176,37 @@ struct ClaudeIntegrationView: View {
             openShortcutsApp()
             return
         }
-        #if canImport(UIKit)
-        UIApplication.shared.open(url)
-        #endif
+        openExternal(url)
     }
 
     private func openShortcutsApp() {
-        #if canImport(UIKit)
         if let url = URL(string: "shortcuts://") {
-            UIApplication.shared.open(url)
+            openExternal(url)
         }
+    }
+
+    /// プラットフォーム共通の外部 URL オープン。
+    /// iOS は UIApplication 経由、macOS は NSWorkspace 経由。
+    private func openExternal(_ url: URL) {
+        #if canImport(UIKit)
+        UIApplication.shared.open(url)
+        #elseif canImport(AppKit)
+        NSWorkspace.shared.open(url)
         #endif
     }
 
     private func copy(_ text: String, key: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
         #endif
         copiedKey = key
+        #if canImport(UIKit)
+        // macOS では Haptics モジュールが含まれないので iOS でのみフィードバック。
         Haptics.success()
+        #endif
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             if copiedKey == key { copiedKey = nil }
         }

@@ -5,6 +5,14 @@
 
 import SwiftUI
 import CoreData
+#if canImport(PhotosUI)
+import PhotosUI
+#endif
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct EditSheetView: View {
     @Environment(\.dismiss) private var dismiss
@@ -20,9 +28,28 @@ struct EditSheetView: View {
     @State private var selectedSymbol: String = "person.2.fill"
     @State private var defaultCurrencyCode: String = CurrencyCatalog.defaultCode
     @State private var budgetText: String = ""
+    @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
     @State private var showingPaywall: Bool = false
+    @State private var showingMoreIcons: Bool = false
+    // バーチャルメンバー管理 (Premium)
+    @State private var showMemberPrompt = false
+    @State private var newMemberName = ""
+    /// 名前変更対象の recordName。nil = 新規追加。
+    @State private var editingMemberID: String?
+    /// 編集中のバーチャルメンバー (プロフィール編集シート提示用)。
+    @State private var editingVirtualMember: EditingVirtualMember?
+    /// 削除確認アラート対象のバーチャルメンバー。
+    @State private var pendingVirtualDelete: PendingVirtualDelete?
+
+    /// `.sheet(item:)` 用の recordName ラッパー。
+    private struct EditingVirtualMember: Identifiable { let id: String }
+    /// 削除確認用 (recordName + 表示名スナップショット)。
+    private struct PendingVirtualDelete: Identifiable {
+        let id: String  // recordName
+        let displayName: String
+    }
 
     /// このシート配下の自分の ParticipantProfile (= 「このシートでの自分」)
     private var selfParticipantProfile: ParticipantProfile? {
@@ -38,6 +65,7 @@ struct EditSheetView: View {
     @State private var origSymbol: String = ""
     @State private var origCurrencyCode: String = ""
     @State private var origBudgetText: String = ""
+    @State private var origArchived: Bool = false
 
     /// JPY/KRW など最小単位のない通貨は decimalPad 不要
     private var decimalKeypadNeeded: Bool {
@@ -123,9 +151,20 @@ struct EditSheetView: View {
                     Text("「今月」表示時に進捗バーで残額を可視化します。0 のまま保存すると予算なし扱い。")
                 }
 
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
+                }
+
+                memberSection
+
+                Section {
+                    Toggle(isOn: $archivedDraft) {
+                        Label("このシートをアーカイブ",
+                              systemImage: archivedDraft ? "archivebox.fill" : "archivebox")
+                    }
+                } footer: {
+                    Text("アーカイブしたシートはシート一覧の下部の「アーカイブ済み」セクションにまとまります。データは削除されず、トグルでいつでも戻せます。変更は「保存」で反映されます。")
                 }
 
                 Section {
@@ -145,14 +184,14 @@ struct EditSheetView: View {
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     #if os(macOS)
                     Button("完了") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     #else
-                    Button("保存") { save() }
+                    Button("保存", systemImage: "checkmark") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     #endif
                 }
@@ -174,6 +213,46 @@ struct EditSheetView: View {
                      ? "このシートとすべての支出が削除されます。元には戻せません。"
                      : "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。")
             }
+            .alert(editingMemberID == nil ? "バーチャルメンバーを追加" : "名前を変更",
+                   isPresented: $showMemberPrompt) {
+                TextField("名前", text: $newMemberName)
+                Button("保存") {
+                    let trimmed = newMemberName.trimmingCharacters(in: .whitespaces)
+                    if let rn = editingMemberID {
+                        if !trimmed.isEmpty,
+                           let pp = record.virtualMemberProfiles.first(where: { $0.recordName == rn }) {
+                            pp.displayName = trimmed
+                            pp.updatedAt = .now
+                            PersistenceController.shared.save()
+                        }
+                    } else {
+                        record.addVirtualMember(name: trimmed)
+                    }
+                    newMemberName = ""
+                    editingMemberID = nil
+                }
+                Button("キャンセル", role: .cancel) { newMemberName = ""; editingMemberID = nil }
+            }
+            .sheet(item: $editingVirtualMember) { item in
+                if let pp = record.virtualMemberProfiles.first(where: { $0.recordName == item.id }) {
+                    VirtualMemberEditView(profile: pp)
+                }
+            }
+            .alert(
+                "「\(pendingVirtualDelete?.displayName ?? "")」を削除しますか?",
+                isPresented: Binding(
+                    get: { pendingVirtualDelete != nil },
+                    set: { if !$0 { pendingVirtualDelete = nil } }
+                ),
+                presenting: pendingVirtualDelete
+            ) { target in
+                Button("削除", role: .destructive) {
+                    record.deleteVirtualMember(profileID: target.id)
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: { _ in
+                Text("過去の支出で使われている場合、履歴を保つためアーカイブされ、新規の割り勘候補から外れます。使われていなければ完全に削除されます。")
+            }
         }
     }
 
@@ -188,10 +267,11 @@ struct EditSheetView: View {
                     sheetIconButton(sym, tint: tint)
                 }
             }
-            // その他カテゴリは別画面で選択
-            NavigationLink {
-                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint,
-                                    premiumUnlocked: PurchaseManager.hasPremiumAccess(to: record))
+            // その他カテゴリは別画面で選択。Form 内の NavigationLink は行に
+            // 自動でシェブロンが付き、カード内の手動シェブロンと二重になるため、
+            // Button + navigationDestination でカスタムカードのまま遷移する。
+            Button {
+                showingMoreIcons = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -211,6 +291,10 @@ struct EditSheetView: View {
                 )
             }
             .buttonStyle(.plain)
+            .navigationDestination(isPresented: $showingMoreIcons) {
+                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint,
+                                    premiumUnlocked: PurchaseManager.hasPremiumAccess(to: record))
+            }
         }
         .padding(.vertical, 4)
         .sheet(isPresented: $showingPaywall) { PaywallView() }
@@ -272,6 +356,57 @@ struct EditSheetView: View {
         #endif
     }
 
+    /// バーチャルメンバー (アプリ未使用の相手を割り勘・支払者に含める) の管理セクション。
+    @ViewBuilder
+    private var memberSection: some View {
+        Section {
+            ForEach(record.virtualMemberProfiles, id: \.objectID) { pp in
+                // 行タップでプロフィール編集 (名前 + 写真 + Memoji + 背景色)。
+                Button {
+                    if let rn = pp.recordName {
+                        editingVirtualMember = EditingVirtualMember(id: rn)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarView(photoData: pp.photoData,
+                                   displayName: pp.displayNameOrEmpty,
+                                   colorHex: pp.displayColorHex, size: 32)
+                        Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        if let rn = pp.recordName {
+                            pendingVirtualDelete = PendingVirtualDelete(
+                                id: rn,
+                                displayName: pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty
+                            )
+                        }
+                    } label: { Label("削除", systemImage: "trash") }
+                }
+            }
+            Button {
+                if PurchaseManager.hasPremiumAccess(to: record) {
+                    editingMemberID = nil
+                    newMemberName = ""
+                    showMemberPrompt = true
+                } else {
+                    showingPaywall = true
+                }
+            } label: {
+                Label("バーチャルメンバーを追加", systemImage: "person.badge.plus")
+            }
+        } header: {
+            Text("バーチャルメンバー")
+        } footer: {
+            Text("アプリを使っていない相手を割り勘・支払者に追加できます。行をタップで名前・写真を編集、スワイプで削除。")
+        }
+    }
+
     private var deleteButtonTitle: String {
         record.isOwnedByCurrentUser ? "シートを削除" : "シートから退出"
     }
@@ -299,6 +434,7 @@ struct EditSheetView: View {
         } else {
             budgetText = ""
         }
+        archivedDraft = record.archived
 
         origName = name
         origNote = note
@@ -306,6 +442,7 @@ struct EditSheetView: View {
         origSymbol = selectedSymbol
         origCurrencyCode = defaultCurrencyCode
         origBudgetText = budgetText
+        origArchived = archivedDraft
     }
 
     /// オーナー = ローカル削除 + CloudKit 伝搬で全員から消える。
@@ -341,6 +478,7 @@ struct EditSheetView: View {
         if selectedSymbol != origSymbol { record.symbol = selectedSymbol }
         if defaultCurrencyCode != origCurrencyCode { record.defaultCurrencyCode = defaultCurrencyCode }
         if budgetText != origBudgetText { record.monthlyBudgetDecimal = Decimal(string: budgetText) }
+        if archivedDraft != origArchived { record.archived = archivedDraft }
         PersistenceController.shared.save()
         Haptics.success()
         dismiss()

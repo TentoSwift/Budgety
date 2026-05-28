@@ -24,10 +24,11 @@ struct ExpensoShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: QuickBudgetIntent(),
             phrases: [
+                "\(.applicationName) で MCP",
                 "\(.applicationName) で家計簿操作",
                 "Run \(.applicationName) command"
             ],
-            shortTitle: "クイック家計簿",
+            shortTitle: "Budgety MCP",
             systemImageName: "yensign.circle.fill"
         )
     }

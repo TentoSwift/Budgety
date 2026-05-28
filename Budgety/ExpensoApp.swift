@@ -19,18 +19,37 @@ struct ExpensoApp: App {
     @State private var premiumExpiredAlertShown: Bool = false
     /// 初回起動時のみオンボーディングを出す。UserDefaults 永続化。
     @AppStorage("hasShownOnboarding") private var hasShownOnboarding: Bool = false
+    /// オンボーディング / プロフィール編集の表示フロー。
+    /// 二つの `.sheet` を重ねると SwiftUI の挙動が不安定 (即閉じ) になり、
+    /// body の型推論も限界に達するので `.sheet(item:)` で単一の sheet にまとめる。
+    @State private var onboardingFlow: OnboardingFlow?
+
+    private enum OnboardingFlow: String, Identifiable {
+        case welcome
+        case profile
+        var id: String { rawValue }
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.locale, Locale(identifier: "ja_JP"))
-                .sheet(isPresented: Binding(
-                    get: { !hasShownOnboarding },
-                    set: { if !$0 { hasShownOnboarding = true } }
-                )) {
-                    OnboardingView { hasShownOnboarding = true }
-                        .interactiveDismissDisabled()
+                .appUpdateGate()
+                #if os(iOS)
+                .fullScreenCover(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
+                }
+                #else
+                .sheet(item: $onboardingFlow) { step in
+                    onboardingSheetContent(for: step)
+                }
+                #endif
+                .onChange(of: onboardingFlow) { old, new in
+                    AppUpdateChecker.shared.suppressOptionalAlert = (new != nil)
+                    #if DEBUG
+                    NSLog("🟡 onboardingFlow: \(old.map { $0.rawValue } ?? "nil") → \(new.map { $0.rawValue } ?? "nil")")
+                    #endif
                 }
                 .overlay(alignment: .top) {
                     if let shareToast {
@@ -59,7 +78,7 @@ struct ExpensoApp: App {
                 .alert("Premium が終了しました", isPresented: $premiumExpiredAlertShown) {
                     Button("OK", role: .cancel) {}
                 } message: {
-                    Text("自分が作成した共有とシートロックを解除しました。")
+                    Text("自分が作成した共有を解除しました。設定済みのシートロックはそのまま残ります。")
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoSaveFailed)) { note in
                     let message = (note.userInfo?["message"] as? String) ?? "保存に失敗しました"
@@ -70,6 +89,20 @@ struct ExpensoApp: App {
                     showToast(message)
                 }
                 .task {
+                    // オンボーディングは初回起動時のみ表示。
+                    if onboardingFlow == nil, !hasShownOnboarding {
+                        onboardingFlow = .welcome
+                    }
+                    // オンボーディング表示中は任意更新アラートを抑制
+                    // (alert が fullScreenCover を蹴り出して閉じてしまうのを防ぐ)
+                    AppUpdateChecker.shared.suppressOptionalAlert = (onboardingFlow != nil)
+                    #if DEBUG
+                    // CloudKit Production デプロイ準備: Development スキーマを一括生成する。
+                    // `EXPENSO_INIT_CK_SCHEMA=1` を付けて iCloud サインイン済みで一度だけ起動。
+                    if ProcessInfo.processInfo.environment["EXPENSO_INIT_CK_SCHEMA"] == "1" {
+                        persistenceController.initializeCloudKitSchemaForDeploy()
+                    }
+                    #endif
                     await PurchaseManager.shared.refreshEntitlements()
                     #if DEBUG
                     if ProcessInfo.processInfo.environment["EXPENSO_DEBUG_REVOKE"] == "1" {
@@ -78,7 +111,9 @@ struct ExpensoApp: App {
                     #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
-                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)
+                    // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)。
+                    // オンボーディング/プロフィール編集を表示中はダイアログが sheet を蹴り出すので延期。
+                    await waitUntilOnboardingFlowEnds()
                     await UserProfileStore.shared.refreshAppleIDName()
                     let ctx = persistenceController.container.viewContext
                     if BuildInfo.profileFeatureEnabled {
@@ -95,6 +130,8 @@ struct ExpensoApp: App {
                     // (= 起動時の auto upload は Public DB の quota を消費するので削除。
                     //  upload は ProfileEditView での明示保存時のみ実行する)
                     await UserProfileStore.shared.refreshOwnPublicProfile()
+                    // 自分のシート数を Public プロフィールに publish (前回から変化した時のみ)
+                    await UserProfileStore.shared.publishSheetCountIfChanged()
                     await UserProfileStore.shared.prefetchAllProfileURNs(in: ctx)
                     // CKShare の participant nameComponents を PP にハイドレートして
                     // Apple ID 名がそのまま表示されるようにする (iCloud Extended Share Access)
@@ -106,6 +143,11 @@ struct ExpensoApp: App {
                     RecurringExpenseGenerator.generateAll(in: ctx)
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
                     SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
+                    // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)。
+                    // 同上、通知許可ダイアログも onboarding 終了後に。
+                    await waitUntilOnboardingFlowEnds()
+                    await SplitNotificationManager.shared.requestAuthorizationIfNeeded()
+                    SplitNotificationManager.shared.processChanges(in: ctx)
                 }
                 // CloudKit が新しいデータを取り込んだら ParticipantProfile から再 hydrate。
                 // 通知は viewContext へのマージ完了より早く飛ぶことがあるため、
@@ -123,12 +165,16 @@ struct ExpensoApp: App {
                         // 旧 canonical (email:...) → URN 移行も remote change で再実行
                         // (CKShare メタデータが遅延ロードされた後に走らせる)
                         UserProfileStore.shared.migrateLegacyPayerProfileIDs(in: ctx)
+                        // 他メンバーが追加した「自分への割り勘」を検出して通知
+                        SplitNotificationManager.shared.processChanges(in: ctx)
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {
                     case .active:
                         Task { await PurchaseManager.shared.refreshEntitlements() }
+                        // iCloud サインイン状態を再取得 (設定でサインインして戻った場合に追従)
+                        persistenceController.refreshAccountStatus()
                         let ctx = persistenceController.container.viewContext
                         RecurringExpenseGenerator.generateAll(in: ctx)
                         Task { @MainActor in
@@ -137,15 +183,14 @@ struct ExpensoApp: App {
                             }
                             // 同 Apple ID の他デバイスで編集された自分のプロフィールを取り込む
                             await UserProfileStore.shared.refreshOwnPublicProfile()
+                            // 前面化のたびにシート数が変わっていれば publish
+                            await UserProfileStore.shared.publishSheetCountIfChanged()
                             if BuildInfo.profileFeatureEnabled {
                                 UserProfileStore.shared.hydrateFromParticipantProfile(in: ctx)
                                 UserProfileStore.shared.propagateProfileToAllSheets(in: ctx)
                             }
                         }
                     case .background:
-                        // バックグラウンドに移る前に次回の BGAppRefreshTask を予約。
-                        // iOS は背景時にしか走らせないので、この瞬間がチャンス。
-                        AppDelegate.scheduleAppRefresh()
                         // バックグラウンドに移ったらシートロックを全て再要求 (= 次回フォアグラウンドで再入力)
                         Task { @MainActor in
                             SheetLockManager.shared.lockAll()
@@ -169,6 +214,43 @@ struct ExpensoApp: App {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation { shareToast = nil }
         }
+    }
+
+    /// オンボーディング/プロフィール編集 sheet が閉じるまで待機。
+    /// Apple ID 名・通知許可など、システムダイアログを伴う処理は
+    /// オンボーディング表示中に走ると sheet を蹴り出してしまうため、これで保留する。
+    @MainActor
+    private func waitUntilOnboardingFlowEnds() async {
+        while onboardingFlow != nil {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+    }
+
+    /// オンボーディング flow に応じた sheet コンテンツ。
+    /// body の型推論コストを下げるため関数に分離している。
+    /// 注: fullScreenCover の content は parent の environment を継承しないので、
+    /// `managedObjectContext` / `locale` を明示的に渡す必要がある (= ProfileEditView が
+    /// 内部で `@Environment(\.managedObjectContext)` を使うため、欠落すると CoreData クラッシュ)。
+    @ViewBuilder
+    private func onboardingSheetContent(for step: OnboardingFlow) -> some View {
+        Group {
+            switch step {
+            case .welcome:
+                OnboardingView {
+                    hasShownOnboarding = true
+                    // sheet の dismiss アニメーション完了を待ってからプロフィール編集を表示。
+                    onboardingFlow = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        onboardingFlow = .profile
+                    }
+                }
+                .interactiveDismissDisabled()
+            case .profile:
+                ProfileEditView()
+            }
+        }
+        .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        .environment(\.locale, Locale(identifier: "ja_JP"))
     }
 
     /// 全シートの ParticipantProfile.recordName (= 共有相手の URN を含む) を集めて

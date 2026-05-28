@@ -104,7 +104,7 @@ struct BeneficiaryPickerView: View {
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("完了") { dismiss() }
+                Button("完了", systemImage: "checkmark") { dismiss() }
             }
         }
     }

@@ -47,11 +47,13 @@ struct SheetListView: View {
         animation: .default
     ) private var sheets: FetchedResults<ExpenseSheet>
 
+    @StateObject private var profile = UserProfileStore.shared
     @State private var showingAddSheet = false
     @State private var showingSettings = false
     @State private var showingPaywall = false
     @State private var showSyncWaitingAlert = false
     @State private var showOfflineAlert = false
+    @State private var showNotSignedInAlert = false
     @State private var path: [NSManagedObjectID] = []
     @State private var didRestorePath = false
     @State private var searchText: String = ""
@@ -78,6 +80,32 @@ struct SheetListView: View {
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
     @ObservedObject private var lockManager = SheetLockManager.shared
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
+
+    /// topBarLeading に置く設定ボタン。歯車ではなく自分のプロフィール
+    /// アバターを表示し、タップで SettingsView を開く。
+    /// (SettingsView 自身が NavigationStack を持つため sheet 提示にする —
+    /// NavigationLink で push すると nested NavigationStack になり即 pop される)
+    @ViewBuilder
+    private var settingsAvatarButton: some View {
+        Button {
+            showingSettings = true
+        } label: {
+            AvatarView(
+                photoData: profile.photoData,
+                displayName: profile.resolvedDisplayName,
+                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                size: 28
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("設定")
+        // 長押し時の Large Content Viewer に「設定」を表示する。
+        // (アバターだけだと何のボタンか分かりづらいので、AX 拡大表示で
+        //  ラベルが大きく出るようにする)
+        .accessibilityShowsLargeContentViewer {
+            Label("設定", systemImage: "gearshape")
+        }
+    }
 
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespaces)
@@ -112,9 +140,33 @@ struct SheetListView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 } else {
+                    let activeSheets = sheets.filter { !$0.archived }
+                    let archivedSheets = sheets.filter { $0.archived }
                     List {
-                        ForEach(sheets) { sheet in
-                            sheetListRow(sheet)
+                        if activeSheets.isEmpty {
+                            // 全件アーカイブ済みの場合のヒント
+                            ContentUnavailableView(
+                                "アクティブなシートがありません",
+                                systemImage: "archivebox",
+                                description: Text("下の「アーカイブ済み」セクションから戻すか、新しいシートを作成してください。")
+                            )
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        } else {
+                            ForEach(activeSheets) { sheet in
+                                sheetListRow(sheet)
+                            }
+                        }
+                        if !archivedSheets.isEmpty {
+                            Section {
+                                ForEach(archivedSheets) { sheet in
+                                    sheetListRow(sheet)
+                                }
+                            } header: {
+                                Label("アーカイブ済み", systemImage: "archivebox")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
@@ -144,20 +196,10 @@ struct SheetListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // SettingsView 自身が NavigationStack を持つため、ここを
-                    // NavigationLink で push すると nested NavigationStack に
-                    // なって 1 回目の push が即座に pop される。
-                    // sheet 提示なら SettingsView の内側 NavigationStack が
-                    // 独立したコンテキストになり問題なく動く。
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+                    settingsAvatarButton
                 }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                ToolbarSpacer(.fixed, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .confirm) {
                         tryShowAddSheet()
                     } label: {
@@ -191,7 +233,7 @@ struct SheetListView: View {
                     subScreenContent(screen)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("閉じる") { subScreen = nil }
+                                Button("閉じる", systemImage: "xmark") { subScreen = nil }
                             }
                         }
                 }
@@ -211,6 +253,11 @@ struct SheetListView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("シートの新規作成には iCloud との同期が必要です。Wi-Fi またはモバイル通信に接続してから再度お試しください。")
+            }
+            .alert("iCloud にサインインしてください", isPresented: $showNotSignedInAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("シートの作成には iCloud へのサインインが必要です。「設定」アプリの最上部から Apple アカウントにサインインしてください。")
             }
             .onAppear {
                 applyDemoLaunch()
@@ -568,9 +615,7 @@ struct SheetListView: View {
                     income: total.income,
                     currency: $searchTotalCurrency,
                     period: $searchPeriod,
-                    count: total.count,
-                    query: trimmedQuery,
-                    mixed: total.mixed
+                    count: total.count
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 .listRowSeparator(.hidden)
@@ -691,6 +736,9 @@ struct SheetListView: View {
         switch PurchaseManager.sheetCreationGate() {
         case .allowed:
             showingAddSheet = true
+        case .notSignedIn:
+            showNotSignedInAlert = true
+            Haptics.warning()
         case .waitingForSync:
             showSyncWaitingAlert = true
             Haptics.warning()
@@ -732,9 +780,9 @@ private struct SearchTotalCard: View {
     /// 期間フィルタ。カードのメニューで変更できる。
     @Binding var period: SheetDetailView.Period
     let count: Int
-    let query: String
-    let mixed: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Reduce Motion 時は数値ロールとアニメーションを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func doubleValue(_ d: Decimal) -> Double {
         NSDecimalNumber(decimal: d).doubleValue
@@ -743,13 +791,15 @@ private struct SearchTotalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 上段: 検索アイコン + 見出し + 通貨メニュー
+            // (SummaryCard の「シートアイコン + 名前」行に対応)
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.accentColor.gradient)
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.white)
-                        .font(.callout.weight(.semibold))
+                        // SummaryCard のシンボルと同じ固定サイズ。
+                        .font(.system(size: 20, weight: .semibold))
                 }
                 .frame(width: 40, height: 40)
                 Text("検索結果")
@@ -759,16 +809,13 @@ private struct SearchTotalCard: View {
                 currencyMenu
             }
 
-            // 検索クエリ件数 pill + 期間メニュー
+            // 期間ピッカー + 件数 (SummaryCard と同じ: 期間メニュー左、件数右)
             HStack(spacing: 8) {
-                Text(query.isEmpty ? "すべて · \(count)件" : "「\(query)」 · \(count)件")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                    .foregroundStyle(Color.accentColor)
-                periodMenu
+                periodMenuLabel
                 Spacer()
+                Text("\(count)件")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
 
             // 大型の支出合計 (SummaryCard と同じ rounded font + 数値トランジション)
@@ -777,8 +824,8 @@ private struct SearchTotalCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(expense)))
-                .animation(.snappy, value: expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
+                .animation(reduceMotion ? nil : .snappy, value: expense)
 
             // 「+収入 | -支出」行 (SummaryCard と同じく AX サイズでは縦積み)
             let ieLayout: AnyLayout = dynamicTypeSize.isAccessibilitySize
@@ -786,18 +833,18 @@ private struct SearchTotalCard: View {
                 : AnyLayout(HStackLayout(spacing: 12))
             ieLayout {
                 Text("+ \(CurrencyCatalog.format(income, code: currency))")
-                    .contentTransition(.numericText(value: doubleValue(income)))
+                    .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(income)))
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text("|").foregroundStyle(.tertiary)
                 }
                 Text("- \(CurrencyCatalog.format(expense, code: currency))")
-                    .contentTransition(.numericText(value: doubleValue(expense)))
+                    .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
             }
             .font(.subheadline.monospacedDigit().weight(.medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.snappy, value: income)
-            .animation(.snappy, value: expense)
+            .animation(reduceMotion ? nil : .snappy, value: income)
+            .animation(reduceMotion ? nil : .snappy, value: expense)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -807,7 +854,8 @@ private struct SearchTotalCard: View {
         )
     }
 
-    /// 表示通貨を切り替えるメニュー。
+    /// 表示通貨を切り替えるメニュー。SummaryCard の期間ピッカーと同じ控えめな
+    /// テキスト + chevron スタイル (pill なし) に統一する。
     private var currencyMenu: some View {
         Menu {
             Picker("通貨", selection: $currency) {
@@ -822,15 +870,21 @@ private struct SearchTotalCard: View {
                     .font(.caption2)
             }
             .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(.secondary)
         }
     }
 
-    /// 期間を切り替えるメニュー。絞り込み中 (全期間以外) は色付きで強調。
-    private var periodMenu: some View {
+    /// 期間ピッカー。SummaryCard と同一の見た目にするため、iOS は
+    /// `PeriodMenuControl` (ソースを残したまま展開する UIControl ラッパー) を使う。
+    @ViewBuilder
+    private var periodMenuLabel: some View {
+        #if os(iOS)
+        PeriodMenuControl(
+            period: $period,
+            periodLabel: period.headerLabel
+        )
+        .fixedSize()
+        #else
         Menu {
             Picker("期間", selection: $period) {
                 ForEach(SheetDetailView.Period.allCases) { p in
@@ -838,21 +892,16 @@ private struct SearchTotalCard: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: period.isFiltering
-                      ? "line.3.horizontal.decrease.circle.fill"
-                      : "calendar")
-                    .font(.caption2)
-                Text(period.label)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
+            HStack(spacing: 6) {
+                Text(period.headerLabel)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.secondary)
             }
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.accentColor.opacity(period.isFiltering ? 0.28 : 0.15)))
-            .foregroundStyle(Color.accentColor)
         }
+        #endif
     }
 }
 

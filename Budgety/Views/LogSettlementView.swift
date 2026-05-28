@@ -83,12 +83,27 @@ struct LogSettlementView: View {
                       seen.insert(rn).inserted else { continue }
                 ids.append(rn)
             }
+            // バーチャルメンバーは CKShare に出ないので PP から追加する。
+            // (SettlementCalculator の memberOrder 構築と挙動を揃える)
+            let virtualPPs = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            for pp in virtualPPs.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName,
+                      UserProfileStore.isVirtualRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                ids.append(rn)
+            }
         } else {
-            // CKShare 未ロード時のみ PP フォールバック
+            // CKShare 未ロード時はバーチャルメンバーのみ PP から追加する。
+            // 非バーチャルの PP は「共有していたが抜けた参加者」の残骸であることが
+            // あるため含めない (SettlementCalculator と挙動を揃える)。
             let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-                guard let rn = pp.recordName, !rn.isEmpty,
-                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+            for pp in pps.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName,
+                      UserProfileStore.isVirtualRecordName(rn),
                       seen.insert(rn).inserted else { continue }
                 ids.append(rn)
             }
@@ -228,11 +243,25 @@ struct LogSettlementView: View {
         target.fromProfileID = fromProfileID
         target.toProfileID = toProfileID
         target.amount = NSDecimalNumber(decimal: amount)
-        target.currencyCode = currencyCode.isEmpty
+        let finalCurrency = currencyCode.isEmpty
             ? sheet.resolvedDefaultCurrencyCode
             : currencyCode
+        target.currencyCode = finalCurrency
         target.date = date
         target.note = note
+
+        // FX スナップショットを記録時に保存。為替変動で「精算済みの送金が
+        // 再び送金プランに現れる」のを防ぐため、target 通貨建ての値を凍結する。
+        let sheetTarget = sheet.resolvedDefaultCurrencyCode
+        if let converted = FXRatesService.shared.convert(amount, from: finalCurrency, to: sheetTarget) {
+            target.fxConvertedAmountDecimal = converted
+            target.fxTargetCurrency = sheetTarget
+        } else {
+            // 換算できなかった (= FX レート未取得) 場合は snapshot を持たない。
+            // SettlementCalculator は fallback で現行 FX を使う (= 旧挙動)。
+            target.fxConvertedAmountDecimal = nil
+            target.fxTargetCurrency = nil
+        }
 
         PersistenceController.shared.save()
         dismiss()

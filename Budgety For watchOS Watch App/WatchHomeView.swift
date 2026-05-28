@@ -11,6 +11,9 @@
 
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct WatchHomeView: View {
     @Environment(\.managedObjectContext) private var ctx
@@ -25,6 +28,9 @@ struct WatchHomeView: View {
     private var sheets: FetchedResults<ExpenseSheet>
 
     @State private var path: [NSManagedObjectID] = []
+    /// 前回開いていたシート (= 次回起動時にそこへ自動遷移)。
+    @AppStorage("watchLastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
+    @State private var didRestorePath = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -36,16 +42,32 @@ struct WatchHomeView: View {
                         description: Text("iPhone でシートを作成すると同期されます。")
                     )
                 } else {
+                    let activeSheets = sheets.filter { !$0.archived }
+                    let archivedSheets = sheets.filter { $0.archived }
                     List {
-                        ForEach(sheets, id: \.objectID) { sheet in
+                        ForEach(activeSheets, id: \.objectID) { sheet in
                             NavigationLink(value: sheet.objectID) {
                                 sheetRow(sheet)
+                            }
+                        }
+                        if !archivedSheets.isEmpty {
+                            Section("アーカイブ済み") {
+                                ForEach(archivedSheets, id: \.objectID) { sheet in
+                                    NavigationLink(value: sheet.objectID) {
+                                        sheetRow(sheet)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
             .navigationTitle("シート")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WatchProfileAvatar()
+                }
+            }
             .navigationDestination(for: NSManagedObjectID.self) { id in
                 if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
                     WatchLockedSheetGate(sheet: sheet) {
@@ -54,7 +76,11 @@ struct WatchHomeView: View {
                 }
             }
         }
+        .onAppear { restoreLastOpenedSheetIfNeeded() }
+        .onChange(of: sheets.count) { _, _ in restoreLastOpenedSheetIfNeeded() }
         .onChange(of: path) { oldPath, newPath in
+            // 末尾のシート URI を覚えておき、次回起動時に復元する。
+            lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
             // 一覧に戻った (= path から外れた) シートを再ロックする。
             // pop アニメ完了後に行い、その間に開き直していたらスキップ
             // (表示中のシートを誤ってロックしないため)。
@@ -68,6 +94,24 @@ struct WatchHomeView: View {
                 }
             }
         }
+    }
+
+    /// 前回開いていたシートへ起動時に 1 度だけ自動遷移する (iOS と同じ挙動)。
+    /// シートがまだ同期されていなければ sheets.count の変化で再試行する。
+    private func restoreLastOpenedSheetIfNeeded() {
+        guard !didRestorePath else { return }
+        guard !lastOpenedSheetURI.isEmpty, sheets.first != nil else { return }
+        guard let coord = ctx.persistentStoreCoordinator,
+              let url = URL(string: lastOpenedSheetURI),
+              let objectID = coord.managedObjectID(forURIRepresentation: url),
+              let _ = try? ctx.existingObject(with: objectID) as? ExpenseSheet
+        else {
+            // URI 不正 / 削除済 → 以後再試行しない
+            didRestorePath = true
+            return
+        }
+        path = [objectID]
+        didRestorePath = true
     }
 
     /// シート一覧の 1 行 (アイコン + 名前 + 今月合計 + ロック表示)。
@@ -171,50 +215,17 @@ private struct WatchSheetPage: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                heroCard
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(.init(top: 0, leading: 0, bottom: 4, trailing: 0))
-            }
-            Section {
-                addButton
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(.init(top: 0, leading: 0, bottom: 4, trailing: 0))
-            }
-            if !expenses.isEmpty {
-                Section {
-                    ForEach(Array(expenses.prefix(6)), id: \.objectID) { expense in
-                        NavigationLink {
-                            WatchExpenseDetailView(expense: expense, sheet: sheet)
-                        } label: {
-                            recentRow(expense)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.white.opacity(0.12))
-                        )
-                        .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                pendingDeleteExpense = expense
-                            } label: {
-                                Label("削除", systemImage: "trash")
-                            }
-                        }
-                    }
-                } header: {
-                    Text("最近")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
+        // タブ 1: サマリー (今月合計 + 「追加」ボタン)
+        // タブ 2: 取引リスト (支出 + 収入。セクションヘッダーは無し)
+        // .verticalPage で Digital Crown / 縦スワイプで切替。
+        TabView {
+            summaryTab.tag(0)
+            transactionsTab.tag(1)
         }
-        .listStyle(.plain)
+        .tabViewStyle(.verticalPage)
         .containerBackground(sheet.tint.gradient, for: .navigation)
         .navigationTitle {
-            (Text(Image(systemName: sheet.displaySymbol)) + Text(" \(sheet.displayName)"))
+            Text(sheet.displayName)
                 .foregroundStyle(sheet.tint)
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -249,21 +260,72 @@ private struct WatchSheetPage: View {
         WKInterfaceDevice.current().play(.success)
     }
 
+    // MARK: - Tabs
+
+    /// 1 ページ目: 今月合計 + 追加ボタン。
+    @ViewBuilder
+    private var summaryTab: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                heroCard
+                addButton
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+        }
+    }
+
+    /// 2 ページ目: 全取引 (支出 + 収入)。セクションヘッダーは無し。
+    @ViewBuilder
+    private var transactionsTab: some View {
+        if expenses.isEmpty {
+            ContentUnavailableView(
+                "まだ記録がありません",
+                systemImage: "tray",
+                description: Text("サマリー画面の「追加」から記録できます。")
+            )
+        } else {
+            List {
+                ForEach(Array(expenses), id: \.objectID) { expense in
+                    NavigationLink {
+                        WatchExpenseDetailView(expense: expense, sheet: sheet)
+                    } label: {
+                        recentRow(expense)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(.white.opacity(0.12))
+                    )
+                    .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            pendingDeleteExpense = expense
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+
     private var heroCard: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: sheet.displaySymbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text("今日")
+                Text("今月")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            Text(formatYen(todayTotal))
+            Text(formatYen(monthTotal))
                 .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .animation(.snappy, value: todayTotal)
+                .animation(.snappy, value: monthTotal)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if let p = budgetProgress {
@@ -327,31 +389,78 @@ private struct WatchSheetPage: View {
 
     private func recentRow(_ e: Expense) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: e.category?.symbol ?? "yensign.circle.fill")
+            // iOS と同じ resolver を使う。カテゴリが無い時は list.bullet +
+            // 灰色になり、無カテゴリでも一貫した見た目に。
+            Image(systemName: e.categorySymbol)
                 .foregroundStyle(.white)
-                .font(.body.weight(.semibold))
+                // Dynamic Type で巨大化しないよう固定サイズに。
+                .font(.system(size: 16, weight: .semibold))
                 .frame(width: 32, height: 32)
                 .background(
-                    Circle().fill(Color(hex: e.category?.colorHex ?? "#FFFFFF") ?? .white)
+                    Circle().fill(e.categoryTint.gradient)
                 )
-            Text(displayTitle(e))
-                .font(.caption2)
-                .foregroundStyle(.white)
-                .lineLimit(1)
+            // タイトルと金額を縦並びに (狭い画面で折り返しが起きないよう)。
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle(e))
+                    .font(.caption2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                // 支出は "-", 収入は "+" を符号として表示。
+                Text(e.formattedSignedAmount)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
             Spacer()
-            Text(formatYen(e.amountDecimal))
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
         }
+        .padding(.horizontal, 8)
     }
 
+    /// 表示用タイトル。title が空ならカテゴリ名 (= iOS と同じ `categoryDisplayName`
+    /// を使うので、カテゴリも無ければ「カテゴリなし」になる)。
     private func displayTitle(_ e: Expense) -> String {
         if let t = e.title, !t.isEmpty { return t }
-        if let c = e.category, let n = c.name, !n.isEmpty { return n }
-        return "支出"
+        return e.categoryDisplayName
     }
 
     private func formatYen(_ d: Decimal) -> String {
         CurrencyCatalog.format(d, code: sheet.resolvedDefaultCurrencyCode)
+    }
+}
+
+// MARK: - Profile Avatar
+
+/// 自分のプロフィールアバター。写真があれば写真、無ければ配色 + 頭文字。
+/// 写真は Public DB から取得した photoData を使う (起動時に refreshOwnPublicProfile)。
+private struct WatchProfileAvatar: View {
+    @ObservedObject private var profile = UserProfileStore.shared
+    var size: CGFloat = 28
+
+    var body: some View {
+        let name = profile.resolvedDisplayName
+        let color = Color(hex: profile.avatarBgColorHex ?? "#5B8DEF") ?? .blue
+        #if canImport(UIKit)
+        if let data = profile.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            initialAvatar(name: name, color: color)
+        }
+        #else
+        initialAvatar(name: name, color: color)
+        #endif
+    }
+
+    private func initialAvatar(name: String, color: Color) -> some View {
+        ZStack {
+            Circle().fill(color.gradient)
+            Text(String(name.prefix(1)))
+                .font(.system(size: size * 0.45, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
     }
 }

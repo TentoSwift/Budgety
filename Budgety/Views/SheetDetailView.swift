@@ -6,6 +6,7 @@
 import SwiftUI
 import CoreData
 import CloudKit
+import UIKit
 import CustomPicker
 #if os(iOS)
 import CustomNavigationTitle
@@ -41,6 +42,28 @@ struct SheetDetailView: View {
         }
         /// 期間フィルタが有効か (全期間以外なら絞り込み中)。
         var isFiltering: Bool { self != .all }
+
+        /// サマリカードのヘッダー表示 ("2026年11月" / "先月の年月" / "2026年" / "全期間")。
+        /// SummaryCard / 検索結果カードの期間ピッカーで共通利用する。
+        var headerLabel: String {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "ja_JP")
+            df.dateFormat = "yyyy年M月"
+            switch self {
+            case .thisMonth:
+                return df.string(from: .now)
+            case .lastMonth:
+                let last = Calendar.current.date(byAdding: .month, value: -1, to: .now) ?? .now
+                return df.string(from: last)
+            case .thisYear:
+                let yf = DateFormatter()
+                yf.locale = Locale(identifier: "ja_JP")
+                yf.dateFormat = "yyyy年"
+                return yf.string(from: .now)
+            case .all:
+                return "全期間"
+            }
+        }
 
         /// 指定日がこの期間に含まれるか。`.all` は常に true。
         func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> Bool {
@@ -104,6 +127,9 @@ struct SheetDetailView: View {
     /// 検索専用の期間。普段の表示の `period` とは独立で、検索開始時は常に全期間。
     @State private var searchPeriod: Period = .all
     @State private var selectedCategory: ExpenseCategory?
+    /// 「カテゴリなし」(= category == nil の支出) でフィルタ中か。
+    /// `selectedCategory` と相互排他。
+    @State private var filterUncategorized: Bool = false
     /// 支払い者で絞り込む時の profileID（membersStrip のタップで設定）。nil = 全員。
     @State private var selectedPayerID: String?
     @State private var exportPaywall: Bool = false
@@ -115,6 +141,8 @@ struct SheetDetailView: View {
     /// ロック状態をツールバーボタンに反映するため observe する。
     @StateObject private var lockManager = SheetLockManager.shared
     @Environment(\.dismiss) private var dismiss
+    /// 「視差効果を減らす」(Reduce Motion) が ON ならアニメーションを抑制する。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var demoOpenStats: Bool = false
     @State private var demoOpenChat: Bool = false
     /// AddExpenseView から「定期項目を編集」が押された時にセットされる。
@@ -135,7 +163,11 @@ struct SheetDetailView: View {
         self.record = record
         self.isPreview = isPreview
         self._allExpenses = FetchRequest<Expense>(
-            sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
+            // date が同じ時の並びが不安定にならないよう createdAt を tiebreaker に使う。
+            sortDescriptors: [
+                NSSortDescriptor(keyPath: \Expense.date, ascending: false),
+                NSSortDescriptor(keyPath: \Expense.createdAt, ascending: false),
+            ],
             predicate: NSPredicate(format: "sheet == %@", record),
             animation: .default
         )
@@ -184,6 +216,8 @@ struct SheetDetailView: View {
         var list = Array(allExpenses)
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
+        } else if filterUncategorized {
+            list = list.filter { $0.category == nil }
         }
         if let payerID = selectedPayerID {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
@@ -255,6 +289,9 @@ struct SheetDetailView: View {
                 }
         }
         .listStyle(.plain)
+        // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
+        // Reduce Motion 時はアニメーションしない。
+        .animation(reduceMotion ? nil : .default, value: filteredExpenses.map(\.objectID))
         #if os(iOS)
         // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
         .scrollAwareTitle(record.displayName)
@@ -279,7 +316,14 @@ struct SheetDetailView: View {
         }
         .toolbar {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            ToolbarSpacer(.fixed, placement: .bottomBar)
+            // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
+            // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
+            // iPhone は検索バーが bottomBar に残り `+` を右へ押すので fixed のまま。
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+            } else {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
+            }
             ToolbarItem(placement: .bottomBar) {
                 Button(role: .confirm) {
                     showingAddExpense = true
@@ -351,11 +395,21 @@ struct SheetDetailView: View {
                     } label: {
                         Label("カテゴリを管理", systemImage: "tag.fill")
                     }
+                    NavigationLink {
+                        VirtualMemberListView(record: record)
+                            .sheetLockCover(record)
+                    } label: {
+                        Label("バーチャルメンバー", systemImage: "person.crop.circle.badge.plus")
+                    }
                     // ロック設定はオーナーのみ。参加者 (= 非オーナー) はロック解除画面で
                     // パスワードを入れて閲覧することしかできない。
                     if record.isOwnedByCurrentUser {
                         Button {
-                            if PurchaseManager.shared.isPremium {
+                            // 既存のロックの編集 / 解除は Premium 解除後も許可する。
+                            // (Premium 無いから外せないバグの修正)。
+                            // 新規ロックの追加だけは Premium 必須。
+                            if PurchaseManager.shared.isPremium
+                                || SheetLockManager.shared.hasPassword(for: record) {
                                 showingSetPassword = true
                             } else {
                                 lockPaywall = true
@@ -407,7 +461,7 @@ struct SheetDetailView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis")
                 }
             }
         }
@@ -530,13 +584,14 @@ struct SheetDetailView: View {
 
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
-        selectedCategory != nil || selectedPayerID != nil || (isSearchActive && searchPeriod.isFiltering)
+        selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+            || (isSearchActive && searchPeriod.isFiltering)
     }
 
     private var filterDescription: String {
         var parts: [String] = []
         if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
-        if selectedCategory != nil { parts.append("カテゴリ") }
+        if selectedCategory != nil || filterUncategorized { parts.append("カテゴリ") }
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
@@ -557,12 +612,18 @@ struct SheetDetailView: View {
             } actions: {
                 Button("フィルタをオフにする") {
                     selectedCategory = nil
+                    filterUncategorized = false
                     selectedPayerID = nil
                     searchPeriod = .all
                 }
+                .buttonStyle(.plain)
             }
+            .listSectionSeparator(.hidden)
+            .listRowSeparator(.hidden)
         } else {
             ContentUnavailableView.search(text: searchText)
+                .listSectionSeparator(.hidden)
+                .listRowSeparator(.hidden)
         }
     }
 
@@ -583,6 +644,8 @@ struct SheetDetailView: View {
                                 onDuplicate: { duplicate(expense) },
                                 onDelete: { deleteExpense(expense) }
                             )
+                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                            .transition(.identity)
                         }
                 } header: {
                     DateHeaderView(label: section.dayLabel,
@@ -594,8 +657,11 @@ struct SheetDetailView: View {
     }
 
     /// Mac の `membersStrip` と同じ、シートに参加しているメンバーのアバター + 名前一覧。
+    /// 現在のメンバー (= 自分 + CKShare 受諾済み参加者 + アーカイブされていない
+    /// バーチャル) のみ表示する。退室済み参加者やアーカイブ済みバーチャルは
+    /// 表示しない (過去の支出には残るが、フィルタには出さない)。
     private var membersStrip: some View {
-        let ids = record.allMemberProfileIDs()
+        let ids = record.acceptedMemberProfileIDs()
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(ids, id: \.self) { id in
@@ -634,7 +700,14 @@ struct SheetDetailView: View {
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
     /// CKShare 未ロード時は PP の存在で判定。
+    /// 共有していなくてもバーチャルメンバーが居れば「他メンバーあり」扱いにする
+    /// (= メンバーフィルタ・支払者表示を出すため)。
     private var hasAcceptedOtherMembers: Bool {
+        let profilesAll = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+        let hasVirtual = profilesAll.contains {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }
+        if hasVirtual { return true }
         if let share = ShareCoordinator.shared.existingShare(for: record) {
             // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
@@ -645,19 +718,21 @@ struct SheetDetailView: View {
                 return !selfIDs.contains(rn)
             }
         }
-        guard let profiles = record.participantProfiles as? Set<ParticipantProfile> else { return false }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
-        return profiles.contains { p in
+        return profilesAll.contains { p in
             let rn = p.recordName ?? ""
             return !rn.isEmpty && rn != myRN
         }
     }
 
     private var categoryPills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let isAllSelected = selectedCategory == nil && !filterUncategorized
+        let uncategorizedTint = Color.gray
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Button {
                     selectedCategory = nil
+                    filterUncategorized = false
                 } label: {
                     Text("すべて")
                         .font(.caption.weight(.semibold))
@@ -665,16 +740,21 @@ struct SheetDetailView: View {
                         .padding(.vertical, 6)
                         .background(
                             Capsule()
-                                .fill(selectedCategory == nil ? record.tint : Color.platformSecondarySystemFill)
+                                .fill(isAllSelected ? record.tint : Color.platformSecondarySystemFill)
                         )
                         // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(selectedCategory == nil ? Color.platformSystemBackground : .primary)
+                        .foregroundStyle(isAllSelected ? Color.platformSystemBackground : .primary)
                 }
                 .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
                     Button {
-                        selectedCategory = (selectedCategory?.objectID == cat.objectID) ? nil : cat
+                        if selectedCategory?.objectID == cat.objectID {
+                            selectedCategory = nil
+                        } else {
+                            selectedCategory = cat
+                            filterUncategorized = false
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: cat.displaySymbol)
@@ -692,8 +772,35 @@ struct SheetDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                // カテゴリなしの支出が 1 件でもあれば「カテゴリなし」ピルを出す。
+                if hasUncategorizedExpenses {
+                    Button {
+                        filterUncategorized.toggle()
+                        if filterUncategorized { selectedCategory = nil }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "list.bullet")
+                            Text("カテゴリなし")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(filterUncategorized ? uncategorizedTint : Color.platformSecondarySystemFill)
+                        )
+                        .foregroundStyle(filterUncategorized ? Color.platformSystemBackground : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
+    }
+
+    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。
+    private var hasUncategorizedExpenses: Bool {
+        allExpenses.contains { $0.category == nil }
     }
 
     // MARK: - Helpers
@@ -710,15 +817,21 @@ struct SheetDetailView: View {
         let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
             cal.startOfDay(for: exp.date ?? .now)
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy年M月d日 (E)"
+        // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
+        let currentYear = cal.component(.year, from: .now)
+        let shortFormatter = DateFormatter()
+        shortFormatter.locale = Locale(identifier: "ja_JP")
+        shortFormatter.dateFormat = "M月d日 (E)"
+        let longFormatter = DateFormatter()
+        longFormatter.locale = Locale(identifier: "ja_JP")
+        longFormatter.dateFormat = "yyyy年M月d日 (E)"
 
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
 
         let sections = dict.map { (day, items) -> DaySection in
-            let label = formatter.string(from: day)
+            let year = cal.component(.year, from: day)
+            let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
             var net: Decimal = 0
             for e in items {
                 let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
@@ -788,6 +901,8 @@ struct SheetDetailView: View {
         copy.categoryRaw = expense.categoryRaw
         copy.paidBy = nil
         copy.payerProfileID = expense.payerProfileID
+        // 複製は割り勘を引き継がない (支払者のみの負担にする)。
+        copy.beneficiaryProfileIDs = expense.payerProfileID
         copy.date = .now
         copy.note = expense.note
         copy.createdAt = .now
@@ -798,6 +913,8 @@ struct SheetDetailView: View {
            cat.objectID.persistentStore == parentStore {
             copy.category = cat
         }
+        // FX スナップショット (複製時の current FX を凍結)
+        copy.captureFXSnapshot()
         pc.save()
         Haptics.success()
     }
@@ -818,6 +935,8 @@ private struct SummaryCard: View {
     let searchQuery: String
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Reduce Motion 時は数値ロール (numericText) とアニメーションを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 子 Expense の編集 (amount 変更等) は ExpenseSheet の objectWillChange を発火させないため、
     /// `record.expenses` 経由で集計すると view が再描画されない。
@@ -839,7 +958,10 @@ private struct SummaryCard: View {
         self.selectedPayerID = selectedPayerID
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
-            sortDescriptors: [NSSortDescriptor(keyPath: \Expense.date, ascending: false)],
+            sortDescriptors: [
+                NSSortDescriptor(keyPath: \Expense.date, ascending: false),
+                NSSortDescriptor(keyPath: \Expense.createdAt, ascending: false),
+            ],
             predicate: NSPredicate(format: "sheet == %@", record),
             animation: .default
         )
@@ -942,8 +1064,8 @@ private struct SummaryCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(t.expense)))
-                .animation(.snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(t.expense)))
+                .animation(reduceMotion ? nil : .snappy, value: t.expense)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
@@ -1028,23 +1150,7 @@ private struct SummaryCard: View {
     }
 
     /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "カスタム")
-    private var periodHeaderLabel: String {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "ja_JP")
-        df.dateFormat = "yyyy年M月"
-        switch period {
-        case .thisMonth: return df.string(from: .now)
-        case .lastMonth:
-            let last = Calendar.current.date(byAdding: .month, value: -1, to: .now) ?? .now
-            return df.string(from: last)
-        case .thisYear:
-            let yf = DateFormatter()
-            yf.locale = Locale(identifier: "ja_JP")
-            yf.dateFormat = "yyyy年"
-            return yf.string(from: .now)
-        case .all: return "全期間"
-        }
-    }
+    private var periodHeaderLabel: String { period.headerLabel }
 
     /// 期間に応じた支出キャプション
     private var expenseCaption: String {
@@ -1063,8 +1169,8 @@ private struct SummaryCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(value: doubleValue(expense)))
-                .animation(.snappy, value: expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
+                .animation(reduceMotion ? nil : .snappy, value: expense)
             Text(expenseCaption)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -1230,19 +1336,19 @@ private struct SummaryCard: View {
 
         layout {
             Text("+ \(CurrencyCatalog.format(income, code: code))")
-                .contentTransition(.numericText(value: doubleValue(income)))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(income)))
             if !dynamicTypeSize.isAccessibilitySize {
                 Text("|")
                     .foregroundStyle(.tertiary)
             }
             Text("- \(CurrencyCatalog.format(expense, code: code))")
-                .contentTransition(.numericText(value: doubleValue(expense)))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
         }
         .font(.subheadline.monospacedDigit().weight(.medium))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.snappy, value: income)
-        .animation(.snappy, value: expense)
+        .animation(reduceMotion ? nil : .snappy, value: income)
+        .animation(reduceMotion ? nil : .snappy, value: expense)
     }
 
     private var hasMultipleCurrencies: Bool {
@@ -1459,8 +1565,15 @@ private struct ExpenseRowView: View {
     /// 個人専用シート (= 参加済の他メンバーが居ない) かどうか。
     /// CKShare ロード済なら `acceptanceStatus == .accepted` の他メンバーが居るかで判定。
     /// 未ロード時のみ PP フォールバック。
+    /// 共有していなくても (アーカイブされていない) バーチャルメンバーが居れば
+    /// solo ではない扱いにして、支払者表示を出す。
     private var isSoloSheet: Bool {
         guard let sheet = expense.sheet else { return true }
+        let profilesAll = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+        let hasVirtual = profilesAll.contains {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }
+        if hasVirtual { return false }
         if let share = ShareCoordinator.shared.existingShare(for: sheet) {
             // 「自分」以外で受諾済みの参加者が居るか（オーナーも自分でなければ数える）。
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
@@ -1472,9 +1585,8 @@ private struct ExpenseRowView: View {
             }
             return !hasAcceptedOthers
         }
-        guard let profiles = sheet.participantProfiles as? Set<ParticipantProfile> else { return true }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
-        return !profiles.contains { p in
+        return !profilesAll.contains { p in
             let rn = p.recordName ?? ""
             return !rn.isEmpty && rn != myRN
         }
@@ -1506,27 +1618,20 @@ private struct ExpenseRowView: View {
             Text(expense.categoryDisplayName)
                 .font(.body)
                 .foregroundStyle(.primary)
-            // サブタイトル: 入力タイトル · 支払者 (アバターはアイコン右下に重ねるので
-            // ここでは出さない)
+            // サブタイトル: 入力タイトルと支払者を縦に積む。
+            // (アバターはアイコン右下に重ねるのでここでは出さない)
             let titleText = expense.displayTitle
             let rawName = expense.displayPaidBy
             let payerText = (isSoloSheet && payerIsSelf) ? "" : rawName
-            if !titleText.isEmpty || !payerText.isEmpty {
-                HStack(spacing: 4) {
-                    if !titleText.isEmpty {
-                        Text(titleText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !titleText.isEmpty && !payerText.isEmpty {
-                        Text("·").font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !payerText.isEmpty {
-                        Text(payerText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            if !titleText.isEmpty {
+                Text(titleText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !payerText.isEmpty {
+                Text(payerText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

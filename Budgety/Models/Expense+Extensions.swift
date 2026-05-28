@@ -67,11 +67,7 @@ extension Expense {
     @MainActor
     var isPayerSelf: Bool {
         guard let pid = payerProfileID, !pid.isEmpty else { return false }
-        #if !os(watchOS)
         let share: CKShare? = sheet.flatMap { ShareCoordinator.shared.existingShare(for: $0) }
-        #else
-        let share: CKShare? = nil
-        #endif
         return UserProfileStore.shared.canonicalSelfIDs(forShare: share).contains(pid)
     }
 
@@ -86,7 +82,6 @@ extension Expense {
     /// URN マッチを優先、email/phone ベース canonical (旧データ) もフォールバックで照合。
     @MainActor
     private func resolvedSharedParticipantName() -> String? {
-        #if !os(watchOS)
         guard let pid = payerProfileID, !pid.isEmpty,
               let sheet = sheet,
               let share = ShareCoordinator.shared.existingShare(for: sheet) else { return nil }
@@ -106,12 +101,8 @@ extension Expense {
             }
         }
         return nil
-        #else
-        return nil
-        #endif
     }
 
-    #if !os(watchOS)
     @MainActor
     private func nameFromIdentity(_ identity: CKUserIdentity) -> String? {
         if let nc = identity.nameComponents {
@@ -123,7 +114,6 @@ extension Expense {
         }
         return nil
     }
-    #endif
 
     /// 支払者の Member を引く。Member は Private ストアにしか存在しないが、
     /// id / recordName / 名前のいずれかで見つかれば Shared ストアの Expense でも返す
@@ -138,11 +128,7 @@ extension Expense {
         guard let pid = payerProfileID, !pid.isEmpty else { return nil }
 
         // 1) 自分: payerProfileID が canonical self ID 群のいずれかと一致 → selfMember
-        #if !os(watchOS)
         let share: CKShare? = sheet.flatMap { ShareCoordinator.shared.existingShare(for: $0) }
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
         if selfIDs.contains(pid),
            let selfID = UserProfileStore.shared.selfMemberID {
@@ -177,14 +163,60 @@ extension Expense {
            let pp = profiles.first(where: { $0.recordName == pid }) {
             return pp
         }
-        // 2) displayName 一致 (旧データ移行用)
+        // 2) displayName 一致 (旧データ移行用)。同名が複数いると Set の列挙順次第で
+        //    別人を拾い、背景色がチカチカ入れ替わるため、recordName でソートして決定的に選ぶ。
         guard let name = paidBy, !name.isEmpty else { return nil }
-        return profiles.first(where: { $0.displayName == name })
+        return profiles
+            .filter { $0.displayName == name }
+            .sorted { ($0.recordName ?? "") < ($1.recordName ?? "") }
+            .first
     }
 
     var amountDecimal: Decimal {
         get { (amount ?? 0) as Decimal }
         set { amount = NSDecimalNumber(decimal: newValue) }
+    }
+
+    /// FX 換算スナップショット (= 作成 / 編集時に解決された target 通貨建ての金額)。
+    /// 設定されていれば SettlementCalculator は当時の値をそのまま使い、為替変動
+    /// による残高ドリフトを防ぐ。SettlementRecord の FX スナップショットと同じ役割。
+    var fxConvertedAmountDecimal: Decimal? {
+        get {
+            guard let n = fxConvertedAmount else { return nil }
+            return n as Decimal
+        }
+        set {
+            if let v = newValue { fxConvertedAmount = NSDecimalNumber(decimal: v) }
+            else { fxConvertedAmount = nil }
+        }
+    }
+
+    /// FX スナップショットが有効かつ現在の target と一致する時のみ返す。
+    /// 一致しない (シート既定通貨が変更された) 時は nil → 現行 FX で再計算。
+    func snapshotConvertedAmount(forTarget targetCode: String) -> Decimal? {
+        guard let snap = fxConvertedAmountDecimal,
+              let snapTarget = fxTargetCurrency,
+              snapTarget == targetCode else { return nil }
+        return snap
+    }
+
+    /// 現在の `amount` / `currencyCode` / `sheet.resolvedDefaultCurrencyCode` から
+    /// FX スナップショットを取り直して保存する。Expense 作成・編集時に呼ぶ。
+    /// レートが取得できなければスナップショットは nil にし、Calculator は
+    /// 現行 FX にフォールバックする (= 旧挙動)。
+    @MainActor
+    func captureFXSnapshot() {
+        guard let sheet else { return }
+        let target = sheet.resolvedDefaultCurrencyCode
+        if let converted = FXRatesService.shared.convert(
+            amountDecimal, from: resolvedCurrencyCode, to: target
+        ) {
+            fxConvertedAmountDecimal = converted
+            fxTargetCurrency = target
+        } else {
+            fxConvertedAmountDecimal = nil
+            fxTargetCurrency = nil
+        }
     }
 
     /// 受益者の profileID リスト (誰の負担として扱うか)。
@@ -207,12 +239,58 @@ extension Expense {
     }
 
     /// 精算計算で使う実効受益者リスト。
-    /// 空 (= 未指定 / 旧データ) ならシートの全メンバー、設定済ならそのまま返す。
+    /// 受益者が明示的に設定されていればそれをそのまま返す。
+    /// 空 (= 割り勘オフ / solo シートで作成) の場合は空のまま返す。
+    /// SettlementCalculator では「空 = 支払者単独負担」として扱われ、
+    /// 精算は発生しないがカテゴリ集計には含められる。
     @MainActor
     func resolvedBeneficiaryIDs() -> [String] {
-        let list = beneficiaryIDList
-        if !list.isEmpty { return list }
-        return sheet?.allMemberProfileIDs() ?? []
+        beneficiaryIDList
+    }
+
+    /// 精算済みにした受益者の profileID リスト (支出ごと・相手ごとの精算)。
+    /// `beneficiaryProfileIDs` のサブセット。内部表現は CSV。
+    var settledBeneficiaryIDList: [String] {
+        get {
+            (settledBeneficiaryProfileIDs ?? "")
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            var seen = Set<String>()
+            let cleaned = newValue
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && seen.insert($0).inserted }
+            settledBeneficiaryProfileIDs = cleaned.joined(separator: ",")
+        }
+    }
+
+    /// 指定受益者がこの支出で精算済みか。
+    func isBeneficiarySettled(_ profileID: String) -> Bool {
+        settledBeneficiaryIDList.contains(profileID)
+    }
+
+    /// 指定受益者の精算済みフラグを切り替える。
+    func setBeneficiarySettled(_ settled: Bool, for profileID: String) {
+        var list = settledBeneficiaryIDList
+        if settled {
+            if !list.contains(profileID) { list.append(profileID) }
+        } else {
+            list.removeAll { $0 == profileID }
+        }
+        settledBeneficiaryIDList = list
+    }
+
+    /// 現在の受益者に含まれない精算済みフラグを除去する。
+    /// 割り勘を編集して受益者から外した人の精算済みマークが残ると、
+    /// 再追加時に勝手に「精算済み」表示になるため、保存時に掃除する。
+    func pruneSettledBeneficiaries() {
+        let current = Set(beneficiaryIDList)
+        let pruned = settledBeneficiaryIDList.filter { current.contains($0) }
+        if pruned.count != settledBeneficiaryIDList.count {
+            settledBeneficiaryIDList = pruned
+        }
     }
 
     var kind: TransactionKind {
@@ -250,7 +328,7 @@ extension Expense {
     }
 
     var categoryDisplayName: String {
-        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : "未分類")
+        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : "カテゴリなし")
     }
 
     var categoryTint: Color {

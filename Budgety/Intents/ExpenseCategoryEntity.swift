@@ -133,7 +133,7 @@ extension ExpenseCategoryEntity {
         let gray = "#8E8E93"
         return ExpenseCategoryEntity(
             id: AddExpenseIntent.skipCategoryID,
-            name: "未分類",
+            name: "カテゴリなし",
             sheetName: "カテゴリなしで保存",
             kindRaw: "",
             symbol: "list.bullet",

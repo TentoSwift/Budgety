@@ -178,12 +178,59 @@ enum QuickIntentLogic {
 
         let profile = UserProfileStore.shared
         let share = ShareCoordinator.shared.existingShare(for: sheet)
-        if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
-            expense.payerProfileID = pid
+
+        // 支払者 (payer): 名前指定があれば解決、無ければ自分。
+        // "self" / "自分" は明示的に自分を表す。
+        let selfPID = profile.canonicalSelfID(forShare: share) ?? ""
+        let payerInput = (parsed["payer"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var resolvedPayerID: String = selfPID
+        if !payerInput.isEmpty {
+            if payerInput.lowercased() == "self" || payerInput == "自分" {
+                resolvedPayerID = selfPID
+            } else if let mid = Self.resolveMemberID(name: payerInput, in: sheet, selfPID: selfPID) {
+                resolvedPayerID = mid
+            }
         }
-        if let memberID = profile.selfMemberID {
+        if !resolvedPayerID.isEmpty {
+            expense.payerProfileID = resolvedPayerID
+        }
+        // 受益者 (beneficiaries): 名前配列 / 単一文字列 / "all" を許容。
+        // 未指定なら空のままで「割り勘オフ (= 支払者単独負担)」扱い。
+        // 指定されたが解決後 0 人 (例: 存在しない名前のみ / 空配列) はエラーで弾く。
+        var beneficiaryIDs: [String] = []
+        var beneficiariesProvided: Bool = false
+        let benInput = parsed["beneficiaries"]
+        if let arr = benInput as? [String] {
+            beneficiariesProvided = true
+            beneficiaryIDs = Self.resolveBeneficiaries(names: arr, in: sheet, selfPID: selfPID)
+        } else if let str = benInput as? String {
+            beneficiariesProvided = true
+            if str.lowercased() == "all" || str == "全員" {
+                beneficiaryIDs = sheet.allMemberProfileIDs()
+            } else if !str.isEmpty {
+                // CSV 形式も受ける ("Emma, Liam, Sofia")
+                let parts = str.split(separator: ",").map { String($0) }
+                beneficiaryIDs = Self.resolveBeneficiaries(names: parts, in: sheet, selfPID: selfPID)
+            }
+        }
+        if beneficiariesProvided && beneficiaryIDs.isEmpty {
+            ctx.delete(expense)
+            return [
+                "ok": false,
+                "error": "beneficiaries was specified but resolved to 0 members. Select at least one valid sheet member, or omit beneficiaries to record as the payer's sole burden."
+            ]
+        }
+        if !beneficiaryIDs.isEmpty {
+            expense.beneficiaryProfileIDs = beneficiaryIDs.joined(separator: ",")
+        }
+        // payerMemberID は自分が支払者の時のみセット (denormalized キャッシュ)。
+        if resolvedPayerID == selfPID, let memberID = profile.selfMemberID {
             expense.payerMemberID = memberID
         }
+
+        // FX スナップショット (MCP / Shortcuts 経由でも current FX を凍結)
+        expense.captureFXSnapshot()
 
         do {
             try ctx.save()
@@ -194,15 +241,62 @@ enum QuickIntentLogic {
         var summary: [String: Any] = [
             "ok": true,
             "amount": amount,
+            "currency": expense.currencyCode ?? "",
             "title": title,
             "sheet": sheet.displayName,
             "kind": kind == .income ? "income" : "expense",
             "category": firstCategory?.name ?? ""
         ]
+        // 割り勘設定したものは確認のためレスポンスに名前を入れる
+        if !payerInput.isEmpty, resolvedPayerID != selfPID {
+            summary["payer"] = sheet.memberDisplayInfo(for: resolvedPayerID).name
+        }
+        if !beneficiaryIDs.isEmpty {
+            summary["beneficiaries"] = beneficiaryIDs.map { sheet.memberDisplayInfo(for: $0).name }
+        }
         if nameCollisionCount > 1 {
             summary["warning"] = "name_collision: \(nameCollisionCount) sheets named \"\(sheet.displayName)\". Using oldest by createdAt."
         }
         return summary
+    }
+
+    /// 名前 (displayName) から sheet 内のメンバー profileID を解決する。
+    /// "self" / "自分" は selfPID にマップ。完全一致 (大小無視) で探す。
+    @MainActor
+    private static func resolveMemberID(name: String, in sheet: ExpenseSheet, selfPID: String) -> String? {
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if target.isEmpty { return nil }
+        if target.lowercased() == "self" || target == "自分" {
+            return selfPID.isEmpty ? nil : selfPID
+        }
+        let lowered = target.lowercased()
+        for id in sheet.allMemberProfileIDs() {
+            let info = sheet.memberDisplayInfo(for: id)
+            if info.name.lowercased() == lowered { return id }
+        }
+        return nil
+    }
+
+    /// 名前の配列を beneficiaries profileID 配列に解決する。重複は dedup。
+    /// 解決できなかった名前は無視 (= 部分的な指定でも保存は通す)。
+    @MainActor
+    private static func resolveBeneficiaries(names: [String], in sheet: ExpenseSheet, selfPID: String) -> [String] {
+        var ids: [String] = []
+        var seen = Set<String>()
+        for rawName in names {
+            let n = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if n.lowercased() == "all" || n == "全員" {
+                for id in sheet.allMemberProfileIDs() where seen.insert(id).inserted {
+                    ids.append(id)
+                }
+                continue
+            }
+            if let id = resolveMemberID(name: n, in: sheet, selfPID: selfPID),
+               seen.insert(id).inserted {
+                ids.append(id)
+            }
+        }
+        return ids
     }
 
     // MARK: - Get (支出 / 収入の取得)
@@ -273,7 +367,16 @@ enum QuickIntentLogic {
         }
 
         let payloadOut: [[String: Any]] = expenses.map { e in
-            [
+            // 支払者 / 受益者の名前を解決 (空 = 未指定)。
+            let payerName: String = {
+                guard let s = e.sheet, let pid = e.payerProfileID, !pid.isEmpty else { return "" }
+                return s.memberDisplayInfo(for: pid).name
+            }()
+            let beneficiaryNames: [String] = {
+                guard let s = e.sheet else { return [] }
+                return e.beneficiaryIDList.map { s.memberDisplayInfo(for: $0).name }
+            }()
+            return [
                 "date": ISO8601DateFormatter().string(from: e.date ?? Date()),
                 "title": e.displayTitle,
                 "amount": NSDecimalNumber(decimal: e.amountDecimal).doubleValue,
@@ -283,6 +386,11 @@ enum QuickIntentLogic {
                 "categoryColor": e.category?.colorHex ?? "",
                 "sheet": e.sheet?.name ?? "",
                 "paidBy": e.displayPaidBy,
+                // 支払者名 (sheet 内 memberDisplayInfo 経由)。
+                // payerProfileID が空 (= 未設定) の時は "" 。
+                "payer": payerName,
+                // 割り勘の受益者名配列。空 (= 未設定 / 割り勘オフ) なら []。
+                "beneficiaries": beneficiaryNames,
                 "note": e.note ?? ""
             ]
         }
@@ -314,6 +422,69 @@ enum QuickIntentLogic {
             result["warning"] = warnings.joined(separator: " ")
         }
         return result
+    }
+
+    // MARK: - Members (シートのメンバー一覧)
+
+    /// シートのメンバー一覧を返す。MCP add_expense の payer / beneficiaries
+    /// 指定時に有効な名前を事前に取得するために使う。
+    /// 入力: { "op": "members", "sheet": "京都旅行" }  (sheet 省略時は最古シート)
+    /// 出力: { "ok": true, "sheet": "...", "members": [
+    ///         { "name": "てん", "profileID": "...", "isSelf": true, "isVirtual": false }, ...
+    ///       ] }
+    @MainActor
+    static func members(parsed: [String: Any]) -> [String: Any] {
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        let sheetName = (parsed["sheet"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // シート決定 (add/get と同じく最古シートフォールバック)
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        sheetReq.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: true)]
+        let sheet: ExpenseSheet
+        if !sheetName.isEmpty {
+            sheetReq.predicate = NSPredicate(format: "name == %@", sheetName)
+            if let s = (try? ctx.fetch(sheetReq))?.first {
+                sheet = s
+            } else {
+                sheetReq.predicate = nil
+                sheetReq.fetchLimit = 1
+                guard let fallback = (try? ctx.fetch(sheetReq))?.first else {
+                    return ["ok": false, "error": "no sheet found"]
+                }
+                sheet = fallback
+            }
+        } else {
+            sheetReq.fetchLimit = 1
+            guard let s = (try? ctx.fetch(sheetReq))?.first else {
+                return ["ok": false, "error": "no sheet found"]
+            }
+            sheet = s
+        }
+
+        let profile = UserProfileStore.shared
+        let share = ShareCoordinator.shared.existingShare(for: sheet)
+        let selfIDs = profile.canonicalSelfIDs(forShare: share)
+
+        // CKShare を抜けた参加者 (= 受諾済みでない PP) を含めないよう
+        // acceptedMemberProfileIDs() を使う。archived 済み virtual も自動的に除外される。
+        var members: [[String: Any]] = []
+        for pid in sheet.acceptedMemberProfileIDs() {
+            let info = sheet.memberDisplayInfo(for: pid)
+            members.append([
+                "name": info.name,
+                "profileID": pid,
+                "isSelf": selfIDs.contains(pid),
+                "isVirtual": UserProfileStore.isVirtualRecordName(pid)
+            ])
+        }
+        return [
+            "ok": true,
+            "sheet": sheet.displayName,
+            "count": members.count,
+            "members": members
+        ]
     }
 
     // MARK: - Helpers

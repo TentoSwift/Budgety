@@ -1,14 +1,14 @@
 //
-//  ProfileEditView.swift
+//  VirtualMemberEditView.swift
 //  Budgety
 //
-//  カスタムプロフィール (名前 + 写真 + 背景色) を編集する画面。
-//  保存は UserProfileStore のローカル + CloudKit Public DB の UserProfile レコード。
-//  優先順位: カスタム > Apple ID 名 > "メンバー"。
+//  バーチャルメンバー (ParticipantProfile) の編集画面。
+//  自分のプロフィール編集 (ProfileEditView) と同じ UI: 名前 + 写真 +
+//  Memoji / 絵文字 + 背景色。保存はシート配下の ParticipantProfile に
+//  書き込む (CloudKit で同期)。Public DB へのアップロードはしない。
 //
-//  ShareCalendarApp の UserProfileView を参考にしたミニマル版。
-//  写真のほかに Memoji / 絵文字 + 背景色でアバターを作成できる
-//  (MemojiEditorView。MemojiView パッケージは iOS ターゲットのみリンク)。
+//  MemojiView パッケージは iOS ターゲットのみリンクのため、Memoji ボタンは
+//  `#if canImport(MemojiView)` でガード (= iOS でのみ表示)。
 //
 
 import SwiftUI
@@ -26,22 +26,20 @@ import AppKit
 import ImagePlayground
 #endif
 
-struct ProfileEditView: View {
+struct VirtualMemberEditView: View {
+    @ObservedObject var profile: ParticipantProfile
+
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.managedObjectContext) private var viewContext
-    @StateObject private var profile = UserProfileStore.shared
 
     @State private var draftName: String = ""
     @State private var draftPhoto: Data? = nil
-    /// アバター背景色 (Memoji 作成時に選んだ色)。写真未設定時のフォールバックにも使う。
-    @State private var draftBgHex: String? = nil
+    @State private var draftBgHex: String = "#FF9500"
     @State private var didLoad: Bool = false
-    @State private var saveError: String? = nil
 
     #if canImport(PhotosUI)
     @State private var pickerItem: PhotosPickerItem? = nil
     @State private var isLoadingPhoto: Bool = false
-    /// アバターのメニューから「写真を選択」した時に PhotosPicker を開く。
+    /// アバターメニューから「写真を選択」を選んだ時に PhotosPicker を開く。
     @State private var showPhotoPicker: Bool = false
     #endif
 
@@ -57,20 +55,15 @@ struct ProfileEditView: View {
             Form {
                 avatarSection
                 nameSection
-                if let saveError {
-                    Section {
-                        Label(saveError, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
-                }
             }
             #if os(macOS)
             .formStyle(.grouped)
-            .frame(minWidth: 480, minHeight: 600)
+            .frame(minWidth: 480, minHeight: 560)
             #endif
-            .navigationTitle("プロフィール")
+            .navigationTitle("メンバー")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") { dismiss() }
@@ -94,7 +87,9 @@ struct ProfileEditView: View {
                 }
             }
             #endif
-            // concept は渡さない (= 人物 / テキスト / テーマ何からでも生成可能に)。
+            // concept は渡さずに開く。人物 (PhotosLibrary) 選択を必須にせず、
+            // テキスト/絵文字/テーマなど何からでも生成できるようにするため。
+            // ユーザーが Playground 内で自由に concept を組み立てられる。
             .imagePlaygroundSheet(
                 isPresented: $showingImagePlayground,
                 onCompletion: { url in
@@ -125,7 +120,8 @@ struct ProfileEditView: View {
                         ProgressView().controlSize(.small)
                     }
                 } else {
-                    // アバターをタップすると写真選択 / Memoji / 削除を選べるメニューを開く。
+                    // アバターをタップすると写真選択 / Memoji / Image Playground /
+                    // 写真を削除 を選べるメニューを開く (ProfileEditView と同じ UX)。
                     Menu {
                         avatarMenuContent
                     } label: {
@@ -143,7 +139,8 @@ struct ProfileEditView: View {
         }
     }
 
-    /// アバターのメニュー項目 (写真を選択 / Memoji・絵文字 / 削除)。
+    /// アバターのメニュー項目 (写真を選択 / Memoji・絵文字 / Image Playground / 写真を削除)。
+    /// 「削除」だとシートのメンバーごと消すと誤解されやすいので「写真を削除」と明示する。
     @ViewBuilder
     private var avatarMenuContent: some View {
         #if canImport(PhotosUI)
@@ -169,17 +166,16 @@ struct ProfileEditView: View {
             Divider()
             Button(role: .destructive) {
                 draftPhoto = nil
-                draftBgHex = nil
                 #if canImport(PhotosUI)
                 pickerItem = nil
                 #endif
             } label: {
-                Label("削除", systemImage: "trash")
+                Label("写真を削除", systemImage: "trash")
             }
         }
     }
 
-    /// プレビュー + 右下に編集を示すカメラバッジ。
+    /// プレビュー + 右下にカメラバッジ (= タップで編集メニュー が開くことを示唆)。
     private var avatarPreviewWithBadge: some View {
         avatarPreview
             .overlay(alignment: .bottomTrailing) {
@@ -196,8 +192,8 @@ struct ProfileEditView: View {
     private var avatarPreview: some View {
         let trimmedName = draftName.trimmingCharacters(in: .whitespaces)
         let initial = String(trimmedName.first ?? "?").uppercased()
-        // 写真未設定時は名前から決定的に背景色生成
-        let color = Color.deterministic(from: trimmedName.isEmpty ? "?" : trimmedName)
+        let color = Color(hex: draftBgHex)
+            ?? Color.deterministic(from: trimmedName.isEmpty ? "?" : trimmedName)
         if let photo = draftPhoto, let image = platformImage(from: photo) {
             image
                 .resizable()
@@ -229,10 +225,8 @@ struct ProfileEditView: View {
     }
 
     private var nameSection: some View {
-        Section("ニックネーム") {
-            // macOS Form は第1引数を LabeledContent のラベルにしてしまうため
-            // .labelsHidden() で潰し、placeholder は prompt: で出す。
-            TextField("ニックネーム", text: $draftName, prompt: Text("自分の名前"))
+        Section("名前") {
+            TextField("名前", text: $draftName, prompt: Text("メンバーの名前"))
                 .labelsHidden()
                 .autocorrectionDisabled()
         }
@@ -243,9 +237,20 @@ struct ProfileEditView: View {
     private func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        draftName = profile.displayName
+        draftName = profile.displayName ?? ""
         draftPhoto = profile.photoData
-        draftBgHex = profile.avatarBgColorHex
+        if let c = profile.colorHex, !c.isEmpty { draftBgHex = c }
+    }
+
+    private func save() {
+        let name = draftName.trimmingCharacters(in: .whitespaces)
+        profile.displayName = name.isEmpty ? (profile.displayName ?? "メンバー") : name
+        profile.photoData = draftPhoto
+        profile.colorHex = draftBgHex
+        profile.updatedAt = .now
+        PersistenceController.shared.save()
+        Haptics.success()
+        dismiss()
     }
 
     #if canImport(PhotosUI)
@@ -260,25 +265,21 @@ struct ProfileEditView: View {
         }
     }
 
-    /// 巨大な画像を 512px 程度に縮小して JPEG にする。CKAsset サイズを抑える。
+    /// 画像を maxDimension 程度に縮小して JPEG にする (CKAsset サイズを抑える)。
     private func downsize(_ data: Data, maxDimension: CGFloat) -> Data {
         #if canImport(UIKit)
         guard let img = UIImage(data: data) else { return data }
-        let w = img.size.width, h = img.size.height
-        let maxSide = max(w, h)
+        let maxSide = max(img.size.width, img.size.height)
         let scale = maxSide > maxDimension ? maxDimension / maxSide : 1
-        let newSize = CGSize(width: w * scale, height: h * scale)
+        let newSize = CGSize(width: img.size.width * scale, height: img.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: newSize)
-        let resized = renderer.image { _ in
-            img.draw(in: CGRect(origin: .zero, size: newSize))
-        }
+        let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: newSize)) }
         return resized.jpegData(compressionQuality: 0.82) ?? data
         #elseif canImport(AppKit)
         guard let img = NSImage(data: data) else { return data }
-        let w = img.size.width, h = img.size.height
-        let maxSide = max(w, h)
+        let maxSide = max(img.size.width, img.size.height)
         let scale = maxSide > maxDimension ? maxDimension / maxSide : 1
-        let newSize = NSSize(width: w * scale, height: h * scale)
+        let newSize = NSSize(width: img.size.width * scale, height: img.size.height * scale)
         let target = NSImage(size: newSize)
         target.lockFocus()
         img.draw(in: NSRect(origin: .zero, size: newSize))
@@ -294,17 +295,4 @@ struct ProfileEditView: View {
         #endif
     }
     #endif
-
-    private func save() {
-        let name = draftName.trimmingCharacters(in: .whitespaces)
-        saveError = nil
-
-        // ローカル更新 + Public DB upload (updateProfile が背景で upload。
-        // シート数も含めて publish される)。
-        profile.updateProfile(displayName: name, photoData: draftPhoto, avatarBgColorHex: draftBgHex)
-        profile.applyDeviceLocalProfileEdit(in: viewContext)
-
-        Haptics.success()
-        dismiss()
-    }
 }

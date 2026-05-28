@@ -22,6 +22,11 @@ final class PersistenceController: ObservableObject {
     /// 一度 true になったら UserDefaults に永続化し、次回起動時は最初から true。
     @Published private(set) var initialSyncComplete: Bool = UserDefaults.standard.bool(forKey: PersistenceController.initialSyncCompleteKey)
 
+    /// iCloud アカウントが利用可能か (= サインイン済み)。
+    /// `.noAccount` / `.restricted` の時のみ false。判定前は楽観的に true。
+    /// シート作成ゲートで同期的に参照するためキャッシュしている。
+    @Published private(set) var iCloudAccountAvailable: Bool = true
+
     private static let cloudKitContainerIdentifier = "iCloud.com.tento.budgety"
     private static let initialSyncCompleteKey = "ExpensoInitialSyncComplete"
 
@@ -162,13 +167,13 @@ final class PersistenceController: ObservableObject {
             }
         }
 
-        // iCloud アカウントが利用不可なら待つ意味が無いので即時開放
-        if !UserDefaults.standard.bool(forKey: Self.initialSyncCompleteKey) {
-            CKContainer(identifier: Self.cloudKitContainerIdentifier)
-                .accountStatus { [weak self] status, _ in
-                    guard let self, status != .available else { return }
-                    self.markInitialSyncComplete()
-                }
+        // iCloud サインイン状態を取得・監視 (シート作成ゲートで参照)。
+        // 未サインイン等で利用不可なら初回同期を待つ意味が無いのでゲートも即時開放する。
+        refreshAccountStatus()
+        NotificationCenter.default.addObserver(
+            forName: .CKAccountChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.refreshAccountStatus()
         }
 
         container.viewContext.automaticallyMergesChangesFromParent = true
@@ -188,6 +193,23 @@ final class PersistenceController: ObservableObject {
             seedDevDataIfNeeded()
         }
         #endif
+    }
+
+    /// iCloud アカウント状態を取得して `iCloudAccountAvailable` を更新する。
+    /// 起動時・`.CKAccountChanged`・前面化時に呼ぶ。
+    func refreshAccountStatus() {
+        CKContainer(identifier: Self.cloudKitContainerIdentifier).accountStatus { [weak self] status, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // サインイン済みか (作成ゲート用): .noAccount / .restricted のみ false。
+                let signedIn = (status != .noAccount && status != .restricted)
+                if self.iCloudAccountAvailable != signedIn {
+                    self.iCloudAccountAvailable = signedIn
+                }
+                // .available 以外なら初回同期を待つ意味が無いのでゲート開放 (従来挙動)。
+                if status != .available { self.markInitialSyncComplete() }
+            }
+        }
     }
 
     /// `initialSyncComplete` を 1 度だけ true にする (= idempotent)。
@@ -654,6 +676,28 @@ final class PersistenceController: ObservableObject {
     func cloudKitContainer() -> CKContainer {
         CKContainer(identifier: Self.cloudKitContainerIdentifier)
     }
+
+    #if DEBUG
+    /// CloudKit Development スキーマをモデル定義から一括生成する (Production デプロイ準備用)。
+    ///
+    /// NSPersistentCloudKitContainer は通常レコード同期時にフィールドを遅延生成するため、
+    /// まだ一度も同期されていない新規属性 (例: `settledBeneficiaryProfileIDs`) は Development
+    /// スキーマに現れず、CloudKit Console の Deploy Schema Changes にも出てこない。
+    /// このメソッドを一度実行すると、モデルの全 Record Type / フィールド / インデックスが
+    /// Development に作られ、その後 Console から Production へデプロイできるようになる。
+    ///
+    /// 実行方法: iCloud サインイン済みの DEBUG ビルドで環境変数 `EXPENSO_INIT_CK_SCHEMA=1`
+    /// を付けて一度だけ起動する。スキーマ生成にはネットワークと数十秒かかることがある。
+    /// 注意: DEBUG 限定。Production ビルドには絶対に含めない。
+    func initializeCloudKitSchemaForDeploy() {
+        do {
+            try container.initializeCloudKitSchema(options: [])
+            print("✅ initializeCloudKitSchema: Development スキーマを生成しました")
+        } catch {
+            print("⚠️ initializeCloudKitSchema 失敗: \(error)")
+        }
+    }
+    #endif
 
     /// バックグラウンド context で書き込みを行うヘルパー。クロージャ内では渡されたコンテキスト上で
     /// Core Data オブジェクトを生成・操作し、終了時に save する。

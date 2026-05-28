@@ -109,11 +109,7 @@ extension ExpenseSheet {
         var result: [String] = []
         var seen = Set<String>()
 
-        #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
             ?? UserProfileStore.shared.userRecordName
         if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
@@ -126,15 +122,135 @@ extension ExpenseSheet {
         }
 
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
-        let sortedProfiles = profiles.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+        let sortedProfiles = profiles.sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
         for pp in sortedProfiles {
             guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+                  rn != "_defaultOwner_", rn != "__defaultOwner__",
+                  !pp.archived else { continue }
             if seen.insert(rn).inserted {
                 result.append(rn)
             }
         }
         return result
+    }
+
+    /// 割り勘・支払者の候補とする「現在のメンバー」の profileID。
+    /// = 自分 + CKShare の **受諾済み** 参加者 + バーチャルメンバー。
+    /// CKShare 未ロード時は受諾判定できないので非バーチャル PP で代替する。
+    /// `allMemberProfileIDs()` と違い、招待中 (.pending)・解除済みの参加者は含めない。
+    @MainActor
+    func acceptedMemberProfileIDs() -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        let share = ShareCoordinator.shared.existingShare(for: self)
+        // 自分
+        let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+        if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
+            result.append(me)
+        }
+        if let urn = UserProfileStore.shared.userRecordName, !urn.isEmpty {
+            seen.insert(urn)
+        }
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        let sorted = profiles.sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
+        if let share {
+            for p in share.participants {
+                guard p.acceptanceStatus == .accepted,
+                      let rn = p.userIdentity.userRecordID?.recordName, !rn.isEmpty,
+                      !UserProfileStore.isSelfPlaceholderRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
+        } else {
+            // CKShare 未ロード (= solo シート or 未同期) のフォールバック
+            for pp in sorted {
+                guard let rn = pp.recordName, !rn.isEmpty,
+                      rn != "_defaultOwner_", rn != "__defaultOwner__",
+                      !UserProfileStore.isVirtualRecordName(rn),
+                      seen.insert(rn).inserted else { continue }
+                result.append(rn)
+            }
+        }
+        // バーチャルメンバーは CKShare に出ないので常に PP から追加する。
+        // アーカイブ済みは新規の割り勘候補に出さない。
+        for pp in sorted {
+            guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn),
+                  !pp.archived,
+                  seen.insert(rn).inserted else { continue }
+            result.append(rn)
+        }
+        return result
+    }
+
+    /// このシートのバーチャルメンバー (ParticipantProfile) を名前順で返す。
+    /// アーカイブ済み (削除されたが過去の支出で使われている) は除外する。
+    var virtualMemberProfiles: [ParticipantProfile] {
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        return profiles
+            .filter { UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived }
+            .sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
+    }
+
+    /// バーチャルメンバーのアバター配色パレット。
+    static let virtualMemberPalette: [String] = [
+        "#FF9500", "#34C759", "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00", "#A2845E"
+    ]
+
+    /// バーチャルメンバーを追加し、その profileID (recordName) を返す。
+    @MainActor
+    @discardableResult
+    func addVirtualMember(name: String, colorHex: String? = nil) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let ctx = managedObjectContext,
+              let store = objectID.persistentStore else { return nil }
+        let rn = UserProfileStore.virtualRecordPrefix + UUID().uuidString
+        let pp = ParticipantProfile(context: ctx)
+        ctx.assign(pp, to: store)
+        pp.recordName = rn
+        pp.sheet = self
+        pp.displayName = trimmed
+        let palette = Self.virtualMemberPalette
+        pp.colorHex = colorHex ?? palette[virtualMemberProfiles.count % palette.count]
+        pp.updatedAt = .now
+        PersistenceController.shared.save()
+        return rn
+    }
+
+    /// シートが「アーカイブ済み」か。Core Data 上は Bool (scalar) なので
+    /// `archived` を直接参照すれば良いが、命名統一のため computed property も用意。
+    /// 既存データには `archived` が無いため Core Data の default (NO) が返る。
+    var isArchived: Bool { archived }
+
+    /// アーカイブ状態をトグルする。CloudKit にも同期される。
+    @MainActor
+    func setArchived(_ value: Bool) {
+        guard archived != value else { return }
+        archived = value
+        PersistenceController.shared.save()
+    }
+
+    /// バーチャルメンバーを削除する (バーチャル以外は無視)。
+    /// 支出 (受益者 or 支払者) で使われている場合は、過去の精算を壊さないよう
+    /// アーカイブ (= 新規候補・メンバー一覧から隠すが履歴・精算には残す)。
+    /// どの支出でも使われていなければ完全削除する。
+    @MainActor
+    func deleteVirtualMember(profileID: String) {
+        guard UserProfileStore.isVirtualRecordName(profileID),
+              let ctx = managedObjectContext else { return }
+        let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        guard let pp = profiles.first(where: { $0.recordName == profileID }) else { return }
+        let used = ((expenses as? Set<Expense>) ?? []).contains { e in
+            (e.payerProfileID == profileID) || e.beneficiaryIDList.contains(profileID)
+        }
+        if used {
+            pp.archived = true
+            pp.updatedAt = .now
+        } else {
+            ctx.delete(pp)
+        }
+        PersistenceController.shared.save()
     }
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
@@ -143,7 +259,14 @@ extension ExpenseSheet {
     /// オーナーを除外してソロ扱いにしないため）。
     @MainActor
     func hasAcceptedOtherMembers() -> Bool {
-        #if !os(watchOS)
+        // バーチャルメンバーは CKShare に出ないので、(アーカイブ済みを除き) 居れば
+        // 常に「他メンバーあり」。
+        let profilesAll = (participantProfiles as? Set<ParticipantProfile>) ?? []
+        if profilesAll.contains(where: {
+            UserProfileStore.isVirtualRecordName($0.recordName ?? "") && !$0.archived
+        }) {
+            return true
+        }
         if let share = ShareCoordinator.shared.existingShare(for: self) {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
             return share.participants.contains { p in
@@ -153,7 +276,6 @@ extension ExpenseSheet {
                 return !selfIDs.contains(rn)
             }
         }
-        #endif
         guard let profiles = participantProfiles as? Set<ParticipantProfile> else { return false }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
         return profiles.contains { p in
@@ -175,11 +297,7 @@ extension ExpenseSheet {
     @MainActor
     func memberDisplayInfo(for profileID: String) -> (name: String, colorHex: String, photoData: Data?) {
         // 自分判定: URN だけでなく canonical (email:..) や旧 ID も含めて広く拾う。
-        #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
         let selfEmailID: String? = {
             if let e = UserProfileStore.shared.selfEmail?.lowercased(), !e.isEmpty {
@@ -212,20 +330,19 @@ extension ExpenseSheet {
         let photoFromCache = PublicProfileSync.shared.cachedProfile(for: profileID)?.photoData
 
         // 3) CKShare の Apple ID 名 (カスタム未設定時)
-        #if !os(watchOS)
         if let share = share,
            let liveName = nameFromShare(share, profileID: profileID),
            !liveName.isEmpty {
             return (name: liveName, colorHex: fallbackColor, photoData: photoFromCache)
         }
-        #endif
 
         // 4) PP フォールバック
+        // バーチャルメンバーは Public DB に居ないので、PP に保存した photoData を優先で使う。
         if let pp = ppMatch {
             return (
                 name: pp.displayName?.isEmpty == false ? pp.displayName! : "メンバー",
                 colorHex: fallbackColor,
-                photoData: photoFromCache
+                photoData: pp.photoData ?? photoFromCache
             )
         }
         // ローカル Member へのフォールバック (recordName / UUID)
@@ -247,7 +364,6 @@ extension ExpenseSheet {
         return (name: "メンバー", colorHex: "#8E8E93", photoData: nil)
     }
 
-    #if !os(watchOS)
     /// `share` の owner / participants から `profileID` (URN) と一致するエントリを探し、
     /// その `userIdentity.nameComponents` をフォーマットして返す。
     /// `__defaultOwner__` placeholder の自分は別途 UserProfileStore で扱うので無視。
@@ -271,5 +387,4 @@ extension ExpenseSheet {
         }
         return nil
     }
-    #endif
 }

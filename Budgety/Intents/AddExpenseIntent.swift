@@ -161,11 +161,16 @@ struct AddExpenseIntent: AppIntent {
         if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
             expense.payerProfileID = pid
         }
+        // ショートカット / MCP からの追加は割り勘にしない (受益者未設定 = 支払者単独負担)。
+        // beneficiaryProfileIDs は明示的にセットしない (resolvedBeneficiaryIDs() で
+        // 空のままになり、SettlementCalculator では残高変動なしの扱い)。
         if let memberID = profile.selfMemberID {
             expense.payerMemberID = memberID
         }
 
         expense.sheet = coreSheet
+        // FX スナップショット (Shortcut 経由でも current FX で凍結)
+        expense.captureFXSnapshot()
 
         // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
         if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx) }

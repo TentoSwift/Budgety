@@ -11,6 +11,7 @@
 import Foundation
 import CoreData
 import PDFKit
+import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -83,166 +84,111 @@ enum SheetExporter {
         }
     }
 
-    // MARK: - PDF (iOS only)
+    // MARK: - PDF (SwiftUI ImageRenderer ベース, iOS / macOS 共通)
 
-    #if canImport(UIKit)
-    /// シートの月別サマリレポート PDF を生成。
-    /// - 1 ページ目: 表紙 (シート名 / 期間 / 総合計)
-    /// - 以降: 月ごとに 支出/収入 合計 + カテゴリ別内訳
+    /// 1 ブロック (= ヘッダーカード or 日セクション or フッター) を ImageRenderer で
+    /// 画像化した結果。`heightPt` は PDF ポイント単位での高さ。
+    private struct RenderedBlock {
+        let image: CGImage
+        let widthPt: CGFloat
+        let heightPt: CGFloat
+    }
+
+    /// 1 View を ImageRenderer で CGImage 化する。scale=2 で高解像度に。
+    /// 返値の寸法は PDF ポイント単位 (= pixel / scale)。
+    @MainActor
+    private static func renderBlock<V: View>(_ view: V, pageWidth: CGFloat) -> RenderedBlock? {
+        let renderer = ImageRenderer(content: view)
+        renderer.proposedSize = ProposedViewSize(width: pageWidth, height: nil)
+        renderer.scale = 2
+        #if canImport(AppKit)
+        guard let nsImg = renderer.nsImage,
+              let cg = nsImg.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        #elseif canImport(UIKit)
+        guard let uiImg = renderer.uiImage, let cg = uiImg.cgImage else { return nil }
+        #else
+        return nil
+        #endif
+        return RenderedBlock(
+            image: cg,
+            widthPt: CGFloat(cg.width) / renderer.scale,
+            heightPt: CGFloat(cg.height) / renderer.scale
+        )
+    }
+
+    /// シートのレポート PDF を生成。
+    /// ヘッダーカードと各日セクションを **ブロック単位** で ImageRenderer に通して
+    /// A4 ページに積み上げる。1 ブロックが切れて見切れることが無いように
+    /// 「ブロックがページ末尾に収まらなければ次ページの先頭から始める」方式で
+    /// 改ページする (= 単一ブロックがページより長い場合のみ強制スプリット)。
+    @MainActor
     static func writePDF(for sheet: ExpenseSheet) -> URL? {
         let dir = FileManager.default.temporaryDirectory
         let safe = sheet.displayName
             .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
             .joined()
-        let url = dir.appendingPathComponent("Expenso-\(safe).pdf")
+        let url = dir.appendingPathComponent("Budgety-\(safe).pdf")
 
-        // A4 (72dpi 換算)
-        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8)
-        let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: UIGraphicsPDFRendererFormat())
+        let pageWidth = PDFReport.pageWidth
+        let pageHeight = PDFReport.pageHeight
 
-        do {
-            try renderer.writePDF(to: url) { ctx in
-                drawPDF(into: ctx, sheet: sheet, pageRect: pageRect)
+        // 1) 描画するブロックを順に並べる
+        var blocks: [RenderedBlock] = []
+        if let header = renderBlock(
+            PDFHeaderCardView(sheet: sheet).padding(.top, 24),
+            pageWidth: pageWidth
+        ) {
+            blocks.append(header)
+        }
+        for section in PDFReport.daySections(for: sheet) {
+            if let block = renderBlock(
+                PDFDaySectionView(sheet: sheet, section: section),
+                pageWidth: pageWidth
+            ) {
+                blocks.append(block)
             }
-            return url
-        } catch {
-            #if DEBUG
-            print("⚠️ writePDF: \(error)")
-            #endif
+        }
+        if let footer = renderBlock(PDFFooterView(), pageWidth: pageWidth) {
+            blocks.append(footer)
+        }
+        guard !blocks.isEmpty else { return nil }
+
+        // 2) ページ組み: ブロックを順に積んで、収まらなければ次ページに送る
+        struct Placement { let block: RenderedBlock; let topY: CGFloat }
+        var pages: [[Placement]] = [[]]
+        var currentY: CGFloat = 0
+        for block in blocks {
+            let fits = currentY + block.heightPt <= pageHeight
+            if !fits, !pages[pages.count - 1].isEmpty {
+                pages.append([])
+                currentY = 0
+            }
+            pages[pages.count - 1].append(Placement(block: block, topY: currentY))
+            currentY += block.heightPt
+            // 単一ブロックが pageHeight 超の場合: そのページの後ろに何も置かないため
+            // 次の loop iteration で fits=false → 新ページ送り、で OK。
+        }
+
+        // 3) PDF 出力
+        var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
+        guard let consumer = CGDataConsumer(url: url as CFURL),
+              let pdf = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
             return nil
         }
-    }
-
-    private static func drawPDF(
-        into ctx: UIGraphicsPDFRendererContext,
-        sheet: ExpenseSheet,
-        pageRect: CGRect
-    ) {
-        let margin: CGFloat = 36
-        let contentWidth = pageRect.width - margin * 2
-        let code = sheet.resolvedDefaultCurrencyCode
-
-        let titleFont = UIFont.systemFont(ofSize: 28, weight: .bold)
-        let h2Font = UIFont.systemFont(ofSize: 18, weight: .semibold)
-        let bodyFont = UIFont.systemFont(ofSize: 12, weight: .regular)
-        let subFont = UIFont.systemFont(ofSize: 11, weight: .regular)
-
-        // PDF コンテキストには UITraitCollection が無く UIColor.label など動的色は
-        // 解決されない (= 透明として扱われテキストが見えない)。具体色を使う。
-        let primaryColor = UIColor.black
-        let secondaryColor = UIColor.darkGray
-        let separatorColor = UIColor.lightGray
-
-        func draw(_ text: String, at point: CGPoint, font: UIFont, color: UIColor) {
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: color
-            ]
-            NSAttributedString(string: text, attributes: attrs).draw(at: point)
-        }
-
-        let expenses = ((sheet.expenses as? Set<Expense>) ?? [])
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "ja_JP")
-        df.dateFormat = "yyyy/MM/dd"
-
-        // ===== Page 1: 表紙 =====
-        ctx.beginPage()
-        var y: CGFloat = margin
-
-        draw(sheet.displayName, at: CGPoint(x: margin, y: y),
-             font: titleFont, color: primaryColor)
-        y += titleFont.lineHeight + 8
-
-        draw("Budgety レポート (\(df.string(from: .now)) 出力)",
-             at: CGPoint(x: margin, y: y), font: subFont, color: secondaryColor)
-        y += subFont.lineHeight + 24
-
-        let totalExpense = expenses.filter { $0.kind == .expense }
-            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
-        let totalIncome = expenses.filter { $0.kind == .income }
-            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
-        let net = totalIncome - totalExpense
-
-        for (label, value) in [
-            ("支出合計", totalExpense),
-            ("収入合計", totalIncome),
-            ("差引",   net)
-        ] {
-            let line = "\(label):  \(CurrencyCatalog.format(value, code: code))"
-            draw(line, at: CGPoint(x: margin, y: y),
-                 font: bodyFont, color: primaryColor)
-            y += bodyFont.lineHeight + 6
-        }
-
-        if expenses.isEmpty {
-            y += 12
-            draw("(まだ支出 / 収入が記録されていません)",
-                 at: CGPoint(x: margin, y: y),
-                 font: subFont, color: secondaryColor)
-        }
-
-        // ===== Page 2+: 月別 =====
-        let cal = Calendar.current
-        let byMonth = Dictionary(grouping: expenses) { e -> DateComponents in
-            let d = e.date ?? .now
-            return cal.dateComponents([.year, .month], from: d)
-        }
-        let sortedKeys = byMonth.keys.sorted { (a, b) in
-            (a.year ?? 0, a.month ?? 0) > (b.year ?? 0, b.month ?? 0)
-        }
-
-        let monthHeader = DateFormatter()
-        monthHeader.locale = Locale(identifier: "ja_JP")
-        monthHeader.dateFormat = "yyyy 年 M 月"
-
-        for comps in sortedKeys {
-            ctx.beginPage()
-            var py: CGFloat = margin
-
-            let monthDate = cal.date(from: comps) ?? .now
-            draw(monthHeader.string(from: monthDate),
-                 at: CGPoint(x: margin, y: py),
-                 font: h2Font, color: primaryColor)
-            py += h2Font.lineHeight + 12
-
-            let items = byMonth[comps] ?? []
-            let mExp = items.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
-            let mInc = items.filter { $0.kind == .income }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
-
-            draw("支出 \(CurrencyCatalog.format(mExp, code: code))    収入 \(CurrencyCatalog.format(mInc, code: code))",
-                 at: CGPoint(x: margin, y: py),
-                 font: bodyFont, color: secondaryColor)
-            py += bodyFont.lineHeight + 16
-
-            let byCategory = Dictionary(grouping: items.filter { $0.kind == .expense }) { $0.categoryDisplayName }
-            let rows = byCategory.map { (name, items) -> (String, Decimal, Int) in
-                let sum = items.reduce(Decimal(0)) { $0 + $1.amountDecimal }
-                return (name, sum, items.count)
-            }.sorted { $0.1 > $1.1 }
-
-            draw("カテゴリ別 (支出):",
-                 at: CGPoint(x: margin, y: py),
-                 font: bodyFont, color: primaryColor)
-            py += bodyFont.lineHeight + 4
-
-            for (name, total, count) in rows {
-                guard py < pageRect.height - margin - bodyFont.lineHeight else { break }
-                draw("  \(name):  \(CurrencyCatalog.format(total, code: code))  (\(count) 件)",
-                     at: CGPoint(x: margin, y: py),
-                     font: subFont, color: primaryColor)
-                py += subFont.lineHeight + 2
+        for page in pages {
+            pdf.beginPDFPage(nil)
+            for placement in page {
+                let b = placement.block
+                // PDF は左下原点 + Y 上向き。topY (ページ上端からの距離) を
+                // CGRect.origin に変換するには pageHeight - topY - heightPt。
+                let originY = pageHeight - placement.topY - b.heightPt
+                pdf.draw(b.image, in: CGRect(x: 0, y: originY, width: b.widthPt, height: b.heightPt))
             }
-
-            separatorColor.setStroke()
-            let path = UIBezierPath()
-            path.move(to: CGPoint(x: margin, y: py + 8))
-            path.addLine(to: CGPoint(x: margin + contentWidth, y: py + 8))
-            path.lineWidth = 0.5
-            path.stroke()
+            pdf.endPDFPage()
         }
+        pdf.closePDF()
+        return url
     }
-    #endif
 }

@@ -14,7 +14,7 @@ import AppIntents
 import Foundation
 
 struct QuickBudgetIntent: AppIntent {
-    static let title: LocalizedStringResource = "クイック家計簿"
+    static let title: LocalizedStringResource = "Budgety MCP"
     static let description = IntentDescription(
         "支出/収入の追加・取得、定期項目の追加を 1 つの JSON 入力で行います。op='add' / 'get' / 'recurring'。MCP / 自動化向け。"
     )
@@ -46,8 +46,10 @@ struct QuickBudgetIntent: AppIntent {
             result = await QuickIntentLogic.add(parsed: parsed)
         case "recurring":
             result = await QuickIntentLogic.addRecurring(parsed: parsed)
+        case "members":
+            result = QuickIntentLogic.members(parsed: parsed)
         default:
-            result = ["ok": false, "error": "unknown op '\(op)'. Use 'add', 'get', or 'recurring'."]
+            result = ["ok": false, "error": "unknown op '\(op)'. Use 'add', 'get', 'recurring', or 'members'."]
         }
         return .result(value: QuickIntentLogic.encodeJSON(result))
     }

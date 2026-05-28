@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		2D18B4CC2FB31606006F2C29 /* Budgety For watchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2D31C36A2FC452E10011566C /* LicenseList in Frameworks */ = {isa = PBXBuildFile; productRef = 2D31C3692FC452E10011566C /* LicenseList */; };
 		2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
 		2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
@@ -65,10 +66,12 @@
 				"Models/SettlementRecord+Extensions.swift",
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
+				ShareCoordinator.swift,
 				"Support/Color+Hex.swift",
 				Support/Currency.swift,
 				Support/Notifications.swift,
 				Support/PublicProfileSync.swift,
+				Support/ShareParticipantCanonical.swift,
 				Support/ShareParticipantDiagnostics.swift,
 				Support/SheetLockManager.swift,
 				UserProfileStore.swift,
@@ -143,6 +146,7 @@
 				PersistenceController.swift,
 				PurchaseManager.swift,
 				ShareCoordinator.swift,
+				Support/AppUpdateChecker.swift,
 				Support/BuildInfo.swift,
 				"Support/Calendar+Month.swift",
 				Support/CategoryAISuggestor.swift,
@@ -153,6 +157,7 @@
 				Support/MarkdownHelper.swift,
 				Support/NetworkMonitor.swift,
 				Support/Notifications.swift,
+				Support/PDFReportView.swift,
 				Support/PublicProfileSync.swift,
 				Support/RecurringExpenseGenerator.swift,
 				Support/SampleDataGenerator.swift,
@@ -172,14 +177,15 @@
 				Views/CategoryIconView.swift,
 				Views/CategoryListView.swift,
 				Views/CategoryPickerView.swift,
+				Views/ClaudeIntegrationView.swift,
 				Views/CSVImportView.swift,
 				Views/EditCategoryView.swift,
 				Views/EditRecurringRuleView.swift,
 				Views/EditSheetView.swift,
+				Views/ExpenseDetailView.swift,
 				Views/iCloudStatusBanner.swift,
 				Views/LogSettlementView.swift,
 				Views/MemberPickerView.swift,
-				Views/OnboardingView.swift,
 				Views/PaywallView.swift,
 				Views/ProfileEditView.swift,
 				Views/RecurringListView.swift,
@@ -192,6 +198,8 @@
 				Views/SheetIconView.swift,
 				Views/SheetLockView.swift,
 				Views/StatsView.swift,
+				Views/VirtualMemberEditView.swift,
+				Views/VirtualMemberListView.swift,
 			);
 			target = 4D18B4C12FB31605006F2C30 /* Budgety For macOS */;
 		};
@@ -253,6 +261,7 @@
 			files = (
 				A0010000A0010000A0010000 /* MemojiView in Frameworks */,
 				2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */,
+				2D31C36A2FC452E10011566C /* LicenseList in Frameworks */,
 				B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -345,6 +354,7 @@
 				A0030000A0030000A0030000 /* MemojiView */,
 				2D84845F2FADB766001AB1B6 /* CustomPicker */,
 				B0030000B0030000B0030000 /* CustomNavigationTitle */,
+				2D31C3692FC452E10011566C /* LicenseList */,
 			);
 			productName = Expenso;
 			productReference = 2DDCE11E2FA8974700A42F60 /* Budgety.app */;
@@ -432,6 +442,7 @@
 				A0020000A0020000A0020000 /* XCRemoteSwiftPackageReference "MemojiView" */,
 				2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */,
 				B0020000B0020000B0020000 /* XCRemoteSwiftPackageReference "CustomNavigationTitle" */,
+				2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2DDCE11F2FA8974700A42F60 /* Products */;
@@ -523,11 +534,11 @@
 		2D18B4CE2FB31606006F2C29 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BudgetyIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051502;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -559,11 +570,11 @@
 		2D18B4CF2FB31606006F2C29 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = BudgetyIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051502;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -722,7 +733,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051801;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -768,7 +779,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051801;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -813,7 +824,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051502;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -855,7 +866,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051502;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -898,7 +909,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026051801;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -908,7 +919,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Tento Ishino";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -937,7 +948,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026051801;
+				CURRENT_PROJECT_VERSION = 2026052801;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -947,7 +958,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Tento Ishino";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1018,6 +1029,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/cybozu/LicenseList.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.0;
+			};
+		};
 		2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/TentoSwift/CustomPicker.git";
@@ -1045,6 +1064,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2D31C3692FC452E10011566C /* LicenseList */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D31C3682FC452E10011566C /* XCRemoteSwiftPackageReference "LicenseList" */;
+			productName = LicenseList;
+		};
 		2D84845F2FADB766001AB1B6 /* CustomPicker */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2D84845E2FADB766001AB1B6 /* XCRemoteSwiftPackageReference "CustomPicker" */;

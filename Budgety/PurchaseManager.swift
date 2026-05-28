@@ -184,8 +184,7 @@ final class PurchaseManager: ObservableObject {
             Task { @MainActor in
                 // 必ず active な共有の有無をリモートでも確認 (= revoke 再試行のトリガ)
                 let hasActiveShares = await ShareCoordinator.shared.hasActiveOwnedShares()
-                let hasLockedSheets = Self.hasAnyOwnedLockedSheets()
-                guard isTransition || hasActiveShares || hasLockedSheets else {
+                guard isTransition || hasActiveShares else {
                     Self.purchaseLog.debug("non-premium but nothing to clean; skip")
                     return
                 }
@@ -207,51 +206,17 @@ final class PurchaseManager: ObservableObject {
         }
     }
 
-    /// 自分がオーナーで、かつパスワードロックが設定されているシートが 1 件以上あるか。
-    /// Premium 解除時の「掃除すべき残骸あり」判定の fast-path 用。
-    @MainActor
-    static func hasAnyOwnedLockedSheets() -> Bool {
-        let ctx = PersistenceController.shared.container.viewContext
-        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        req.predicate = NSPredicate(format: "lockPasswordHash != nil AND lockPasswordHash != ''")
-        guard let sheets = try? ctx.fetch(req) else { return false }
-        return sheets.contains(where: { $0.isOwnedByCurrentUser })
-    }
-
-    /// 自分がオーナーのシートのパスワードロックを全て解除する。
-    /// - Returns: 解除した件数。
-    @MainActor
-    @discardableResult
-    static func clearOwnedSheetLocks() -> Int {
-        let ctx = PersistenceController.shared.container.viewContext
-        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        req.predicate = NSPredicate(format: "lockPasswordHash != nil AND lockPasswordHash != ''")
-        guard let sheets = try? ctx.fetch(req) else { return 0 }
-        var count = 0
-        for sheet in sheets where sheet.isOwnedByCurrentUser {
-            SheetLockManager.shared.clearPassword(for: sheet)
-            count += 1
-        }
-        return count
-    }
-
     /// 期限切れ確定時の共有解除処理。テスト用に Settings から
     /// `runExpiryRevokeForDebug()` でも呼べるよう独立メソッドにしてある。
-    /// - 共有 (CKShare) の解除に加え、自分がオーナーのシートのパスワードロックも解除する。
-    ///   ロックは Premium 機能なので、Premium が切れたユーザーがロック解除手段を失わないよう
-    ///   自動で外す (= ロック画面で詰まないようにする)。
+    /// - 共有 (CKShare) の解除のみ行う。シートのパスワードロックは Premium が切れても
+    ///   そのまま維持する (= ユーザーが設定したロックを勝手に外さない)。新規ロックの追加は
+    ///   UI 側で Premium gate される。既存ロックはパスワードで通常どおり解錠できる。
     /// - Returns: 共有解除が成功したか。`false` の場合、`refreshEntitlements` 側で次回再試行される。
     @MainActor
     @discardableResult
     static func performExpiryRevoke() async -> Bool {
         let ok = await ShareCoordinator.shared.revokeAllOwnedShares()
         purchaseLog.debug("revokeAllOwnedShares returned \(ok)")
-        // ローカルロックは Core Data のローカル書き込みのみで失敗しないので、
-        // 共有解除が失敗していても掃除する (= ユーザーがロック解除画面で詰まない)。
-        let clearedLocks = clearOwnedSheetLocks()
-        if clearedLocks > 0 {
-            purchaseLog.debug("cleared sheet locks: count=\(clearedLocks)")
-        }
         return ok
     }
 
@@ -313,7 +278,7 @@ enum FreeTierLimits {
     static let categoriesPerSheet: Int = 20
     /// 自分が「所有」できるシートの最大数 (= 自分が作成したシートのみカウント、
     /// 共有受け入れシートは数えない)
-    static let ownedSheets: Int = 5
+    static let ownedSheets: Int = 3
 }
 
 extension PurchaseManager {
@@ -352,6 +317,7 @@ extension PurchaseManager {
     /// - `.overLimit`: Free 上限到達 → Paywall 案内
     enum SheetCreationGate {
         case allowed
+        case notSignedIn
         case waitingForSync
         case offline
         case overLimit
@@ -359,6 +325,8 @@ extension PurchaseManager {
 
     @MainActor
     static func sheetCreationGate() -> SheetCreationGate {
+        // iCloud 未サインインでは (Premium 有無に関わらず) シートを作成させない。
+        if !PersistenceController.shared.iCloudAccountAvailable { return .notSignedIn }
         if isCurrentUserPremium { return .allowed }
         // 初回 import がまだ完了していない時は、既に CloudKit 上に上限分の
         // シートがある可能性を排除できないので保守的に block する。

@@ -12,9 +12,10 @@ struct SettingsView: View {
     @StateObject private var profile = UserProfileStore.shared
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showPaywall: Bool = false
-    @State private var showEraseConfirm: Bool = false
     @State private var showingProfileEdit: Bool = false
+    @State private var showingOnboarding: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
 
@@ -24,12 +25,7 @@ struct SettingsView: View {
                 Section {
                     if pm.isPremium {
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Budgety Premium").bold()
-                                Text("シート共有機能が有効です")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Text("Budgety Premium").bold()
                         } icon: {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundStyle(.green)
@@ -124,19 +120,11 @@ struct SettingsView: View {
                 }
 
                 Section("為替レート") {
-                    HStack {
-                        Label("基準通貨", systemImage: "dollarsign.circle")
-                        Spacer()
-                        Text(fx.baseCurrency).foregroundStyle(.secondary)
+                    infoRow("基準通貨", systemImage: "dollarsign.circle") {
+                        Text(fx.baseCurrency)
                     }
-                    HStack {
-                        Label("最終更新", systemImage: "clock.arrow.circlepath")
-                        Spacer()
-                        if let date = fx.lastRateDate {
-                            Text(date).foregroundStyle(.secondary)
-                        } else {
-                            Text("未取得").foregroundStyle(.secondary)
-                        }
+                    infoRow("最終更新", systemImage: "clock.arrow.circlepath") {
+                        Text(fx.lastRateDate ?? "未取得")
                     }
                     Button {
                         Task { await fx.refresh() }
@@ -177,35 +165,62 @@ struct SettingsView: View {
                 }
 
                 Section("バージョン") {
-                    HStack {
-                        Text("Budgety")
-                        Spacer()
+                    infoRow("Budgety") {
                         Text(Bundle.main.versionDisplay)
-                            .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        showingOnboarding = true
+                    } label: {
+                        Label {
+                            Text("ようこそ画面を表示")
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                    NavigationLink {
+                        LicenseListScreen()
+                    } label: {
+                        Label("ライセンス", systemImage: "doc.text")
+                    }
+                    Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/")!) {
+                        Label {
+                            HStack {
+                                Text("プライバシーポリシー")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "hand.raised.fill")
+                                .foregroundStyle(.blue)
+                        }
                     }
                 }
 
                 Section {
-                    Button(role: .destructive) {
-                        showEraseConfirm = true
+                    NavigationLink {
+                        EraseAllDataView()
                     } label: {
-                        Label("全データを削除", systemImage: "trash.fill")
-                            .frame(maxWidth: .infinity)
+                        Label {
+                            Text("全データを削除")
+                        } icon: {
+                            Image(systemName: "trash.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                 } footer: {
-                    Text("シート・支出・カテゴリ・メンバー・繰り返し項目・テンプレ・プロフィール (名前/写真/色) を含む全データを削除し、設定 (シートロック等) も初期化します。自分が作成した共有は解除され iCloud からも削除されます。受信した共有シートはオーナー側のデータには影響しません。元に戻せません。")
+                    Text("全データを削除して、アプリを初期状態に戻します。元に戻せません。")
                         .font(.caption)
                 }
             }
             .navigationTitle("設定")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("閉じる")
+                    Button("閉じる", systemImage: "xmark") { dismiss() }
                 }
             }
             .sheet(isPresented: $showPaywall) {
@@ -213,6 +228,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingProfileEdit) {
                 ProfileEditView()
+            }
+            .sheet(isPresented: $showingOnboarding) {
+                OnboardingView { showingOnboarding = false }
             }
             .task {
                 UserProfileStore.shared.ensureSelfMemberExists(in: viewContext)
@@ -222,21 +240,32 @@ struct SettingsView: View {
                     showPaywall = true
                 }
             }
-            .confirmationDialog(
-                "全データを削除しますか?",
-                isPresented: $showEraseConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("削除する", role: .destructive) {
-                    Task { @MainActor in
-                        Haptics.warning()
-                        await PersistenceController.shared.eraseAllData()
-                    }
-                }
-                Button("キャンセル", role: .cancel) {}
-            } message: {
-                Text("すべてのデータ・プロフィール・設定を削除し、アプリを初期状態に戻します。元に戻せません。削除後はアプリを再起動してください。")
+        }
+    }
+
+    /// ラベル + 値の行。AX サイズでは横に収まらないので AnyLayout で縦積みに切替。
+    /// systemImage を渡すと Label アイコン付き、省略すると素の Text ラベル。
+    @ViewBuilder
+    private func infoRow<Trailing: View>(
+        _ label: String,
+        systemImage: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        let isAX = dynamicTypeSize.isAccessibilitySize
+        let layout: AnyLayout = isAX
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 8))
+        layout {
+            if let systemImage {
+                Label(label, systemImage: systemImage)
+            } else {
+                Text(label)
             }
+            if !isAX { Spacer(minLength: 8) }
+            trailing()
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: isAX ? .infinity : nil,
+                       alignment: isAX ? .leading : .trailing)
         }
     }
 }

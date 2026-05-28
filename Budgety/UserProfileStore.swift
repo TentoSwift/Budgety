@@ -30,6 +30,8 @@ final class UserProfileStore: ObservableObject {
         /// 自分の Apple ID メールアドレス (CKUserIdentity.lookupInfo.emailAddress 由来)。
         /// 旧 "email:..." canonical → URN 移行で「自分の email」判定に使う。
         static let selfEmail          = "userProfile.selfEmail"
+        /// 最後に Public DB へ publish した自分のシート数。変化時のみ再 upload するため記録。
+        static let lastPublishedSheetCount = "userProfile.lastPublishedSheetCount"
     }
     private static let photoFileName = "userProfile.photo.jpg"
     private static let containerID = "iCloud.com.tento.budgety"
@@ -117,6 +119,7 @@ final class UserProfileStore: ObservableObject {
         userRecordName = nil
         selfEmail = nil
         profileUpdatedAt = nil
+        UserDefaults.standard.removeObject(forKey: Keys.lastPublishedSheetCount)
         PublicProfileSync.shared.clearCache()
     }
 
@@ -152,15 +155,41 @@ final class UserProfileStore: ObservableObject {
         self.profileUpdatedAt = .now
         // 背景で Public DB に push (失敗してもローカル状態は更新済み)
         if let urn = userRecordName, !urn.isEmpty {
-            Task { [resolvedDisplayName, photoData, avatarBgColorHex] in
+            let count = ownedSheetCount()
+            Task { [resolvedDisplayName, photoData, count] in
                 await PublicProfileSync.shared.uploadOwnProfile(
                     urn: urn,
                     displayName: resolvedDisplayName,
                     photoData: photoData,
-                    colorHex: avatarBgColorHex
+                    sheetCount: count
                 )
+                UserDefaults.standard.set(count, forKey: Keys.lastPublishedSheetCount)
             }
         }
+    }
+
+    /// 自分が作成した (= オーナーの) シート数。Public プロフィールに publish する値。
+    func ownedSheetCount() -> Int {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        let sheets = (try? ctx.fetch(req)) ?? []
+        return sheets.filter { $0.isOwnedByCurrentUser }.count
+    }
+
+    /// 自分のシート数が前回 publish 時から変わっていれば Public DB に再 upload する。
+    /// 起動時・前面化時に呼ぶ想定 (プロフィール編集が無くても件数を最新に保つ)。
+    func publishSheetCountIfChanged() async {
+        guard let urn = userRecordName, !urn.isEmpty else { return }
+        let count = ownedSheetCount()
+        let last = UserDefaults.standard.object(forKey: Keys.lastPublishedSheetCount) as? Int
+        guard last != count else { return }
+        await PublicProfileSync.shared.uploadOwnProfile(
+            urn: urn,
+            displayName: resolvedDisplayName,
+            photoData: photoData,
+            sheetCount: count
+        )
+        UserDefaults.standard.set(count, forKey: Keys.lastPublishedSheetCount)
     }
 
     // MARK: - User record name fetch
@@ -251,6 +280,16 @@ final class UserProfileStore: ObservableObject {
     /// 匿名化される。これを判定するためのヘルパ。
     static func isSelfPlaceholderRecordName(_ recordName: String) -> Bool {
         recordName == "__defaultOwner__" || recordName == "_defaultOwner_"
+    }
+
+    /// バーチャルメンバー (アプリ未使用の相手を割り勘・精算に含める仮想メンバー) の
+    /// recordName 接頭辞。実在の CloudKit ユーザーではないことを表す。
+    /// CloudKit スキーマは既存の ParticipantProfile をそのまま使い、recordName の
+    /// 接頭辞だけで区別する (スキーマ変更なし)。
+    static let virtualRecordPrefix = "virtual:"
+    /// recordName がバーチャルメンバーのものか。
+    static func isVirtualRecordName(_ recordName: String) -> Bool {
+        recordName.hasPrefix(virtualRecordPrefix)
     }
 
     /// 共有シート内で「自分」を identify するための canonical な ID。

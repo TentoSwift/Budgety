@@ -22,6 +22,8 @@ struct MacAddExpenseView: View {
 
     @State private var title: String = ""
     @State private var amountText: String = ""
+    /// 新規追加時に金額へ初期フォーカスする (金額を先に入力)。
+    @FocusState private var amountFocused: Bool
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
     @State private var date: Date = .now
     @State private var kind: TransactionKind = .expense
@@ -29,6 +31,15 @@ struct MacAddExpenseView: View {
     @State private var selectedCategory: ExpenseCategory?
     @State private var payerProfileID: String = ""
     @State private var selectedBeneficiaries: Set<String> = []
+    /// 割り勘トグル。オフ = 支払者のみの負担 (受益者 = 支払者)。
+    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    @State private var splitEnabled: Bool = false
+    /// バーチャルメンバー追加 (Premium 機能)。
+    @State private var showAddMemberPrompt = false
+    @State private var newMemberName = ""
+    @State private var showMemberPaywall = false
+    /// 名前変更対象の recordName。nil = 新規追加。
+    @State private var editingMemberID: String?
     @State private var didLoad: Bool = false
     @State private var showingDeleteConfirm: Bool = false
     @State private var share: CKShare?
@@ -58,7 +69,13 @@ struct MacAddExpenseView: View {
     }
 
     private var canSave: Bool {
-        Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil
+        guard Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) != nil else { return false }
+        // 割り勘オンのときは必ず 1 人以上選ぶ。空 (= 全員均等) を許すと、
+        // あとで追加したメンバーが過去の支出に遡って含まれてしまうため。
+        if hasOtherMembers, splitEnabled, selectedBeneficiaries.isEmpty {
+            return false
+        }
+        return true
     }
 
     // MARK: - Members
@@ -117,6 +134,10 @@ struct MacAddExpenseView: View {
         var ids: [String] = []
         if !selfProfileID.isEmpty { ids.append(selfProfileID) }
         ids.append(contentsOf: otherProfileIDs)
+        // バーチャルメンバー (CKShare に出ない) を候補に追加。
+        for rn in sheet.virtualMemberProfiles.compactMap({ $0.recordName }) where !ids.contains(rn) {
+            ids.append(rn)
+        }
         return ids
     }
 
@@ -132,10 +153,7 @@ struct MacAddExpenseView: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                Section("タイトル") {
-                    TextField("タイトル", text: $title, prompt: Text("コンビニ、ランチ など"))
-                        .labelsHidden()
-                }
+                // 金額を先に入力する。
                 Section("金額") {
                     HStack {
                         // 注意: Form 内の HStack に置いた TextField は、第1引数のタイトルが
@@ -143,6 +161,7 @@ struct MacAddExpenseView: View {
                         // .labelsHidden() でラベル列を消し、prompt: で placeholder を出す。
                         TextField("金額", text: $amountText, prompt: Text("0"))
                             .labelsHidden()
+                            .focused($amountFocused)
                             .onChange(of: amountText) { _, new in
                                 // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
                                 let normalized = new
@@ -151,7 +170,6 @@ struct MacAddExpenseView: View {
                                     .filter { $0.isASCII && ($0.isNumber || $0 == ".") }
                                 if allowed != new { amountText = allowed }
                             }
-                        Spacer()
                         Picker("通貨", selection: $currencyCode) {
                             ForEach(CurrencyCatalog.all) { opt in
                                 Text("\(opt.symbol)  \(opt.code)").tag(opt.code)
@@ -159,8 +177,15 @@ struct MacAddExpenseView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(maxWidth: 160)
+                        // 内容に合わせて picker をシュリンクし、TextField 右隣に
+                        // 自然に並ぶようにする (= 160pt 固定では行内で浮いて見えた)。
+                        .fixedSize()
                     }
+                }
+                // 次にタイトルを入力する。
+                Section("タイトル") {
+                    TextField("タイトル", text: $title)
+                        .labelsHidden()
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)
@@ -174,31 +199,65 @@ struct MacAddExpenseView: View {
                     }
                 }
                 aiCategorySuggestionSection
-                Section("支払い者") {
+                Section(kind == .income ? "受取者" : "支払い者") {
                     payerPicker
                 }
-                Section {
-                    beneficiariesList
-                } header: {
-                    HStack {
-                        Text("受益者")
-                        Spacer()
-                        Button(action: { selectAllBeneficiaries() }) {
-                            Text("全員").font(.caption)
+                // 共有シート、またはバーチャルメンバー追加可能な Premium なら表示
+                // (ソロシートでも Premium はバーチャルメンバーを足して割り勘できる)。
+                // 収入には割り勘の概念がないので支出時のみ表示。
+                if kind == .expense, hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
+                    Section {
+                        Toggle("割り勘", isOn: Binding(
+                            get: { splitEnabled },
+                            set: { on in
+                                splitEnabled = on
+                                // オンにした直後は全員を選択する (空 = 全員にはしない)。
+                                if on, selectedBeneficiaries.isEmpty
+                                    || selectedBeneficiaries == Set([payerProfileID]) {
+                                    selectAllBeneficiaries()
+                                }
+                            }
+                        ))
+                        if splitEnabled {
+                            beneficiariesList
+                            Button {
+                                if PurchaseManager.hasPremiumAccess(to: sheet) {
+                                    showAddMemberPrompt = true
+                                } else {
+                                    showMemberPaywall = true
+                                }
+                            } label: {
+                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                            }
+                            .buttonStyle(.borderless)
                         }
-                        .buttonStyle(.borderless)
-                        Button(action: { selectedBeneficiaries.removeAll() }) {
-                            Text("解除").font(.caption)
+                    } header: {
+                        if splitEnabled {
+                            HStack {
+                                Text("割る相手")
+                                Spacer()
+                                Button(action: { selectAllBeneficiaries() }) {
+                                    Text("全員").font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                Button(action: { selectedBeneficiaries.removeAll() }) {
+                                    Text("解除").font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(selectedBeneficiaries.isEmpty)
+                            }
                         }
-                        .buttonStyle(.borderless)
-                        .disabled(selectedBeneficiaries.isEmpty)
+                    } footer: {
+                        if splitEnabled {
+                            Text(selectedBeneficiaries.isEmpty
+                                 ? "割る相手を 1 人以上選んでください。"
+                                 : "選んだ人で均等割りします。")
+                                .font(.caption2)
+                                .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
+                        }
                     }
-                } footer: {
-                    Text("選んだ人で均等割り。全員未選択の場合は「全員均等割り」として扱います。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("メモ", text: $note, prompt: Text("詳細"), axis: .vertical)
                         .labelsHidden()
                         .lineLimit(2...4)
@@ -230,6 +289,30 @@ struct MacAddExpenseView: View {
         }
         .frame(width: 560, height: 720)
         .tint(sheet.tint)
+        .sheet(isPresented: $showMemberPaywall) { PaywallView() }
+        .alert(editingMemberID == nil ? "メンバーを追加" : "名前を変更",
+               isPresented: $showAddMemberPrompt) {
+            TextField("名前", text: $newMemberName)
+            Button("保存") {
+                let trimmed = newMemberName.trimmingCharacters(in: .whitespaces)
+                if let rn = editingMemberID {
+                    if !trimmed.isEmpty,
+                       let pp = sheet.virtualMemberProfiles.first(where: { $0.recordName == rn }) {
+                        pp.displayName = trimmed
+                        pp.updatedAt = .now
+                        PersistenceController.shared.save()
+                    }
+                } else if let id = sheet.addVirtualMember(name: trimmed) {
+                    splitEnabled = true
+                    selectedBeneficiaries.insert(id)
+                }
+                newMemberName = ""
+                editingMemberID = nil
+            }
+            Button("キャンセル", role: .cancel) { newMemberName = ""; editingMemberID = nil }
+        } message: {
+            Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
+        }
         .confirmationDialog(
             "この支出を削除しますか？",
             isPresented: $showingDeleteConfirm,
@@ -241,6 +324,12 @@ struct MacAddExpenseView: View {
             Text("元に戻せません。")
         }
         .task { await loadShareAndDefaults() }
+        .onAppear {
+            // 新規追加時のみ、金額へ自動フォーカス。
+            if expense == nil {
+                DispatchQueue.main.async { amountFocused = true }
+            }
+        }
         .onChange(of: title) { _, newValue in
             kickAICategorySuggest(title: newValue)
         }
@@ -389,9 +478,20 @@ struct MacAddExpenseView: View {
 
     @ViewBuilder
     private var beneficiariesList: some View {
-        ForEach(allMemberIDs, id: \.self) { id in
+        ForEach(beneficiaryPickerIDs, id: \.self) { id in
             beneficiaryRow(id)
         }
+    }
+
+    /// 現メンバー + 受益者として保存済みだが現メンバーに居ない人 (退室済み等) を末尾に。
+    /// 編集中の支出を開いた時に「居ないメンバー」もチェック状態のまま表示するため。
+    private var beneficiaryPickerIDs: [String] {
+        var ids = allMemberIDs
+        var seen = Set(ids)
+        for sb in selectedBeneficiaries where !sb.isEmpty && seen.insert(sb).inserted {
+            ids.append(sb)
+        }
+        return ids
     }
 
     private func beneficiaryRow(_ id: String) -> some View {
@@ -417,6 +517,19 @@ struct MacAddExpenseView: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if UserProfileStore.isVirtualRecordName(id) {
+                Button("名前を変更") {
+                    editingMemberID = id
+                    newMemberName = info.name
+                    showAddMemberPrompt = true
+                }
+                Button("削除", role: .destructive) {
+                    selectedBeneficiaries.remove(id)
+                    sheet.deleteVirtualMember(profileID: id)
+                }
+            }
+        }
     }
 
     private func selectAllBeneficiaries() {
@@ -442,6 +555,17 @@ struct MacAddExpenseView: View {
             selectedCategory = e.category
             payerProfileID = e.payerProfileID ?? selfProfileID
             selectedBeneficiaries = Set(e.beneficiaryIDList)
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ。複数ならオン。
+            // ※ 空はそのまま「割り勘オフ (支払者単独負担)」として扱い、全メンバーへの
+            //   展開は行わない (= 後から追加されたメンバーを巻き込まない)。
+            let loadedPayerID = e.payerProfileID ?? ""
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
+            }
 
             // CRDT 差分書き戻し用にスナップショット保存
             origTitle = title
@@ -452,13 +576,30 @@ struct MacAddExpenseView: View {
             origPayerProfileID = e.payerProfileID ?? ""
             origDate = date
             origNote = note
-            origBeneficiaryCSV = e.beneficiaryProfileIDs ?? ""
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = e.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(e.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
         } else {
             selectedCategory = nil
             payerProfileID = selfProfileID
             selectedBeneficiaries = []
             currencyCode = sheet.resolvedDefaultCurrencyCode
         }
+    }
+
+    /// 自分以外のメンバーがいる (= 共有シート) か。割り勘トグルの表示判定に使う。
+    private var hasOtherMembers: Bool { allMemberIDs.count > 1 }
+
+    /// 実際に保存する受益者 ID 配列。
+    /// - 割り勘オン: 選択中の相手。
+    /// - 割り勘オフ: 空 (= 受益者未設定。SettlementCalculator では支払者単独負担として
+    ///   残高変動なし、カテゴリ集計のみ計上)。
+    private var effectiveBeneficiaryIDs: [String] {
+        splitEnabled ? Array(selectedBeneficiaries) : []
     }
 
     private func save() {
@@ -500,7 +641,9 @@ struct MacAddExpenseView: View {
             } else {
                 target.payerMemberID = nil
             }
-            target.beneficiaryIDList = Array(selectedBeneficiaries)
+            target.beneficiaryIDList = effectiveBeneficiaryIDs
+            // FX スナップショット (amount / currencyCode / sheet 設定後に呼ぶ)
+            target.captureFXSnapshot()
         }
 
         PersistenceController.shared.save()
@@ -519,11 +662,17 @@ struct MacAddExpenseView: View {
         profile: UserProfileStore
     ) {
         if trimmedTitle != origTitle { expense.title = trimmedTitle }
-        if amountText != origAmountText {
+        let amountChanged = amountText != origAmountText
+        if amountChanged {
             expense.amount = NSDecimalNumber(decimal: amount)
         }
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
-        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        let currencyChanged = currencyCode != origCurrencyCode
+        if currencyChanged { expense.currencyCode = currencyCode }
+        // amount / currency が変わったら FX スナップショットを取り直す
+        if amountChanged || currencyChanged {
+            expense.captureFXSnapshot()
+        }
         if !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }
@@ -548,7 +697,7 @@ struct MacAddExpenseView: View {
             }
         }
         // beneficiaryIDList は内部で重複・空除去するので、CSV 比較で diff を取る
-        let newCSV = Array(selectedBeneficiaries)
+        let newCSV = effectiveBeneficiaryIDs
             .sorted()
             .joined(separator: ",")
         let oldCSV = origBeneficiaryCSV
@@ -557,7 +706,7 @@ struct MacAddExpenseView: View {
             .sorted()
             .joined(separator: ",")
         if newCSV != oldCSV {
-            expense.beneficiaryIDList = Array(selectedBeneficiaries)
+            expense.beneficiaryIDList = effectiveBeneficiaryIDs
         }
     }
 

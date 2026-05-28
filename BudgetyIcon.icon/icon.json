@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "display-p3:1.00000,0.62942,0.86815,1.00000",
-      "display-p3:0.82936,0.23312,0.96783,1.00000"
+      "display-p3:0.87908,0.68058,0.98238,1.00000",
+      "display-p3:0.40977,0.12649,0.52076,1.00000"
     ],
     "orientation" : {
       "start" : {
@@ -18,7 +18,140 @@
   "groups" : [
     {
       "layers" : [
-
+        {
+          "fill-specializations" : [
+            {
+              "value" : "none"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "none"
+            }
+          ],
+          "image-name" : "Lines 3.svg",
+          "name" : "Lines 3",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 1.1,
+                "translation-in-points" : [
+                  7.384332630367965,
+                  -8.63470143394261
+                ]
+              }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.1,
+                "translation-in-points" : [
+                  7.4,
+                  -8.6
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "display-p3:0.96783,0.76852,0.55522,1.00000"
+          },
+          "image-name" : "sheet1 2.svg",
+          "name" : "sheet1 2",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  4.369604630367917,
+                  7.039067369631994
+                ]
+              }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  4.4,
+                  7
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.96783,0.83470,0.34979,1.00000"
+          },
+          "image-name" : "sheet3 2.svg",
+          "name" : "sheet3 2",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 1.9,
+                "translation-in-points" : [
+                  104.37253087753788,
+                  37.58559049999997
+                ]
+              }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.9,
+                "translation-in-points" : [
+                  104.4,
+                  37.6
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.71977,0.41902,0.48696,1.00000"
+          },
+          "image-name" : "sheet2 2.svg",
+          "name" : "sheet2 2",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 1.8,
+                "translation-in-points" : [
+                  -126.82004956300113,
+                  36.91483369999992
+                ]
+              }
+            },
+            {
+              "idiom" : "watchOS",
+              "value" : {
+                "scale" : 1.8,
+                "translation-in-points" : [
+                  -126.8,
+                  36.9
+                ]
+              }
+            }
+          ]
+        }
       ],
       "shadow" : {
         "kind" : "neutral",

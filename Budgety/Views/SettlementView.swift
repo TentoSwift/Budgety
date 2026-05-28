@@ -13,23 +13,32 @@ struct SettlementView: View {
     @ObservedObject var record: ExpenseSheet
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var profile = UserProfileStore.shared
     @State private var result: SettlementResult?
 
-    /// 「送金済みにする」シートの表示状態。
-    @State private var loggingPrefill: LoggingPrefill?
     /// 編集対象の SettlementRecord (= シート再表示)
     @State private var editingRecord: SettlementRecord?
+    /// 新規送金記録のシート表示フラグ (送金プラン以外のタイミングで自由に記録するため)。
+    @State private var showingNewLog: Bool = false
     /// 削除確認用
     @State private var deletingRecord: SettlementRecord?
+    /// 送金プランの 1 行を「精算済み」として SettlementRecord 化する対象。
+    /// nil 解除でアラート閉じ。
+    @State private var settlingTransfer: PendingTransferSettlement?
 
-    /// 新規 SettlementRecord 入力時のプリフィル。
-    private struct LoggingPrefill: Identifiable {
+    /// 送金プランの 1 行 = これから SettlementRecord として記録する送金。
+    /// per-expense フラグは触らず、SettlementRecord 1 件で精算を完了させる
+    /// (= greedy で集約された金額をそのまま記録できるので残高が一致する)。
+    private struct PendingTransferSettlement: Identifiable {
         let id = UUID()
-        let from: String
-        let to: String
+        let fromID: String
+        let toID: String
+        let fromName: String
+        let toName: String
         let amount: Decimal
         let currencyCode: String
+        var formattedAmount: String { CurrencyCatalog.format(amount, code: currencyCode) }
     }
 
     var body: some View {
@@ -40,9 +49,11 @@ struct SettlementView: View {
                         emptySection
                     } else {
                         summarySection(result: result)
-                        // 共有していない (= 自分しかいない) シートでは
+                        // 自分しかいない (= 共有もバーチャルメンバーも無い) シートでは
                         // 残高 / 送金プラン / 送金履歴を出しても意味がないので隠す。
-                        if result.balances.count > 1 {
+                        // バーチャルメンバーがいる時は notSharedSection を出さない
+                        // (= 「共有されていません」というメッセージは不正確になるため)。
+                        if result.balances.count > 1 || record.hasAcceptedOtherMembers() {
                             balancesSection(result: result)
                             transfersSection(result: result)
                             settlementHistorySection
@@ -66,6 +77,7 @@ struct SettlementView: View {
             .padding(16)
         }
         .background(Color.platformSystemBackground.ignoresSafeArea())
+        .tint(record.tint)
         .navigationTitle("精算")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -75,38 +87,27 @@ struct SettlementView: View {
             recompute()
         }
         .onChange(of: fx.lastUpdated) { _, _ in recompute() }
-        .sheet(item: $loggingPrefill) { prefill in
-            LogSettlementView(
-                sheet: record,
-                prefillFrom: prefill.from,
-                prefillTo: prefill.to,
-                prefillAmount: prefill.amount,
-                prefillCurrencyCode: prefill.currencyCode
-            )
+        .alert(
+            "送金を記録しますか？",
+            isPresented: Binding(
+                get: { settlingTransfer != nil },
+                set: { if !$0 { settlingTransfer = nil } }
+            ),
+            presenting: settlingTransfer
+        ) { target in
+            Button("精算済みにする") { confirmSettleTransfer(target) }
+            Button("キャンセル", role: .cancel) { settlingTransfer = nil }
+        } message: { target in
+            Text("\(target.fromName) → \(target.toName)\n\(target.formattedAmount)")
         }
         .sheet(item: $editingRecord) { rec in
             LogSettlementView(sheet: record, record: rec)
         }
-        .confirmationDialog(
-            "この送金記録を削除しますか？",
-            isPresented: Binding(
-                get: { deletingRecord != nil },
-                set: { if !$0 { deletingRecord = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("削除", role: .destructive) {
-                if let r = deletingRecord {
-                    viewContext.delete(r)
-                    PersistenceController.shared.save()
-                    deletingRecord = nil
-                    recompute()
-                }
-            }
-            Button("キャンセル", role: .cancel) { deletingRecord = nil }
-        } message: {
-            Text("この記録を取り消すと、精算残高が元に戻ります。")
+        .sheet(isPresented: $showingNewLog) {
+            LogSettlementView(sheet: record, record: nil)
         }
+        // 削除確認ダイアログは各送金履歴行に個別に attach する
+        // (settlementHistorySection 内の ForEach 参照)。
     }
 
     // MARK: - Card
@@ -149,6 +150,45 @@ struct SettlementView: View {
         result = SettlementCalculator.calculate(for: record, in: nil)
     }
 
+    /// 送金プランの 1 行を SettlementRecord として永続化。
+    /// per-expense フラグは触らない (= greedy で集約された金額をそのまま記録)。
+    /// 削除・編集は settlementHistorySection (送金履歴) から行える。
+    @MainActor
+    private func confirmSettleTransfer(_ target: PendingTransferSettlement) {
+        let ctx = PersistenceController.shared.container.viewContext
+        let rec = SettlementRecord(context: ctx)
+        if let store = record.objectID.persistentStore {
+            ctx.assign(rec, to: store)
+        }
+        rec.id = UUID()
+        rec.sheet = record
+        rec.amount = NSDecimalNumber(decimal: target.amount)
+        rec.currencyCode = target.currencyCode
+        rec.fromProfileID = target.fromID
+        rec.toProfileID = target.toID
+        rec.date = .now
+        rec.createdAt = .now
+        // FX スナップショット: 送金プランから記録した時点での target 換算額を
+        // 凍結する。送金プランは元々 target 通貨で出ているのでそのまま使える。
+        let sheetTarget = record.resolvedDefaultCurrencyCode
+        if let converted = fx.convert(target.amount, from: target.currencyCode, to: sheetTarget) {
+            rec.fxConvertedAmountDecimal = converted
+            rec.fxTargetCurrency = sheetTarget
+        }
+        #if !os(watchOS)
+        let share = ShareCoordinator.shared.existingShare(for: record)
+        rec.createdByProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+            ?? UserProfileStore.shared.userRecordName
+            ?? ""
+        #else
+        rec.createdByProfileID = UserProfileStore.shared.userRecordName ?? ""
+        #endif
+        PersistenceController.shared.save()
+        Haptics.success()
+        settlingTransfer = nil
+        recompute()
+    }
+
     private var emptySection: some View {
         card {
             VStack(alignment: .leading, spacing: 8) {
@@ -178,7 +218,7 @@ struct SettlementView: View {
     private func summarySection(result: SettlementResult) -> some View {
         card(
             title: "サマリ",
-            footer: "収入は精算対象外です。受益者が指定されていない支出はシート全員で均等割りとして扱います。"
+            footer: "収入は精算対象外です。"
         ) {
             HStack(alignment: .firstTextBaseline) {
                 Text("通貨")
@@ -210,12 +250,19 @@ struct SettlementView: View {
 
     /// 連絡先ウィジェット風の縦長タイル: アバター + 名前 + 残高。
     /// 背景はプロフィール写真の平均色 (なければ colorHex) を薄く敷く。
+    /// このシートで削除 (アーカイブ) 済みのメンバーか。残高に残っている時に表示する。
+    private func isArchivedMember(_ profileID: String) -> Bool {
+        let pps = (record.participantProfiles as? Set<ParticipantProfile>) ?? []
+        return pps.contains { ($0.recordName == profileID) && $0.archived }
+    }
+
     @ViewBuilder
     private func balanceTile(bal: MemberBalance, currencyCode: String) -> some View {
         let info = record.memberDisplayInfo(for: bal.profileID)
         let share = ShareCoordinator.shared.existingShare(for: record)
         let selfIDs = profile.canonicalSelfIDs(forShare: share)
         let isMe = selfIDs.contains(bal.profileID)
+        let isArchived = isArchivedMember(bal.profileID)
         // 写真からドミナント色を抽出 (キャッシュ済)。未設定なら colorHex フォールバック。
         let tileTint: Color = AverageColorCache.color(for: info.photoData)
             ?? Color(hex: info.colorHex)
@@ -232,15 +279,20 @@ struct SettlementView: View {
                 Text(info.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                Text(isMe ? "自分" : " ")
+                Text(isArchived ? "このシートにいないメンバー" : (isMe ? "自分" : " "))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isArchived ? Color.orange : Color.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .multilineTextAlignment(.center)
             }
             balanceLabel(amount: bal.amount, currencyCode: currencyCode)
                 .monospacedDigit()
         }
         // 全タイルが同じ高さになるよう minHeight を固定。
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .top)
+        // maxHeight: .infinity で同じ行のタイルを最も高いタイルに合わせて伸ばす
+        // (AX サイズで残高ラベルの行数が違っても高さが揃う)。
+        .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 14)
         .padding(.horizontal, 8)
         .background(
@@ -334,19 +386,21 @@ struct SettlementView: View {
                 )
                 Spacer()
                 Button {
-                    loggingPrefill = LoggingPrefill(
-                        from: transfer.fromProfileID,
-                        to: transfer.toProfileID,
+                    settlingTransfer = PendingTransferSettlement(
+                        fromID: transfer.fromProfileID,
+                        toID: transfer.toProfileID,
+                        fromName: from.name,
+                        toName: to.name,
                         amount: transfer.amount,
                         currencyCode: currencyCode
                     )
                 } label: {
-                    Text("送金済み")
+                    Text("精算")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-                        .foregroundStyle(Color.accentColor)
+                        .background(Capsule().fill(record.tint.opacity(0.18)))
+                        .foregroundStyle(record.tint)
                 }
                 .buttonStyle(.plain)
             }
@@ -359,80 +413,89 @@ struct SettlementView: View {
             .minimumScaleFactor(0.7)
             Text(CurrencyCatalog.format(transfer.amount, code: currencyCode))
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .padding(.vertical, 2)
     }
 
-    /// 期間内に記録された送金履歴。新規記録ボタンも出す。
+    /// 送金履歴 + 「送金を記録」ボタン。
+    /// 送金プラン経由でなくても任意のタイミングで送金を記録できるよう、
+    /// ヘッダーに「+ 送金を記録」を置く。記録があれば一覧表示、無ければ空表示。
     @ViewBuilder
     private var settlementHistorySection: some View {
         let records = settlementsInCurrentRange
-        card(
-            title: "送金履歴",
-            footer: "送金プランから「送金済み」をタップすると、ここに記録されて残高に反映されます。"
-        ) {
+        card(title: "送金履歴", footer: records.isEmpty ? "" : "以前に記録した送金です。残高に反映されます。") {
             VStack(spacing: 12) {
-                if records.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(systemName: "tray")
-                            .foregroundStyle(.secondary)
-                        Text("送金記録はまだありません")
-                            .foregroundStyle(.secondary)
-                            .font(.callout)
-                        Spacer()
+                Button {
+                    showingNewLog = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("送金を記録")
+                            .font(.subheadline.weight(.semibold))
                     }
-                } else {
+                    .foregroundStyle(record.tint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                if !records.isEmpty {
+                    Divider()
                     ForEach(Array(records.enumerated()), id: \.element.objectID) { idx, r in
-                        HStack(spacing: 0) {
-                            settlementRecordRow(r)
-                                .contentShape(Rectangle())
-                                .onTapGesture { editingRecord = r }
-                            Button(role: .destructive) {
-                                deletingRecord = r
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                                    .padding(.leading, 6)
+                        settlementRecordRow(r)
+                            .contentShape(Rectangle())
+                            .onTapGesture { editingRecord = r }
+                            // swipeActions は Form/List 配下でしか効かないので、
+                            // VStack 配下では使えない。代わりに contextMenu で
+                            // 編集/削除を提供し、削除は確認ダイアログ付き。
+                            // (UX 要望: 削除タップ → 確認ダイアログ)
+                            .contextMenu {
+                                Button {
+                                    editingRecord = r
+                                } label: {
+                                    Label("編集", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) {
+                                    deletingRecord = r
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
-                            .buttonStyle(.plain)
-                        }
-                        .contextMenu {
-                            Button {
-                                editingRecord = r
-                            } label: {
-                                Label("編集", systemImage: "pencil")
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    deletingRecord = r
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
                             }
-                            Button(role: .destructive) {
-                                deletingRecord = r
-                            } label: {
-                                Label("削除", systemImage: "trash")
+                            // 確認ダイアログを各行に付ける。 isPresented は
+                            // deletingRecord がこの行 (= r) かで判定するので、
+                            // ダイアログは「この記録」固有のものとして開く。
+                            .confirmationDialog(
+                                "この送金記録を削除しますか？",
+                                isPresented: Binding(
+                                    get: { deletingRecord?.objectID == r.objectID },
+                                    set: { if !$0 { deletingRecord = nil } }
+                                ),
+                                titleVisibility: .visible
+                            ) {
+                                Button("削除", role: .destructive) {
+                                    viewContext.delete(r)
+                                    PersistenceController.shared.save()
+                                    deletingRecord = nil
+                                    recompute()
+                                }
+                                Button("キャンセル", role: .cancel) { deletingRecord = nil }
+                            } message: {
+                                Text("この記録を取り消すと、精算残高が元に戻ります。")
                             }
-                        }
                         if idx < records.count - 1 {
                             Divider()
                         }
                     }
                 }
-                Divider()
-                Button {
-                    loggingPrefill = LoggingPrefill(
-                        from: profile.canonicalSelfID(forShare: ShareCoordinator.shared.existingShare(for: record))
-                            ?? profile.userRecordName
-                            ?? "",
-                        to: "",
-                        amount: 0,
-                        currencyCode: record.resolvedDefaultCurrencyCode
-                    )
-                } label: {
-                    Label("送金を手動で記録", systemImage: "plus.circle")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
             }
         }
     }
@@ -530,3 +593,4 @@ struct SettlementView: View {
         }
     }
 }
+

@@ -20,6 +20,7 @@ struct AddSheetView: View {
     @State private var budgetText: String = ""
 
     @State private var showingPaywall: Bool = false
+    @State private var showingMoreIcons: Bool = false
 
     private let palette: [String] = [
         "#5B8DEF", "#34C759", "#FF9500", "#FF3B30",
@@ -90,7 +91,7 @@ struct AddSheetView: View {
                     Text("「今月」表示時に進捗バーで残額を可視化します。0 のまま保存すると予算なし扱い。")
                 }
 
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -100,10 +101,10 @@ struct AddSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("作成") { save() }
+                    Button("作成", systemImage: "checkmark") { save() }
                         .disabled(!canSave)
                 }
             }
@@ -134,9 +135,11 @@ struct AddSheetView: View {
                     sheetIconButton(sym, tint: tint)
                 }
             }
-            // その他カテゴリは別画面で選択
-            NavigationLink {
-                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint)
+            // その他カテゴリは別画面で選択。Form 内の NavigationLink は行に
+            // 自動でシェブロンが付き、カード内の手動シェブロンと二重になるため、
+            // Button + navigationDestination でカスタムカードのまま遷移する。
+            Button {
+                showingMoreIcons = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -156,6 +159,9 @@ struct AddSheetView: View {
                 )
             }
             .buttonStyle(.plain)
+            .navigationDestination(isPresented: $showingMoreIcons) {
+                SheetIconPickerView(selectedSymbol: $selectedSymbol, tint: tint)
+            }
         }
         .padding(.vertical, 4)
         .sheet(isPresented: $showingPaywall) { PaywallView() }

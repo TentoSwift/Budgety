@@ -198,7 +198,7 @@ struct EditRecurringRuleView: View {
                     }
                 }
 
-                Section("メモ (任意)") {
+                Section("メモ") {
                     TextField("詳細", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -224,14 +224,14 @@ struct EditRecurringRuleView: View {
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
+                    Button("キャンセル", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     #if os(macOS)
                     Button("完了") { save() }
                         .disabled(!canSave)
                     #else
-                    Button("保存") { save() }
+                    Button("保存", systemImage: "checkmark") { save() }
                         .disabled(!canSave)
                     #endif
                 }

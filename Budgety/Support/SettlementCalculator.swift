@@ -104,13 +104,7 @@ enum SettlementCalculator {
         // 「自分」の複数 ID (旧 userRecordName / canonical / cross-device で書かれた別 ID)
         // を一つの canonical に畳む。これで履歴的に複数 ID で記録された自分の expense が
         // 一人として正しく集計される。
-        let share: CKShare? = {
-            #if !os(watchOS)
-            return ShareCoordinator.shared.existingShare(for: sheet)
-            #else
-            return nil
-            #endif
-        }()
+        let share: CKShare? = ShareCoordinator.shared.existingShare(for: sheet)
         // ShareCalendarApp 方式: CKShare の participants から取れる URN を真実として
         // メンバーを構築する。email/phone ベースの旧 ID や PP.recordName の重複は
         // ここで全部 URN に畳む (= 同じ人が複数行に分裂しない)。
@@ -206,16 +200,41 @@ enum SettlementCalculator {
                       memberSet.insert(urn).inserted else { continue }
                 memberOrder.append(urn)
             }
+            // バーチャルメンバーは CKShare に出ないので PP から精算対象に追加する。
+            let virtualPPs = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
+            // 同名が複数いると displayName だけでは順序が不安定 (Set 列挙順依存) になり
+            // 残高タイルが入れ替わってチカチカするため、recordName をタイブレークに使う。
+            for pp in virtualPPs.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn) else { continue }
+                let nid = normalize(rn)
+                if memberSet.insert(nid).inserted { memberOrder.append(nid) }
+            }
         } else {
-            // CKShare 未ロード時のみ PP フォールバック
+            // 共有なし (CKShare が無い) 時はバーチャルメンバーのみ精算対象に追加する。
+            // 非バーチャルの PP は「共有していたが抜けた参加者」の残骸であることが
+            // あるため含めない (抜けた人の精算は出さない)。これにより、
+            // 共有していなくてもバーチャルメンバーが居れば精算が表示される。
             let pps = (sheet.participantProfiles as? Set<ParticipantProfile>) ?? []
-            for pp in pps.sorted(by: { ($0.displayName ?? "") < ($1.displayName ?? "") }) {
-                guard let rn = pp.recordName, !rn.isEmpty,
-                      rn != "_defaultOwner_", rn != "__defaultOwner__" else { continue }
+            // 同名タイブレークは recordName で (上記コメント参照)。
+            for pp in pps.sorted(by: {
+                ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "")
+            }) {
+                guard let rn = pp.recordName, UserProfileStore.isVirtualRecordName(rn) else { continue }
                 let nid = normalize(rn)
                 if memberSet.insert(nid).inserted { memberOrder.append(nid) }
             }
         }
+
+        // アーカイブ済み (削除された) バーチャルメンバーの正規化 ID 集合。
+        // 残高が 0 (精算済み) のときだけ残高表示から除外するために使う。
+        let archivedMemberIDs: Set<String> = Set(
+            ((sheet.participantProfiles as? Set<ParticipantProfile>) ?? [])
+                .filter { $0.archived }
+                .compactMap { $0.recordName }
+                .map(normalize)
+        )
 
         var balances: [String: Decimal] = [:]
         for m in memberOrder { balances[m] = 0 }
@@ -237,7 +256,15 @@ enum SettlementCalculator {
             let from = e.resolvedCurrencyCode
             let rawPayer = e.payerProfileID ?? ""
             let rawBeneficiaries = e.resolvedBeneficiaryIDs()
-            let convertedOpt = fx.convert(e.amountDecimal, from: from, to: target)
+            // FX スナップショットがあればそれを優先 (= 記録時の target 換算額を
+            // 凍結することで為替変動による残高ドリフトを防ぐ)。無ければ
+            // 現行 FX で換算 (旧データの後方互換性)。
+            let convertedOpt: Decimal? = {
+                if let snap = e.snapshotConvertedAmount(forTarget: target) {
+                    return snap
+                }
+                return fx.convert(e.amountDecimal, from: from, to: target)
+            }()
             var included = false
             var skipReason: String? = nil
             var normalizedPayer: String = ""
@@ -262,13 +289,17 @@ enum SettlementCalculator {
             // 2) 受益者の正規化 + 現参加者フィルタ + dedup
             // dedup は必須: 旧 URN と canonical が同じ人物にマップされる場合に
             // 同じ人を 2 回カウントしないため。
+            // 受益者が空 (= 割り勘オフ / 支払者単独負担) はスキップせず、
+            // カテゴリ集計だけ行う (= 残高は変動させない)。
             do {
                 var seen = Set<String>()
                 normalizedBeneficiaries = rawBeneficiaries
                     .map(normalize)
                     .filter { memberSet.contains($0) && seen.insert($0).inserted }
             }
-            guard !normalizedBeneficiaries.isEmpty else {
+            if !rawBeneficiaries.isEmpty && normalizedBeneficiaries.isEmpty {
+                // 明示的に受益者がセットされていたが、現在の参加者に居ない
+                // (= 退室済み or 別 ID にマイグレート) → 集計対象外
                 skipReason = "受益者が現参加者に居ない"
                 debugRows.append(.init(
                     id: e.objectID.uriRepresentation().absoluteString,
@@ -309,20 +340,30 @@ enum SettlementCalculator {
             }
 
             // 4) 集計
-            let count = Decimal(normalizedBeneficiaries.count)
-            let perShare = roundToCurrency(converted / count, code: target)
-            perShareOpt = perShare
-            let allocatedTotal = perShare * count
-            balances[payer, default: 0] += allocatedTotal
-            for b in normalizedBeneficiaries {
-                balances[b, default: 0] -= perShare
+            // 受益者が空 (= 割り勘オフ / 支払者単独負担) は残高変動なし。
+            // カテゴリ集計のみ続行する。
+            if !normalizedBeneficiaries.isEmpty {
+                let count = Decimal(normalizedBeneficiaries.count)
+                let perShare = roundToCurrency(converted / count, code: target)
+                perShareOpt = perShare
+                // 精算は SettlementRecord (= 送金プランからの記録) のみで行う。
+                // per-expense の settled フラグは廃止済みなので、ここでは全受益者を
+                // そのまま残高に反映する。
+                let allocatedTotal = perShare * Decimal(normalizedBeneficiaries.count)
+                balances[payer, default: 0] += allocatedTotal
+                for b in normalizedBeneficiaries {
+                    balances[b, default: 0] -= perShare
+                }
+                // 精算対象としてカウントするのは「割り勘設定された (= 受益者がいる)」
+                // 支出のみ。割り勘オフ (= 支払者単独負担) は残高に影響しないので
+                // 「対象支出」の件数には数えない。
+                includedCount += 1
             }
             included = true
-            includedCount += 1
 
             // 5) カテゴリ別集計 (期間フィルタ適用後の支出のみ加算)
             let catName = e.resolvedCategory?.displayName
-                ?? (e.categoryRaw?.isEmpty == false ? e.categoryRaw! : "未分類")
+                ?? (e.categoryRaw?.isEmpty == false ? e.categoryRaw! : "カテゴリなし")
             let catSymbol = e.resolvedCategory?.displaySymbol ?? "list.bullet"
             let catColor = e.resolvedCategory?.colorHex
             if var agg = categoryAgg[catName] {
@@ -365,10 +406,20 @@ enum SettlementCalculator {
             let from = normalize(rawFrom)
             let to = normalize(rawTo)
             guard memberSet.contains(from), memberSet.contains(to), from != to else { continue }
-            // 送金時の通貨を target に換算 (= Expense と同様)
+            // 1) FX スナップショット (= 記録時に解決された target 換算額) があれば
+            //    それを優先する。為替変動で「精算済みのはずなのに送金プランに
+            //    再表示される」現象を防ぐため。
+            // 2) スナップショット非対応の古い記録 (= 旧バージョンで作成) は
+            //    fallback で現行 FX レートを使って換算する。
             let amt = s.amountDecimal
             guard amt > 0 else { continue }
-            guard let converted = fx.convert(amt, from: s.resolvedCurrencyCode, to: target) else {
+            let convertedOpt: Decimal? = {
+                if let snap = s.snapshotConvertedAmount(forTarget: target) {
+                    return snap
+                }
+                return fx.convert(amt, from: s.resolvedCurrencyCode, to: target)
+            }()
+            guard let converted = convertedOpt else {
                 missing.insert(s.resolvedCurrencyCode)
                 continue
             }
@@ -377,8 +428,12 @@ enum SettlementCalculator {
             balances[to,   default: 0] -= rounded
         }
 
-        let memberBalances: [MemberBalance] = memberOrder.map { id in
-            MemberBalance(profileID: id, amount: balances[id] ?? 0)
+        let memberBalances: [MemberBalance] = memberOrder.compactMap { id in
+            let amount = balances[id] ?? 0
+            // アーカイブ済みメンバーは精算済み (残高 0) なら残高に表示しない。
+            // 残高が残っている場合は表示し続ける (まだ精算が必要なため)。
+            if amount == 0, archivedMemberIDs.contains(id) { return nil }
+            return MemberBalance(profileID: id, amount: amount)
         }
 
         let nonZero = memberBalances.filter { !$0.isSettled }

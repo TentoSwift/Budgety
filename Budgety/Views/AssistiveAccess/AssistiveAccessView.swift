@@ -179,6 +179,8 @@ struct AAAddExpenseView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var ctx
+    /// Reduce Motion 時は数値ロールを止める。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var amountText: String = ""
 
     private var amount: Decimal? {
@@ -196,8 +198,8 @@ struct AAAddExpenseView: View {
                 Text(amountText.isEmpty ? "¥0" : "¥" + amountText)
                     .font(.system(size: 80, weight: .heavy, design: .rounded).monospacedDigit())
                     .foregroundStyle(.primary)
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: amountText)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .snappy, value: amountText)
                 Spacer(minLength: 0)
                 AAKeypad(amountText: $amountText)
                     .padding(.horizontal)
@@ -257,6 +259,8 @@ struct AAAddExpenseView: View {
         if let store = sheet.objectID.persistentStore {
             ctx.assign(expense, to: store)
         }
+        // FX スナップショット
+        expense.captureFXSnapshot()
         do {
             try ctx.save()
             Haptics.success()

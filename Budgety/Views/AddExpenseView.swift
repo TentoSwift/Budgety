@@ -7,6 +7,7 @@ import SwiftUI
 import CoreData
 import PhotosUI
 import CloudKit
+import UIKit
 
 struct AddExpenseView: View {
     enum Mode {
@@ -49,11 +50,35 @@ struct AddExpenseView: View {
     @State private var title: String = ""
     @State private var amountText: String = ""
     @State private var showingDeleteConfirm: Bool = false
-    /// 新規追加時に title → amount の順でキーボードフォーカスを送る。
-    enum FocusField: Hashable { case amount }
-    @FocusState private var focusedField: FocusField?
-    /// `DynamicTextView` の Bool バインディング (UITextView は @FocusState 非対応のため別管理)
+    /// 金額・タイトルとも UIKit (UITextView) ベースの DynamicTextField を使う。
+    /// SwiftUI の @FocusState を onAppear でトグルするとキーボードが画面ロード後に
+    /// 遅れて出るため、UIKit の becomeFirstResponder() で即座に開く。
+    @State private var amountFocused: Bool = false
     @State private var titleFocused: Bool = false
+
+    /// 金額フォーカス中だけ safeArea に出す簡易電卓の演算子。
+    private enum CalcOp { case add, sub, mul, div
+        var systemImage: String {
+            switch self {
+            case .add: "plus"
+            case .sub: "minus"
+            case .mul: "multiply"
+            case .div: "divide"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .add: "+"
+            case .sub: "−"
+            case .mul: "×"
+            case .div: "÷"
+            }
+        }
+    }
+    /// 演算待ちの左辺。タップで amountText が右辺になる。
+    @State private var calcAccumulator: Decimal? = nil
+    /// 確定待ちの演算子。
+    @State private var calcPendingOp: CalcOp? = nil
     @State private var kind: TransactionKind = .expense
     @State private var currencyCode: String = "JPY"
     @State private var selectedCategory: ExpenseCategory?
@@ -75,10 +100,7 @@ struct AddExpenseView: View {
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
 
-    /// 過去の同タイトル支出からの候補。タイトル入力で自動更新。
-    @State private var titleSuggestion: TitleSuggestion?
-
-    /// FoundationModels が推測したカテゴリ。過去候補にカテゴリが無い時だけセットされる。
+    /// FoundationModels が推測したカテゴリ。
     @State private var aiCategorySuggestion: ExpenseCategory?
     @State private var isComputingAICategory: Bool = false
     /// 現在進行中の AI 推測 Task。新しいキーストロークでキャンセルする。
@@ -104,6 +126,170 @@ struct AddExpenseView: View {
     /// 空 = 「シートの全員で均等割り」(精算計算側で展開される)。
     /// 収入では使わない (精算対象外)。
     @State private var selectedBeneficiaries: Set<String> = []
+    /// 割り勘トグル。オフ = この支出は支払者のみの負担 (受益者 = 支払者)。
+    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    @State private var splitEnabled: Bool = false
+    /// バーチャルメンバー追加 (Premium 機能)。
+    @State private var showAddMemberPrompt = false
+    @State private var newMemberName = ""
+    @State private var memberPaywall = false
+
+    // MARK: - Amount field (UIKit-backed)
+
+    /// 金額入力 UITextView (DynamicTextField)。本体 body の型推論を軽くするため
+    /// 外出ししている。
+    /// - 基準フォント: title3 標準の 20pt。DynamicTextView 内で UIFontMetrics で
+    ///   AX 倍率がかかる (周囲の UI と一緒にスケールする)。
+    /// - 計算中 (accumulator/pendingOp あり) は delete で閉じない。
+    private var amountField: some View {
+        DynamicTextField(
+            text: $amountText,
+            focus: $amountFocused,
+            placeholder: "0",
+            font: .monospacedDigitSystemFont(ofSize: 20, weight: .regular),
+            keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
+            dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
+        )
+    }
+
+    // MARK: - Amount calc bar (safeArea)
+
+    /// 金額フォーカス中に safeArea に出す簡易電卓 + 「次へ」のバー。
+    /// inputAccessoryView の代替。
+    private var amountCalcBar: some View {
+        // 上段: 計算式をしっかり表示。下段: 演算子ボタン + 「次へ」。
+        // 1 段に詰めると HStack で Text が押し潰されて見えないことがあるため。
+        VStack(alignment: .leading) {
+            // 計算プレビューは演算子を押したとき以降だけ表示する。
+            if !calcExpression.isEmpty {
+                Text(calcExpression)
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .glassEffect()
+            }
+            HStack {
+                Spacer()
+                calcOpButton(.sub)
+                calcOpButton(.add)
+                calcOpButton(.mul)
+                calcOpButton(.div)
+                Button { calcEquals() } label: {
+                    Image(systemName: "equal")
+                        .padding()
+                }
+                .disabled(calcPendingOp == nil)
+                Spacer()
+            }
+            .glassEffect()
+        }
+        .padding(.horizontal)
+        .padding(.vertical)
+        // AX サイズだと SF Symbol + padding が巨大化して UI が崩れるので、
+        // バー全体の Dynamic Type を .xxLarge までにキャップする。
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
+
+    /// バー上に出す計算式 ("1000 + 200" 等)。
+    /// 演算子が押されていないときは空文字 (= プレビューを出さない)。
+    private var calcExpression: String {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return "" }
+        let curr = amountText
+        return curr.isEmpty
+            ? "\(formatCalc(acc)) \(op.symbol)"
+            : "\(formatCalc(acc)) \(op.symbol) \(curr)"
+    }
+
+    private func calcOpButton(_ op: CalcOp) -> some View {
+        Button { applyCalcOp(op) } label: {
+            Image(systemName: op.systemImage)
+                .padding()
+        }
+    }
+
+    /// 演算子をタップ: 入力済み数値を accumulator に取り込み、次の演算子を保持する。
+    /// 空タップ時は pending op の差し替えだけ行う (= 演算子の打ち間違い訂正)。
+    private func applyCalcOp(_ newOp: CalcOp) {
+        if let cur = Decimal(string: amountText) {
+            if let acc = calcAccumulator, let op = calcPendingOp {
+                calcAccumulator = roundedForCurrency(applyCalc(op, acc, cur))
+            } else {
+                calcAccumulator = cur
+            }
+            amountText = ""
+        }
+        calcPendingOp = newOp
+        // サブ画面から戻ってキーボードが閉じている場合に再オープン。
+        amountFocused = true
+        Haptics.selection()
+    }
+
+    /// = を確定: 現在の amountText を右辺として演算結果を amountText に書き戻す。
+    private func calcEquals() {
+        guard let acc = calcAccumulator, let op = calcPendingOp else { return }
+        let cur = Decimal(string: amountText) ?? 0
+        let result = roundedForCurrency(applyCalc(op, acc, cur))
+        amountText = formatCalc(result)
+        calcAccumulator = nil
+        calcPendingOp = nil
+        Haptics.success()
+    }
+
+    /// 保存直前に呼ぶ。`=` を押されないまま保存しようとした場合に、
+    /// 残っている計算 (例: `2 *` 入力中で右辺が 20) を自動で確定して
+    /// amountText を「結果値」に書き戻す。これを忘れると `2 * 20` の
+    /// つもりが右辺の `20` しか保存されない。
+    private func finalizePendingCalcIfNeeded() {
+        guard calcAccumulator != nil, calcPendingOp != nil else { return }
+        // amountText が空 (= 演算子押下後すぐ保存) の時は計算する右辺が
+        // 無いので、accumulator をそのまま結果として採用する。
+        if amountText.isEmpty, let acc = calcAccumulator {
+            amountText = formatCalc(acc)
+            calcAccumulator = nil
+            calcPendingOp = nil
+            return
+        }
+        calcEquals()
+    }
+
+    /// 小数を持たない通貨 (JPY/KRW/VND/IDR 等) のときは整数に丸める。
+    /// `÷` で割り切れない時に "333.3333..." のような値にならないようにする。
+    private func roundedForCurrency(_ d: Decimal) -> Decimal {
+        guard !decimalKeypadNeeded else { return d }
+        var result = Decimal()
+        var source = d
+        NSDecimalRound(&result, &source, 0, .plain)
+        return result
+    }
+
+    private func applyCalc(_ op: CalcOp, _ a: Decimal, _ b: Decimal) -> Decimal {
+        switch op {
+        case .add: return a + b
+        case .sub: return a - b
+        case .mul: return a * b
+        case .div:
+            guard b != 0 else { return a }
+            var result = Decimal()
+            var num = a
+            var den = b
+            NSDecimalDivide(&result, &num, &den, .plain)
+            return result
+        }
+    }
+
+    /// 入力欄に書き戻す時の文字列化。末尾の不要な 0 と小数点を落とす。
+    private func formatCalc(_ d: Decimal) -> String {
+        var s = NSDecimalNumber(decimal: d).stringValue
+        if s.contains(".") {
+            while s.hasSuffix("0") { s.removeLast() }
+            if s.hasSuffix(".") { s.removeLast() }
+        }
+        return s
+    }
 
     // MARK: - Recurring (繰り返し)
 
@@ -161,14 +347,22 @@ struct AddExpenseView: View {
     }
 
     private var navTitle: String {
+        // kind を切り替えたらタイトルも追従する (支出 ↔ 収入)。
+        let noun = kind == .income ? "収入" : "支出"
         switch mode {
-        case .create: "支出を追加"
-        case .edit: "支出を編集"
+        case .create: return "\(noun)を追加"
+        case .edit:   return "\(noun)を編集"
         }
     }
 
     private var canSave: Bool {
-        amountDecimal != nil
+        guard amountDecimal != nil else { return false }
+        // 割り勘オンのときは必ず 1 人以上選ぶ。空 (= 全員均等) を許すと、
+        // あとで追加したメンバーが過去の支出に遡って含まれてしまうため。
+        if kind == .expense, shouldShowSharingFields, splitEnabled, selectedBeneficiaries.isEmpty {
+            return false
+        }
+        return true
     }
 
     /// 編集モードで Member 解決ができなかった場合に表示する名前 (保存済みの paidBy)。
@@ -189,28 +383,7 @@ struct AddExpenseView: View {
         return nil
     }
 
-    // MARK: - Title-based suggestion (= 過去の入力から学習)
-
-    fileprivate struct TitleSuggestion {
-        let category: ExpenseCategory?
-        let amount: Decimal?
-        let kind: TransactionKind
-        let payerName: String?
-        let payerProfileID: String?
-        let payerMemberID: UUID?
-        let sampleCount: Int
-
-        /// 1 行プレビュー: "食費 · ¥320 (5 件)"
-        func summary(currency: String) -> String {
-            var parts: [String] = []
-            if let cat = category { parts.append(cat.displayName) }
-            if let amt = amount {
-                parts.append(CurrencyCatalog.format(amt, code: currency))
-            }
-            if let p = payerName, !p.isEmpty { parts.append(p) }
-            return parts.joined(separator: " · ") + "  (\(sampleCount) 件)"
-        }
-    }
+    // MARK: - AI category suggestion
 
     @ViewBuilder
     private var aiCategorySuggestionSection: some View {
@@ -250,50 +423,6 @@ struct AddExpenseView: View {
             startPoint: .leading,
             endPoint: .trailing
         )
-    }
-
-    /// 過去履歴サジェストバナーの中身。AX では適用 pill を下段に。
-    @ViewBuilder
-    private func historySuggestionLabel(for s: TitleSuggestion) -> some View {
-        let header = Text("過去の入力から候補")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-        let summary = Text(s.summary(currency: currencyCode))
-            .font(.subheadline)
-            .foregroundStyle(.primary)
-            // AX では full-width で wrap させたいので、line limit を外す。
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .truncationMode(.tail)
-        let applyPill = Text("適用")
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(Color.accentColor.opacity(0.18)))
-            .foregroundStyle(Color.accentColor)
-
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(Color.accentColor)
-                    header
-                    Spacer()
-                }
-                summary
-                HStack { Spacer(); applyPill }
-            }
-        } else {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    header
-                    summary
-                }
-                Spacer()
-                applyPill
-            }
-        }
     }
 
     /// AI 提案バナーの中身。AX サイズでは「適用」pill を下段にまわして
@@ -344,23 +473,11 @@ struct AddExpenseView: View {
         }
     }
 
-    @ViewBuilder
-    private var suggestionSection: some View {
-        if case .create = mode, let s = titleSuggestion {
-            Section {
-                Button {
-                    applySuggestion(s)
-                } label: {
-                    historySuggestionLabel(for: s)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
 
     /// 現在の title 入力に基づいて、同シート内の過去 Expense を引いて候補を組み立てる。
     /// 現在の kind に一致する Expense だけを対象にすることで、ユーザーが既に選んだ
-    /// 種別 (支出 / 収入) を尊重する。1 文字以下では何もしない (= ノイズ抑制)。
+    /// タイトル入力で AI カテゴリ提案を再キックする。
+    /// 過去履歴ベースの候補機能は廃止済みで、現在は AI 提案のみ。
     @MainActor
     private func recomputeTitleSuggestion() {
         // 進行中の AI suggest Task を必ずキャンセル
@@ -369,66 +486,10 @@ struct AddExpenseView: View {
         aiCategorySuggestion = nil
         isComputingAICategory = false
 
-        guard case .create(let sheet) = mode else {
-            titleSuggestion = nil
-            return
-        }
+        guard case .create(let sheet) = mode else { return }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count >= 2 else {
-            titleSuggestion = nil
-            return
-        }
-        let req = NSFetchRequest<Expense>(entityName: "Expense")
-        req.predicate = NSPredicate(
-            format: "sheet == %@ AND title CONTAINS[c] %@ AND kindRaw == %@",
-            sheet, trimmed, kind.rawValue
-        )
-        req.sortDescriptors = [NSSortDescriptor(keyPath: \Expense.date, ascending: false)]
-        req.fetchLimit = 30
-        let results = (try? viewContext.fetch(req)) ?? []
-        // 過去マッチが 0 件 → 履歴サジェストはなしだが、AI 提案は試す価値あり
-        guard !results.isEmpty else {
-            titleSuggestion = nil
-            kickAICategorySuggest(title: trimmed, in: sheet)
-            return
-        }
-
-        // 最頻カテゴリ (objectID で集計)
-        let categoryCounts = Dictionary(grouping: results, by: { $0.category?.objectID })
-        let topCategoryID = categoryCounts
-            .filter { $0.key != nil }
-            .max(by: { $0.value.count < $1.value.count })?.key
-        let topCategory: ExpenseCategory? = results
-            .first(where: { $0.category?.objectID == topCategoryID })?.category
-
-        // 中央値 (0 以外)
-        let amounts = results.map { $0.amountDecimal }.filter { $0 > 0 }.sorted()
-        let medianAmount: Decimal? = amounts.isEmpty ? nil : amounts[amounts.count / 2]
-
-        // 最頻 payer
-        let payerCounts = Dictionary(grouping: results, by: { $0.payerProfileID ?? "" })
-        let topPayerKey = payerCounts
-            .filter { !$0.key.isEmpty }
-            .max(by: { $0.value.count < $1.value.count })?.key
-        let topPayerExpense = results
-            .first(where: { ($0.payerProfileID ?? "") == (topPayerKey ?? "") })
-
-        titleSuggestion = TitleSuggestion(
-            category: topCategory,
-            amount: medianAmount,
-            kind: kind,
-            payerName: topPayerExpense?.paidBy,
-            payerProfileID: topPayerKey,
-            payerMemberID: topPayerExpense?.payerMemberID,
-            sampleCount: results.count
-        )
-
-        // 過去マッチからカテゴリが拾えない時だけ FoundationModels で推測する。
-        // selectedCategory が既に何か入っていても (= ロード時の自動デフォルト) 提案を出して
-        // 上書きしたいケースに対応する。
-        if topCategory == nil {
-            kickAICategorySuggest(title: trimmed, in: sheet)
-        }
+        guard trimmed.count >= 2 else { return }
+        kickAICategorySuggest(title: trimmed, in: sheet)
     }
 
     /// FoundationModels で「タイトルからカテゴリを推測」を非同期で行う。
@@ -466,34 +527,6 @@ struct AddExpenseView: View {
         }
     }
 
-    /// サジェストを適用。フィールドが空 / 自動初期値のままなら上書きし、ユーザーが
-    /// 手で変更したと推測できる場合は上書きしない。kind は現在の値で絞り込まれているため触らない。
-    @MainActor
-    private func applySuggestion(_ s: TitleSuggestion) {
-        if amountText.isEmpty, let amt = s.amount {
-            amountText = NSDecimalNumber(decimal: amt).stringValue
-        }
-        if selectedCategory == nil, let cat = s.category {
-            selectedCategory = cat
-        }
-        // selectedPayer は loadIfNeeded で自分にデフォルト初期化される。
-        // 自分のままなら "ユーザーが意図して選んだ" わけではないので、サジェストの payer で上書きする。
-        let isDefaultPayer: Bool = {
-            guard let payer = selectedPayer, let myID = profile.selfMemberID else { return false }
-            return payer.id == myID
-        }()
-        if (selectedPayer == nil || isDefaultPayer),
-           let mid = s.payerMemberID,
-           mid != profile.selfMemberID {
-            let req = NSFetchRequest<Member>(entityName: "Member")
-            req.predicate = NSPredicate(format: "id == %@", mid as CVarArg)
-            req.fetchLimit = 1
-            if let m = (try? viewContext.fetch(req))?.first {
-                selectedPayer = m
-            }
-        }
-        Haptics.success()
-    }
 
     @ViewBuilder
     private var photoSection: some View {
@@ -638,19 +671,61 @@ struct AddExpenseView: View {
         }
     }
 
-    /// 受益者ピッカーのプレビュー文字列。空 = 全員均等、それ以外 = 「N 人選択中: 名前1, 名前2...」。
-    @MainActor
-    private func beneficiarySummary(in sheet: ExpenseSheet) -> String {
-        if selectedBeneficiaries.isEmpty {
-            return "全員均等"
+    /// 受益者をインラインで選ぶ 1 行 (アバター + 名前 + チェック)。タップで選択をトグル。
+    @ViewBuilder
+    private func beneficiaryInlineRow(_ id: String, sheet: ExpenseSheet) -> some View {
+        let info = sheet.memberDisplayInfo(for: id)
+        let isOn = selectedBeneficiaries.contains(id)
+        Button {
+            if isOn { selectedBeneficiaries.remove(id) } else { selectedBeneficiaries.insert(id) }
+        } label: {
+            HStack(spacing: 12) {
+                AvatarView(
+                    photoData: info.photoData,
+                    displayName: info.name,
+                    colorHex: info.colorHex,
+                    size: 32
+                )
+                Text(info.name).foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                    .font(.title3)
+            }
         }
-        let names = selectedBeneficiaries.map { sheet.memberDisplayInfo(for: $0).name }
-        return "\(selectedBeneficiaries.count) 人: \(names.joined(separator: ", "))"
+        .buttonStyle(.plain)
+    }
+
+    /// 割り勘の「全員」ボタン: シートの全メンバーを受益者に追加。
+    @MainActor
+    private func selectAllBeneficiaries(sheet: ExpenseSheet) {
+        for id in sheet.acceptedMemberProfileIDs() { selectedBeneficiaries.insert(id) }
+    }
+
+    /// 割り勘 picker に表示する ID 列。
+    /// 現メンバー + 既に保存されている受益者で現メンバーに居ない人 (退室済み等) を末尾に。
+    @MainActor
+    private func beneficiaryPickerIDs(sheet: ExpenseSheet) -> [String] {
+        var ids = sheet.acceptedMemberProfileIDs()
+        var seen = Set(ids)
+        for sb in selectedBeneficiaries where !sb.isEmpty && seen.insert(sb).inserted {
+            ids.append(sb)
+        }
+        return ids
     }
 
     /// 永続化用のソート済み CSV (順序非依存で同値判定するため)。
     private var selectedBeneficiaryCSV: String {
         selectedBeneficiaries.sorted().joined(separator: ",")
+    }
+
+    /// 実際に保存する受益者 CSV。
+    /// - 割り勘オフ (UI 非表示含む): 空 (= 受益者未設定。SettlementCalculator では
+    ///   「支払者単独負担」として残高変動なし、カテゴリ集計のみ計上)。
+    /// - 割り勘オン: 選択中の相手。
+    private var effectiveBeneficiaryCSV: String {
+        guard shouldShowSharingFields, splitEnabled else { return "" }
+        return selectedBeneficiaryCSV
     }
 
     /// `selectedPayer` (Member) に対応する ParticipantProfile を同シートから引く。
@@ -701,8 +776,12 @@ struct AddExpenseView: View {
     }
 
     /// 支払者 / 受益者セクションを表示するか。
+    /// 共有中・既存共有データあり・Premium (= バーチャルメンバーを足して割り勘可能) なら表示。
+    /// macOS 版 (MacAddExpenseView) と同じ判定にして solo シートでも割り勘トグルを出す。
     private var shouldShowSharingFields: Bool {
-        hasOtherParticipants || existingSharingInfo
+        if hasOtherParticipants || existingSharingInfo { return true }
+        if let sheet = contextSheet, PurchaseManager.hasPremiumAccess(to: sheet) { return true }
+        return false
     }
 
     /// 編集中の支出を削除する。確認ダイアログ経由でのみ呼ばれる。
@@ -859,32 +938,33 @@ struct AddExpenseView: View {
 
 
                 Section {
-                    DynamicTextField(
-                        text: $title,
-                        focus: $titleFocused,
-                        placeholder: kind == .expense ? "タイトル (例: スーパー)" : "タイトル (例: 給料)",
-                        onSubmit: { focusedField = .amount }
-                    )
-                    .onChange(of: title) { _, _ in
-                        recomputeTitleSuggestion()
-                    }
+                    // 金額を先に入力する。
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
-                        TextField("0", text: $amountText)
-                            .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .focused($focusedField, equals: .amount)
-                            .font(.title3.monospacedDigit())
-                            .onChange(of: amountText) { _, new in
-                                // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
-                                let normalized = new
-                                    .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
-                                let allowed = decimalKeypadNeeded
-                                    ? normalized.filter { $0.isASCII && ($0.isNumber || $0 == ".") }
-                                    : normalized.filter { $0.isASCII && $0.isNumber }
-                                if allowed != new { amountText = allowed }
-                            }
+                        // UIKit (UITextView) ベース。詳細は amountField 参照。
+                        amountField
+                        .onChange(of: amountText) { _, new in
+                            // 全角数字 / 全角ピリオドを半角に正規化してから許可文字でフィルタ
+                            let normalized = new
+                                .applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new
+                            let allowed = decimalKeypadNeeded
+                                ? normalized.filter { $0.isASCII && ($0.isNumber || $0 == ".") }
+                                : normalized.filter { $0.isASCII && $0.isNumber }
+                            if allowed != new { amountText = allowed }
+                        }
+                    }
+                    // 次にタイトルを入力する。
+                    DynamicTextField(
+                        text: $title,
+                        focus: $titleFocused,
+                        placeholder: "タイトル",
+                        dismissOnDeleteWhenEmpty: true,
+                        onSubmit: { titleFocused = false }
+                    )
+                    .onChange(of: title) { _, _ in
+                        recomputeTitleSuggestion()
                     }
                     Picker("通貨", selection: $currencyCode) {
                         ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
@@ -894,7 +974,6 @@ struct AddExpenseView: View {
                     .pickerStyle(.navigationLink)
                 }
 
-                suggestionSection
                 aiCategorySuggestionSection
 
                 categorySection
@@ -905,14 +984,58 @@ struct AddExpenseView: View {
 
                 payerSection
 
-                if kind == .expense, let sheet = contextSheet {
+                if kind == .expense, shouldShowSharingFields, let sheet = contextSheet {
                     Section {
-                        NavigationLink {
-                            DiscardGuardedBack(modifier: discardDialogModifier) {
-                                BeneficiaryPickerView(selected: $selectedBeneficiaries, record: sheet)
+                        Toggle("割り勘", isOn: Binding(
+                            get: { splitEnabled },
+                            set: { on in
+                                splitEnabled = on
+                                // オンにした直後は全員を選択する (空 = 全員にはしない)。
+                                // 後から相手を絞れる。空のまま保存させないため。
+                                if on, selectedBeneficiaries.isEmpty
+                                    || selectedBeneficiaries == Set([selectedPayerProfileID ?? ""]) {
+                                    selectAllBeneficiaries(sheet: sheet)
+                                }
                             }
-                        } label: {
-                            beneficiaryLabel(sheet: sheet)
+                        ))
+                        if splitEnabled {
+                            // 別画面に遷移せず、この場でメンバーを選ぶ (インライン)。
+                            // 候補は参加中 (受諾済み) のメンバー + バーチャルメンバー
+                            // + 既に受益者として保存されているが現メンバーには居ない人
+                            //   (= 退室済み / 削除済みバーチャル等を編集中も表示するため)
+                            ForEach(beneficiaryPickerIDs(sheet: sheet), id: \.self) { id in
+                                beneficiaryInlineRow(id, sheet: sheet)
+                            }
+                            Button {
+                                if PurchaseManager.hasPremiumAccess(to: sheet) {
+                                    showAddMemberPrompt = true
+                                } else {
+                                    memberPaywall = true
+                                }
+                            } label: {
+                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                            }
+                        }
+                    } header: {
+                        if splitEnabled {
+                            HStack {
+                                Text("割る相手")
+                                Spacer()
+                                Button("全員") { selectAllBeneficiaries(sheet: sheet) }
+                                    .font(.caption)
+                                    .textCase(nil)
+                                Button("クリア") { selectedBeneficiaries.removeAll() }
+                                    .font(.caption)
+                                    .textCase(nil)
+                                    .disabled(selectedBeneficiaries.isEmpty)
+                            }
+                        }
+                    } footer: {
+                        if splitEnabled {
+                            Text(selectedBeneficiaries.isEmpty
+                                 ? "割る相手を 1 人以上選んでください。"
+                                 : "チェックした人で均等割りします。")
+                                .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                         }
                     }
                 }
@@ -940,6 +1063,20 @@ struct AddExpenseView: View {
             .tint(sheetTint)
             .listStyle(.plain)
             .scrollDismissesKeyboard(.interactively)
+            // 金額フォーカス中だけキーボード上 (safeArea) に簡易電卓を出す。
+            .safeAreaInset(edge: .bottom) {
+                if amountFocused {
+                    amountCalcBar
+                }
+            }
+            // フォーカスを失った瞬間 (= 他 View へ遷移したとき等) に計算を確定する。
+            // これによりサブ画面から戻ったら計算式は確定済 (amountText に結果) で
+            // キーボードは閉じている状態になる。再開したい時はもう一度金額をタップ。
+            .onChange(of: amountFocused) { oldValue, newValue in
+                if oldValue && !newValue {
+                    calcEquals()
+                }
+            }
             .onChange(of: kind) { _, newKind in
                 // 種別変更時にカテゴリの整合を取り、提案も再計算
                 if let cur = selectedCategory, cur.kind == newKind {
@@ -1023,14 +1160,21 @@ struct AddExpenseView: View {
                 Text("元に戻せません。")
             }
             .onAppear {
+                let isFirstAppear = !didLoad
                 loadIfNeeded()
-                // 新規追加時はキーボードを自動で開いて title にフォーカス。
+                // 新規追加 (.create) の初回だけ、金額に自動フォーカスしてキーボードを開く。
                 // 編集 (.edit) では既存値を読みやすくするため自動フォーカスしない。
-                if case .create = mode {
-                    titleFocused = true
+                // サブ画面 (NavigationLink/sheet) から戻ったときは「計算を確定して
+                // キーボードを閉じた」状態を維持し、再フォーカスしない (もう一度金額を
+                // タップすれば再開できる)。
+                if case .create = mode, isFirstAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        amountFocused = true
+                    }
                 }
             }
             .onDisappear {
+                amountFocused = false
                 titleFocused = false
             }
             .fullScreenCover(isPresented: $showCameraScanner) {
@@ -1050,6 +1194,20 @@ struct AddExpenseView: View {
                     },
                     onCancel: { showPhotoScanner = false }
                 )
+            }
+            .sheet(isPresented: $memberPaywall) { PaywallView() }
+            .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
+                TextField("名前", text: $newMemberName)
+                Button("追加") {
+                    if let sheet = contextSheet, let id = sheet.addVirtualMember(name: newMemberName) {
+                        splitEnabled = true
+                        selectedBeneficiaries.insert(id)
+                    }
+                    newMemberName = ""
+                }
+                Button("キャンセル", role: .cancel) { newMemberName = "" }
+            } message: {
+                Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
             }
         }
         // NavigationStack の外側 = シートのルートビューに適用すると、
@@ -1142,18 +1300,6 @@ struct AddExpenseView: View {
         }
     }
 
-    @ViewBuilder
-    private func beneficiaryLabel(sheet: ExpenseSheet) -> some View {
-        LabeledContent("受益者") {
-            Text(beneficiarySummary(in: sheet))
-                .foregroundStyle(.secondary)
-                // AX サイズでは LabeledContent が縦積みになるので、
-                // 切り詰めを許して横で済ませるのは normal サイズだけにする。
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .truncationMode(.tail)
-        }
-    }
-
     /// xmark / 各サブ view に共通で当てる「変更を破棄しますか?」ダイアログ。
     /// 同じ `$showDiscardConfirm` バインディングなので、その時点で
     /// 表示中の view (= xmark を含む AddExpenseView 本体 or push 済みサブ view)
@@ -1221,7 +1367,7 @@ struct AddExpenseView: View {
         if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
         if (selectedPayerProfileID ?? "") != origPayerProfileID { return true }
         if selectedCategory?.objectID != origCategoryObjectID { return true }
-        if selectedBeneficiaryCSV != origBeneficiaryCSV { return true }
+        if effectiveBeneficiaryCSV != origBeneficiaryCSV { return true }
         if (photoData?.count ?? 0) != origPhotoByteCount { return true }
         return false
     }
@@ -1231,11 +1377,18 @@ struct AddExpenseView: View {
     private func applyChanges(toExpense expense: Expense, includeDate: Bool) {
         let newTitle = title.trimmingCharacters(in: .whitespaces)
         if newTitle != origTitle { expense.title = newTitle }
-        if amountText != origAmountText, let d = Decimal(string: amountText) {
+        let amountChanged = amountText != origAmountText
+        if amountChanged, let d = Decimal(string: amountText) {
             expense.amount = NSDecimalNumber(decimal: d)
         }
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
-        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        let currencyChanged = currencyCode != origCurrencyCode
+        if currencyChanged { expense.currencyCode = currencyCode }
+        // amount または通貨が変わったら FX スナップショットを取り直す。
+        // 何も変わっていなければ元の snapshot をそのまま使う (= 当時のレート維持)。
+        if amountChanged || currencyChanged {
+            expense.captureFXSnapshot()
+        }
         if note != origNote { expense.note = note }
         if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
         if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
@@ -1258,8 +1411,8 @@ struct AddExpenseView: View {
                 expense.category = nil
             }
         }
-        if selectedBeneficiaryCSV != origBeneficiaryCSV {
-            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
+        if effectiveBeneficiaryCSV != origBeneficiaryCSV {
+            expense.beneficiaryProfileIDs = effectiveBeneficiaryCSV
         }
     }
 
@@ -1286,6 +1439,8 @@ struct AddExpenseView: View {
     /// 「変更の適用範囲」ダイアログから呼ばれる。
     private func performRecurringSave(scope: RecurringSaveScope) {
         guard case .edit(let expense) = mode else { return }
+        // save() と同じく、計算途中の状態は確定してから保存する。
+        finalizePendingCalcIfNeeded()
         viewContext.refresh(expense, mergeChanges: true)
 
         // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
@@ -1366,6 +1521,19 @@ struct AddExpenseView: View {
             note = expense.note ?? ""
             photoData = expense.photoData
             selectedBeneficiaries = Set(expense.beneficiaryIDList)
+            // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ (支払者単独負担)。
+            // 複数なら割り勘オン。
+            // ※ 空はそのまま「割り勘オフ」と解釈し、全メンバー展開は行わない
+            //   (= 後から追加されたメンバーを巻き込まない)。
+            let loadedPayerID = expense.payerProfileID ?? ""
+            let isPayerOnly = selectedBeneficiaries.isEmpty
+                || (!loadedPayerID.isEmpty && selectedBeneficiaries == Set([loadedPayerID]))
+            splitEnabled = !isPayerOnly
+            // 割り勘オフ時は UI 上のチェック対象を「支払者ただ 1 人」に正規化しておく
+            // (= 割り勘オンに切り替えた時の自然な開始状態)。
+            if !splitEnabled, !loadedPayerID.isEmpty {
+                selectedBeneficiaries = Set([loadedPayerID])
+            }
 
             // 繰り返し state 復元 (関連 Rule があればその値、無ければ既定値で OFF)
             if let rule = expense.relatedRule {
@@ -1390,7 +1558,14 @@ struct AddExpenseView: View {
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
             origPhotoByteCount = expense.photoData?.count ?? 0
-            origBeneficiaryCSV = selectedBeneficiaryCSV
+            // 保存値そのものを基準にする (UI 正規化に引きずられない)。
+            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
+            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
+            let storedCSV = expense.beneficiaryProfileIDs ?? ""
+            origBeneficiaryCSV = (!loadedPayerID.isEmpty
+                                  && Set(expense.beneficiaryIDList) == Set([loadedPayerID]))
+                ? ""
+                : storedCSV
             origIsRecurring = isRecurring
             origFrequencyRaw = frequency.rawValue
             origRecurringInterval = Int32(recurringInterval)
@@ -1406,6 +1581,10 @@ struct AddExpenseView: View {
     }
 
     private func save() {
+        // `=` が押されないままユーザーが保存ボタンを押した時に、計算中の
+        // 状態 (= 2 * 20 の途中) を確定してから保存する。これを忘れると
+        // 右辺だけ (= 20) が保存されてしまう。
+        finalizePendingCalcIfNeeded()
         guard let amountDecimal else { return }
         let pc = PersistenceController.shared
         switch mode {
@@ -1431,7 +1610,7 @@ struct AddExpenseView: View {
             expense.note = note
             expense.photoData = photoData
             expense.createdAt = .now
-            expense.beneficiaryProfileIDs = selectedBeneficiaryCSV
+            expense.beneficiaryProfileIDs = effectiveBeneficiaryCSV
 
             expense.sheet = record
             // category は Expense と同じストア (= sheet と同じストア) に居る前提でのみ紐付ける
@@ -1439,6 +1618,9 @@ struct AddExpenseView: View {
                cat.objectID.persistentStore == sheetStore {
                 expense.category = cat
             }
+            // FX スナップショット: 為替変動による残高ドリフト防止。
+            // amount / currencyCode / sheet がセットされた後で呼ぶ必要がある。
+            expense.captureFXSnapshot()
             // 自分の ParticipantProfile を同シートに ensure (まだ無ければ作成、あれば更新)
             if BuildInfo.profileFeatureEnabled {
                 profile.ensureProfile(in: record, ctx: viewContext)

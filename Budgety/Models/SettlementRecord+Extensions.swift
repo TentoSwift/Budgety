@@ -30,4 +30,27 @@ extension SettlementRecord {
     var formattedAmount: String {
         CurrencyCatalog.format(amountDecimal, code: resolvedCurrencyCode)
     }
+
+    /// FX 換算スナップショット (= 記録時に解決された target 通貨建て金額)。
+    /// 設定されていれば SettlementCalculator は当時の値をそのまま使い、
+    /// 為替変動による「精算済みなのに残高に再出現」現象を防ぐ。
+    var fxConvertedAmountDecimal: Decimal? {
+        get {
+            guard let n = fxConvertedAmount else { return nil }
+            return n as Decimal
+        }
+        set {
+            if let v = newValue { fxConvertedAmount = NSDecimalNumber(decimal: v) }
+            else { fxConvertedAmount = nil }
+        }
+    }
+
+    /// FX スナップショットが有効かつ現在のシート target 通貨と一致するかを返す。
+    /// target 通貨が変更されていたら snapshot は無効化して再計算する。
+    func snapshotConvertedAmount(forTarget targetCode: String) -> Decimal? {
+        guard let snap = fxConvertedAmountDecimal,
+              let snapTarget = fxTargetCurrency,
+              snapTarget == targetCode else { return nil }
+        return snap
+    }
 }

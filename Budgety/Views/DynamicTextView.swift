@@ -14,8 +14,29 @@ struct DynamicTextView: UIViewRepresentable {
     @Binding var focus: Bool
     var placeholder: String = ""
     var font: UIFont = .systemFont(ofSize: 17)
+    /// キーボード種別。金額入力では `.decimalPad` / `.numberPad` を指定する。
+    var keyboardType: UIKeyboardType = .default
+    /// 数字キーボード等に「次へ」アクセサリを出して次のフィールドへ送る。
+    /// 設定すると inputAccessoryView (ツールバー) にボタンを表示する。
+    var accessoryNextTitle: String? = nil
+    var onAccessoryNext: (() -> Void)? = nil
+    /// true のとき、空のフィールドで delete を押すとキーボードを閉じる
+    /// (数字入力で「もう入れない」時に戻れるようにする)。
+    var dismissOnDeleteWhenEmpty: Bool = false
+    /// 指定するとフォントの拡大上限を pt 単位でキャップする。AX サイズで巨大化
+    /// しないようにしたい時に使う (例: 金額入力で 28 を指定)。
+    var maxFontSize: CGFloat? = nil
     /// Enter (改行) が入力された時に呼ばれる。フォーカスは内部で外される。
     var onSubmit: (() -> Void)? = nil
+
+    /// `font` に Dynamic Type スケールをかけ、必要なら maxFontSize でキャップ。
+    private func scaledFont() -> UIFont {
+        let scaled = UIFontMetrics.default.scaledFont(for: font)
+        if let cap = maxFontSize, scaled.pointSize > cap {
+            return scaled.withSize(cap)
+        }
+        return scaled
+    }
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -28,21 +49,36 @@ struct DynamicTextView: UIViewRepresentable {
 
         textView.backgroundColor = .clear
         textView.textColor = .label
-        textView.font = UIFontMetrics.default.scaledFont(for: font)
+        textView.font = scaledFont()
         textView.adjustsFontForContentSizeCategory = true
+        textView.keyboardType = keyboardType
 
         textView.textContainer.lineFragmentPadding = 0
         textView.textContainerInset = .zero
+
+        // 「次へ」アクセサリ (数字キーボードには Return が無いため、これで次のフィールドへ)。
+        if let title = accessoryNextTitle {
+            let bar = UIToolbar()
+            bar.sizeToFit()
+            let flex = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+            let next = UIBarButtonItem(title: title, style: .done,
+                                       target: context.coordinator,
+                                       action: #selector(Coordinator.accessoryNextTapped))
+            bar.items = [flex, next]
+            textView.inputAccessoryView = bar
+        }
 
         return textView
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
+        // クロージャ等を最新の値に保つ (アクセサリ・onSubmit の stale 参照を防ぐ)。
+        context.coordinator.parent = self
         if uiView.text != text {
             uiView.text = text
         }
         // Dynamic Type / アクセシビリティサイズ変更への追従
-        uiView.font = UIFontMetrics.default.scaledFont(for: font)
+        uiView.font = scaledFont()
 
         // SwiftUI → UIKit のフォーカス制御
         if focus && !uiView.isFirstResponder {
@@ -75,13 +111,19 @@ struct DynamicTextView: UIViewRepresentable {
             self.parent = parent
         }
 
+        @objc func accessoryNextTapped() {
+            parent.onAccessoryNext?()
+        }
+
         // UIKit → SwiftUI のフォーカス同期
+        // SwiftUI 描画サイクル中に @State を書き換えるとイベントが落ちる
+        // (キーボード復帰時に bar が出ない原因) ので、必ず次の runloop に遅延する。
         func textViewDidBeginEditing(_ textView: UITextView) {
-            parent.focus = true
+            DispatchQueue.main.async { [weak self] in self?.parent.focus = true }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            parent.focus = false
+            DispatchQueue.main.async { [weak self] in self?.parent.focus = false }
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -100,6 +142,14 @@ struct DynamicTextView: UIViewRepresentable {
                 parent.onSubmit?()
                 return false
             }
+            // 空のフィールドで delete (= replacementText が空 & 削除対象なし) を押したら
+            // キーボードを閉じる。dismissOnDeleteWhenEmpty が true の時のみ。
+            if parent.dismissOnDeleteWhenEmpty,
+               text.isEmpty, range.length == 0, textView.text.isEmpty {
+                textView.resignFirstResponder()
+                parent.focus = false
+                return false
+            }
             return true
         }
     }
@@ -111,6 +161,11 @@ struct DynamicTextField: View {
     @Binding var focus: Bool
     var placeholder: String
     var font: UIFont = .systemFont(ofSize: 17)
+    var keyboardType: UIKeyboardType = .default
+    var accessoryNextTitle: String? = nil
+    var onAccessoryNext: (() -> Void)? = nil
+    var dismissOnDeleteWhenEmpty: Bool = false
+    var maxFontSize: CGFloat? = nil
     var onSubmit: (() -> Void)? = nil
 
     var body: some View {
@@ -119,6 +174,11 @@ struct DynamicTextField: View {
             focus: $focus,
             placeholder: placeholder,
             font: font,
+            keyboardType: keyboardType,
+            accessoryNextTitle: accessoryNextTitle,
+            onAccessoryNext: onAccessoryNext,
+            dismissOnDeleteWhenEmpty: dismissOnDeleteWhenEmpty,
+            maxFontSize: maxFontSize,
             onSubmit: onSubmit
         )
         .background(alignment: .topLeading) {

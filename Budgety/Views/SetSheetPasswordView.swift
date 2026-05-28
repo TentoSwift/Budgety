@@ -78,6 +78,9 @@ struct SetSheetPasswordView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("シートロック")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -124,7 +127,7 @@ struct SetSheetPasswordView: View {
             } header: {
                 Text(hasExistingPassword ? "パスワードを変更" : "パスワードを設定")
             } footer: {
-                Text("4 桁以上の数字。忘れるとシートを再ロックできなくなる以外の影響はありませんが、念のため安全な場所に控えておくことを推奨します。")
+                Text("4 桁以上の数字。絶対に忘れないようにしてください。")
             }
 
             // 新規ロック設定時: パスワード設定と同時に生体認証を有効化するかの選択。
@@ -173,6 +176,9 @@ struct SetSheetPasswordView: View {
                 }
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle(hasExistingPassword ? "シートロック" : "シートロックを設定")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

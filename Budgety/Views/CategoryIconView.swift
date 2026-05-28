@@ -85,36 +85,25 @@ struct CategoryPayerIconView: View {
                     fallbackPhoto: expense.payerPhotoData,
                     size: avatarSize
                 )
-                .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 2))
+                // カテゴリアイコンと重なる部分を分けるため、アバターの背後に
+                // 背景色で塗った Circle を一回り大きく敷いて「枠」にする。
+                .background(
+                    Circle()
+                        .fill(Color.platformSystemBackground)
+                        .padding(-2)
+                )
                 .offset(x: 5, y: 5)
             }
         }
     }
 
     /// 個人専用シート (= 参加済の他メンバーが居ない) かどうか。
+    /// バーチャルメンバーが居れば solo ではない。CKShare の有無に関係なく
+    /// バーチャルを優先チェックするのが重要 (= 過去にシェアして参加者が
+    /// 全員未承諾/退室した状態でバーチャルだけ居る場合、participants は
+    /// 空でも solo 扱いにしてはいけない)。
     private var isSoloSheet: Bool {
         guard let sheet = expense.sheet else { return true }
-        #if !os(watchOS)
-        if let share = ShareCoordinator.shared.existingShare(for: sheet) {
-            // 「自分」以外で受諾済みの参加者が居るか。オーナーも自分でなければ
-            // 他メンバーとして数える（参加者デバイスでオーナーを除外しないため）。
-            // 自分の participant は recordName が __defaultOwner__ に匿名化される
-            // か、URN (canonicalSelfIDs) と一致するので、それで除外する。
-            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
-            let hasAcceptedOthers = share.participants.contains { p in
-                guard p.acceptanceStatus == .accepted else { return false }
-                let rn = p.userIdentity.userRecordID?.recordName ?? ""
-                guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
-                return !selfIDs.contains(rn)
-            }
-            return !hasAcceptedOthers
-        }
-        #endif
-        guard let profiles = sheet.participantProfiles as? Set<ParticipantProfile> else { return true }
-        let myRN = UserProfileStore.shared.userRecordName ?? ""
-        return !profiles.contains { p in
-            let rn = p.recordName ?? ""
-            return !rn.isEmpty && rn != myRN
-        }
+        return !sheet.hasAcceptedOtherMembers()
     }
 }
