@@ -622,6 +622,11 @@ struct MacEditSheetView: View {
     /// バーチャルメンバー管理シート表示。
     @State private var showingMembers: Bool = false
 
+    /// オーナーは「削除」、参加者は「退出」として動作させる。
+    /// 参加者には削除権限を与えると共有シート全体を消してしまう (= オーナー側
+    /// にも伝搬) ので、UI とアクションを明確に分ける。
+    private var isOwner: Bool { record.isOwnedByCurrentUser }
+
     var body: some View {
         MacSheetFormDialog(
             title: "シートを編集",
@@ -632,24 +637,33 @@ struct MacEditSheetView: View {
             archiveBinding: $archivedDraft,
             manageMembersAction: { showingMembers = true },
             primaryActionLabel: "保存",
+            destructiveActionLabel: isOwner ? "削除" : "退出",
             destructiveAction: { showingDeleteConfirm = true },
             onCancel: { dismiss() },
             onSave: { save() }
         )
         .onAppear { loadOnce() }
         .confirmationDialog(
-            "「\(name)」を削除しますか？",
+            isOwner ? "「\(name)」を削除しますか？" : "「\(name)」から退出しますか？",
             isPresented: $showingDeleteConfirm,
             titleVisibility: .visible
         ) {
-            Button("削除", role: .destructive) {
-                viewContext.delete(record)
-                PersistenceController.shared.save()
-                dismiss()
+            Button(isOwner ? "削除" : "退出", role: .destructive) {
+                Task { @MainActor in
+                    if isOwner {
+                        viewContext.delete(record)
+                        PersistenceController.shared.save()
+                    } else {
+                        try? await ShareCoordinator.shared.leaveSharedSheet(record)
+                    }
+                    dismiss()
+                }
             }
             Button("キャンセル", role: .cancel) {}
         } message: {
-            Text("配下の支出・カテゴリ・送金記録もすべて削除されます。")
+            Text(isOwner
+                 ? "配下の支出・カテゴリ・送金記録もすべて削除されます。"
+                 : "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(isPresented: $showingMembers) {
             NavigationStack {
@@ -703,6 +717,8 @@ private struct MacSheetFormDialog: View {
     /// バーチャルメンバーの追加 / 編集 / 削除を行う別シートを開く。
     var manageMembersAction: (() -> Void)? = nil
     let primaryActionLabel: String
+    /// destructive ボタンのラベル。オーナーなら「削除」、参加者なら「退出」。
+    var destructiveActionLabel: String = "削除"
     var destructiveAction: (() -> Void)? = nil
     let onCancel: () -> Void
     let onSave: () -> Void
@@ -814,7 +830,7 @@ private struct MacSheetFormDialog: View {
                             Button {
                                 destructiveAction()
                             } label: {
-                                Text("削除")
+                                Text(destructiveActionLabel)
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.red)
