@@ -205,7 +205,7 @@ struct MacAddExpenseView: View {
                 // 共有シート、またはバーチャルメンバー追加可能な Premium なら表示
                 // (ソロシートでも Premium はバーチャルメンバーを足して割り勘できる)。
                 // 収入には割り勘の概念がないので支出時のみ表示。
-                if kind == .expense, hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
+                if kind == .expense, !payerProfileID.isEmpty, hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
                     Section {
                         Toggle("割り勘", isOn: Binding(
                             get: { splitEnabled },
@@ -442,9 +442,44 @@ struct MacAddExpenseView: View {
 
     @ViewBuilder
     private var payerPicker: some View {
+        // 「未選択」オプション。payerProfileID = "" で保存される。
+        // 割り勘セクションは未選択時に非表示になる (= 未選択 + 割り勘の整合性破壊を防ぐ)。
+        unselectedPayerRow
         ForEach(allMemberIDs, id: \.self) { id in
             payerRow(id)
         }
+    }
+
+    private var unselectedPayerRow: some View {
+        let isOn = payerProfileID.isEmpty
+        return Button {
+            payerProfileID = ""
+            // 未選択にしたら割り勘設定もリセット
+            splitEnabled = false
+            selectedBeneficiaries.removeAll()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                Text("未選択").foregroundStyle(.primary)
+                Spacer()
+                if isOn {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(sheet.tint)
+                } else {
+                    Image(systemName: "circle")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func payerRow(_ id: String) -> some View {
@@ -553,7 +588,9 @@ struct MacAddExpenseView: View {
             kind = e.kind
             note = e.note ?? ""
             selectedCategory = e.category
-            payerProfileID = e.payerProfileID ?? selfProfileID
+            // iOS 側で「未選択」(payerProfileID nil) で保存された支出は、その状態を保つ。
+            // ここで selfProfileID にフォールバックすると編集 → 保存で勝手に自分に書き換わる。
+            payerProfileID = e.payerProfileID ?? ""
             selectedBeneficiaries = Set(e.beneficiaryIDList)
             // 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ。複数ならオン。
             // ※ 空はそのまま「割り勘オフ (支払者単独負担)」として扱い、全メンバーへの

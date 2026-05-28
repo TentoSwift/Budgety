@@ -182,6 +182,13 @@ struct ExpenseDetailView: View {
         }
     }
 
+    /// 支払者が指定されているか。3 フィールドのどれかが入っていれば「指定あり」とみなす。
+    private var hasPayer: Bool {
+        !(expense.payerProfileID ?? "").isEmpty
+            || expense.payerMemberID != nil
+            || !(expense.paidBy ?? "").isEmpty
+    }
+
     /// 支払った人/受け取った人の行。AX サイズではラベルの下にアバター+名前を縦積み。
     @ViewBuilder
     private var payerRow: some View {
@@ -194,15 +201,29 @@ struct ExpenseDetailView: View {
                 .foregroundStyle(.secondary)
             if !isAX { Spacer(minLength: 8) }
             HStack(spacing: 8) {
-                PayerAvatar(
-                    member: expense.resolvedPayer,
-                    participantProfile: expense.resolvedParticipantProfile,
-                    fallbackName: expense.displayPaidBy,
-                    fallbackColorHex: "#8E8E93",
-                    fallbackPhoto: expense.payerPhotoData,
-                    size: 22
-                )
-                Text(expense.displayPaidBy).foregroundStyle(.primary)
+                if hasPayer {
+                    PayerAvatar(
+                        member: expense.resolvedPayer,
+                        participantProfile: expense.resolvedParticipantProfile,
+                        fallbackName: expense.displayPaidBy,
+                        fallbackColorHex: "#8E8E93",
+                        fallbackPhoto: expense.payerPhotoData,
+                        size: 22
+                    )
+                    Text(expense.displayPaidBy).foregroundStyle(.primary)
+                } else {
+                    // 未選択時は破線サークル + 「未選択」テキスト。
+                    // AvatarView は displayName 空文字で "?" を出してしまうのでここで分岐。
+                    ZStack {
+                        Circle()
+                            .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .frame(width: 22, height: 22)
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text("未選択").foregroundStyle(.secondary)
+                }
             }
         }
     }
