@@ -46,8 +46,11 @@ struct AddExpenseView: View {
     /// 保存時に書き込むべき支払者 ID。selectedPayer が nil の場合は自分にフォールバック。
     /// Assistive Access / 新規ユーザー等で Member テーブルが空でも、preview が「自分」と
     /// 表示している通りに自分の canonical ID を保存する。
+    /// ただしユーザーが picker で明示的に「未選択」を選んだ場合 (payerExplicitlyCleared) は
+    /// その意思を尊重して nil を返す。
     @MainActor
     private var effectivePayerProfileID: String? {
+        if payerExplicitlyCleared { return nil }
         if let id = selectedPayerProfileID { return id }
         // selfParticipantProfileInSheet があればその recordName を使う (= 共有シートで canonical)
         if let pp = selfParticipantProfileInSheet,
@@ -61,6 +64,7 @@ struct AddExpenseView: View {
     /// 最終的なフォールバックとして自分の表示名を残しておく。
     @MainActor
     private var effectivePaidByFallback: String? {
+        if payerExplicitlyCleared { return nil }
         if selectedPayer != nil { return nil }   // 通常選択経路では paidBy は使わない
         if effectivePayerProfileID != nil { return nil }
         let name = profile.resolvedDisplayName
@@ -107,6 +111,10 @@ struct AddExpenseView: View {
     @State private var currencyCode: String = "JPY"
     @State private var selectedCategory: ExpenseCategory?
     @State private var selectedPayer: Member?
+    /// ユーザーが明示的に「未選択」を picker で選んだか。
+    /// true なら save 時に自分へのフォールバックを抑止し、payerProfileID = nil で保存する。
+    /// false (= picker 未操作 or 誰かを選んだ後の状態) なら effectivePayerProfileID を使う。
+    @State private var payerExplicitlyCleared: Bool = false
     @State private var date: Date = .now
     @State private var note: String = ""
     /// 添付写真 (任意)。JPEG 圧縮済みの Data を Core Data に保存する。
@@ -1303,13 +1311,26 @@ struct AddExpenseView: View {
         }
     }
 
+    /// MemberPickerView 用の binding ラッパー。書き込み時に
+    /// `payerExplicitlyCleared` を更新することで「明示的に未選択を選んだ」状態を捕捉する。
+    /// (.onChange よりも body 複雑度を増やさない。)
+    private var pickerPayerBinding: Binding<Member?> {
+        Binding(
+            get: { selectedPayer },
+            set: { newValue in
+                payerExplicitlyCleared = (newValue == nil)
+                selectedPayer = newValue
+            }
+        )
+    }
+
     @ViewBuilder
     private var payerSection: some View {
         Section {
             NavigationLink {
                 DiscardGuardedBack(modifier: discardDialogModifier) {
                     MemberPickerView(
-                        selected: $selectedPayer,
+                        selected: pickerPayerBinding,
                         record: contextSheet,
                         kind: kind,
                         fallbackPaidBy: payerFallbackName,
