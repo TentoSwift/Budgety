@@ -109,11 +109,7 @@ extension ExpenseSheet {
         var result: [String] = []
         var seen = Set<String>()
 
-        #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
             ?? UserProfileStore.shared.userRecordName
         if let me = selfID, !me.isEmpty, seen.insert(me).inserted {
@@ -146,11 +142,7 @@ extension ExpenseSheet {
     func acceptedMemberProfileIDs() -> [String] {
         var result: [String] = []
         var seen = Set<String>()
-        #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
-        #else
-        let share: CKShare? = nil
-        #endif
         // 自分
         let selfID = UserProfileStore.shared.canonicalSelfID(forShare: share)
             ?? UserProfileStore.shared.userRecordName
@@ -162,7 +154,6 @@ extension ExpenseSheet {
         }
         let profiles = (participantProfiles as? Set<ParticipantProfile>) ?? []
         let sorted = profiles.sorted { ($0.displayName ?? "", $0.recordName ?? "") < ($1.displayName ?? "", $1.recordName ?? "") }
-        #if !os(watchOS)
         if let share {
             for p in share.participants {
                 guard p.acceptanceStatus == .accepted,
@@ -172,6 +163,7 @@ extension ExpenseSheet {
                 result.append(rn)
             }
         } else {
+            // CKShare 未ロード (= solo シート or 未同期) のフォールバック
             for pp in sorted {
                 guard let rn = pp.recordName, !rn.isEmpty,
                       rn != "_defaultOwner_", rn != "__defaultOwner__",
@@ -180,15 +172,6 @@ extension ExpenseSheet {
                 result.append(rn)
             }
         }
-        #else
-        for pp in sorted {
-            guard let rn = pp.recordName, !rn.isEmpty,
-                  rn != "_defaultOwner_", rn != "__defaultOwner__",
-                  !UserProfileStore.isVirtualRecordName(rn),
-                  seen.insert(rn).inserted else { continue }
-            result.append(rn)
-        }
-        #endif
         // バーチャルメンバーは CKShare に出ないので常に PP から追加する。
         // アーカイブ済みは新規の割り勘候補に出さない。
         for pp in sorted {
@@ -284,7 +267,6 @@ extension ExpenseSheet {
         }) {
             return true
         }
-        #if !os(watchOS)
         if let share = ShareCoordinator.shared.existingShare(for: self) {
             let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
             return share.participants.contains { p in
@@ -294,7 +276,6 @@ extension ExpenseSheet {
                 return !selfIDs.contains(rn)
             }
         }
-        #endif
         guard let profiles = participantProfiles as? Set<ParticipantProfile> else { return false }
         let myRN = UserProfileStore.shared.userRecordName ?? ""
         return profiles.contains { p in
@@ -316,11 +297,7 @@ extension ExpenseSheet {
     @MainActor
     func memberDisplayInfo(for profileID: String) -> (name: String, colorHex: String, photoData: Data?) {
         // 自分判定: URN だけでなく canonical (email:..) や旧 ID も含めて広く拾う。
-        #if !os(watchOS)
         let share = ShareCoordinator.shared.existingShare(for: self)
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
         let selfEmailID: String? = {
             if let e = UserProfileStore.shared.selfEmail?.lowercased(), !e.isEmpty {
@@ -353,13 +330,11 @@ extension ExpenseSheet {
         let photoFromCache = PublicProfileSync.shared.cachedProfile(for: profileID)?.photoData
 
         // 3) CKShare の Apple ID 名 (カスタム未設定時)
-        #if !os(watchOS)
         if let share = share,
            let liveName = nameFromShare(share, profileID: profileID),
            !liveName.isEmpty {
             return (name: liveName, colorHex: fallbackColor, photoData: photoFromCache)
         }
-        #endif
 
         // 4) PP フォールバック
         // バーチャルメンバーは Public DB に居ないので、PP に保存した photoData を優先で使う。
@@ -389,7 +364,6 @@ extension ExpenseSheet {
         return (name: "メンバー", colorHex: "#8E8E93", photoData: nil)
     }
 
-    #if !os(watchOS)
     /// `share` の owner / participants から `profileID` (URN) と一致するエントリを探し、
     /// その `userIdentity.nameComponents` をフォーマットして返す。
     /// `__defaultOwner__` placeholder の自分は別途 UserProfileStore で扱うので無視。
@@ -413,5 +387,4 @@ extension ExpenseSheet {
         }
         return nil
     }
-    #endif
 }

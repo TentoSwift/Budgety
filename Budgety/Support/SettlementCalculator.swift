@@ -104,13 +104,7 @@ enum SettlementCalculator {
         // 「自分」の複数 ID (旧 userRecordName / canonical / cross-device で書かれた別 ID)
         // を一つの canonical に畳む。これで履歴的に複数 ID で記録された自分の expense が
         // 一人として正しく集計される。
-        let share: CKShare? = {
-            #if !os(watchOS)
-            return ShareCoordinator.shared.existingShare(for: sheet)
-            #else
-            return nil
-            #endif
-        }()
+        let share: CKShare? = ShareCoordinator.shared.existingShare(for: sheet)
         // ShareCalendarApp 方式: CKShare の participants から取れる URN を真実として
         // メンバーを構築する。email/phone ベースの旧 ID や PP.recordName の重複は
         // ここで全部 URN に畳む (= 同じ人が複数行に分裂しない)。

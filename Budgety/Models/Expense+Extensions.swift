@@ -67,11 +67,7 @@ extension Expense {
     @MainActor
     var isPayerSelf: Bool {
         guard let pid = payerProfileID, !pid.isEmpty else { return false }
-        #if !os(watchOS)
         let share: CKShare? = sheet.flatMap { ShareCoordinator.shared.existingShare(for: $0) }
-        #else
-        let share: CKShare? = nil
-        #endif
         return UserProfileStore.shared.canonicalSelfIDs(forShare: share).contains(pid)
     }
 
@@ -86,7 +82,6 @@ extension Expense {
     /// URN マッチを優先、email/phone ベース canonical (旧データ) もフォールバックで照合。
     @MainActor
     private func resolvedSharedParticipantName() -> String? {
-        #if !os(watchOS)
         guard let pid = payerProfileID, !pid.isEmpty,
               let sheet = sheet,
               let share = ShareCoordinator.shared.existingShare(for: sheet) else { return nil }
@@ -106,12 +101,8 @@ extension Expense {
             }
         }
         return nil
-        #else
-        return nil
-        #endif
     }
 
-    #if !os(watchOS)
     @MainActor
     private func nameFromIdentity(_ identity: CKUserIdentity) -> String? {
         if let nc = identity.nameComponents {
@@ -123,7 +114,6 @@ extension Expense {
         }
         return nil
     }
-    #endif
 
     /// 支払者の Member を引く。Member は Private ストアにしか存在しないが、
     /// id / recordName / 名前のいずれかで見つかれば Shared ストアの Expense でも返す
@@ -138,11 +128,7 @@ extension Expense {
         guard let pid = payerProfileID, !pid.isEmpty else { return nil }
 
         // 1) 自分: payerProfileID が canonical self ID 群のいずれかと一致 → selfMember
-        #if !os(watchOS)
         let share: CKShare? = sheet.flatMap { ShareCoordinator.shared.existingShare(for: $0) }
-        #else
-        let share: CKShare? = nil
-        #endif
         let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
         if selfIDs.contains(pid),
            let selfID = UserProfileStore.shared.selfMemberID {
