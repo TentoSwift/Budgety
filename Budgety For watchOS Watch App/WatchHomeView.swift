@@ -215,49 +215,14 @@ private struct WatchSheetPage: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                heroCard
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(.init(top: 0, leading: 0, bottom: 4, trailing: 0))
-            }
-            Section {
-                addButton
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(.init(top: 0, leading: 0, bottom: 4, trailing: 0))
-            }
-            if !expenses.isEmpty {
-                Section {
-                    // 全支出を表示する (旧: prefix(6) で最近 6 件のみだった)。
-                    // List + Section なので watchOS でもスクロールで降りていける。
-                    ForEach(Array(expenses), id: \.objectID) { expense in
-                        NavigationLink {
-                            WatchExpenseDetailView(expense: expense, sheet: sheet)
-                        } label: {
-                            recentRow(expense)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.white.opacity(0.12))
-                        )
-                        .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                pendingDeleteExpense = expense
-                            } label: {
-                                Label("削除", systemImage: "trash")
-                            }
-                        }
-                    }
-                } header: {
-                    Text("支出")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
+        // タブ 1: サマリー (今月合計 + 「追加」ボタン)
+        // タブ 2: 取引リスト (支出 + 収入。セクションヘッダーは無し)
+        // .verticalPage で Digital Crown / 縦スワイプで切替。
+        TabView {
+            summaryTab.tag(0)
+            transactionsTab.tag(1)
         }
-        .listStyle(.plain)
+        .tabViewStyle(.verticalPage)
         .containerBackground(sheet.tint.gradient, for: .navigation)
         .navigationTitle {
             Text(sheet.displayName)
@@ -293,6 +258,57 @@ private struct WatchSheetPage: View {
         ctx.delete(e)
         try? ctx.save()
         WKInterfaceDevice.current().play(.success)
+    }
+
+    // MARK: - Tabs
+
+    /// 1 ページ目: 今月合計 + 追加ボタン。
+    @ViewBuilder
+    private var summaryTab: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                heroCard
+                addButton
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+        }
+    }
+
+    /// 2 ページ目: 全取引 (支出 + 収入)。セクションヘッダーは無し。
+    @ViewBuilder
+    private var transactionsTab: some View {
+        if expenses.isEmpty {
+            ContentUnavailableView(
+                "まだ記録がありません",
+                systemImage: "tray",
+                description: Text("サマリー画面の「追加」から記録できます。")
+            )
+        } else {
+            List {
+                ForEach(Array(expenses), id: \.objectID) { expense in
+                    NavigationLink {
+                        WatchExpenseDetailView(expense: expense, sheet: sheet)
+                    } label: {
+                        recentRow(expense)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(.white.opacity(0.12))
+                    )
+                    .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            pendingDeleteExpense = expense
+                        } label: {
+                            Label("削除", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+        }
     }
 
     private var heroCard: some View {
