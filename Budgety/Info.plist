@@ -20,7 +20,5 @@
 		<string>processing</string>
 		<string>remote-notification</string>
 	</array>
-	<key>UISupportsAssistiveAccess</key>
-	<true/>
 </dict>
 </plist>
