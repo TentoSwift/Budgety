@@ -126,19 +126,6 @@ struct SettingsView: View {
                     infoRow("最終更新", systemImage: "clock.arrow.circlepath") {
                         Text(fx.lastRateDate ?? "未取得")
                     }
-                    Button {
-                        Task { await fx.refresh() }
-                    } label: {
-                        if fx.isFetching {
-                            HStack {
-                                ProgressView()
-                                Text("取得中...")
-                            }
-                        } else {
-                            Label("今すぐ更新", systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(fx.isFetching)
                     if let err = fx.lastError {
                         Text(err)
                             .font(.caption)
