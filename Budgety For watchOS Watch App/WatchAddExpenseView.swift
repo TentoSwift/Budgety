@@ -172,9 +172,6 @@ struct WatchAddExpenseView: View {
                 .animation(.snappy, value: amount)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-            Text("Digital Crown で調整")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.8))
             Spacer(minLength: 0)
             HStack(spacing: 6) {
                 ForEach(quickSteps, id: \.self) { step in
