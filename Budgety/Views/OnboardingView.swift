@@ -107,6 +107,8 @@ struct OnboardingView: View {
                 } label: {
                     Text("はじめる")
                         .font(.headline)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .brightness(0.1)
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .contentShape(Rectangle())
                 }
