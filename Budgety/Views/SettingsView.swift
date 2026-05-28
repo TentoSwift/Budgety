@@ -15,7 +15,6 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
-    @State private var showingOnboarding: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
 
@@ -126,19 +125,6 @@ struct SettingsView: View {
                     infoRow("最終更新", systemImage: "clock.arrow.circlepath") {
                         Text(fx.lastRateDate ?? "未取得")
                     }
-                    Button {
-                        Task { await fx.refresh() }
-                    } label: {
-                        if fx.isFetching {
-                            HStack {
-                                ProgressView()
-                                Text("取得中...")
-                            }
-                        } else {
-                            Label("今すぐ更新", systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(fx.isFetching)
                     if let err = fx.lastError {
                         Text(err)
                             .font(.caption)
@@ -167,17 +153,6 @@ struct SettingsView: View {
                 Section("バージョン") {
                     infoRow("Budgety") {
                         Text(Bundle.main.versionDisplay)
-                    }
-                    Button {
-                        showingOnboarding = true
-                    } label: {
-                        Label {
-                            Text("ようこそ画面を表示")
-                                .foregroundStyle(.primary)
-                        } icon: {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.tint)
-                        }
                     }
                     NavigationLink {
                         LicenseListScreen()
@@ -228,9 +203,6 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingProfileEdit) {
                 ProfileEditView()
-            }
-            .sheet(isPresented: $showingOnboarding) {
-                OnboardingView { showingOnboarding = false }
             }
             .task {
                 UserProfileStore.shared.ensureSelfMemberExists(in: viewContext)
