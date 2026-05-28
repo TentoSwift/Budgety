@@ -220,7 +220,9 @@ extension Expense {
     }
 
     /// 受益者の profileID リスト (誰の負担として扱うか)。
-    /// 内部表現: `beneficiaryProfileIDs` カンマ区切り文字列。空文字 = 「シートの全メンバーで均等割り」。
+    /// 内部表現: `beneficiaryProfileIDs` カンマ区切り文字列。
+    /// 空文字 = 割り勘オフ (支払者単独負担)。SettlementCalculator では残高変動なし・
+    /// カテゴリ集計のみ計上。「全メンバー均等割り」ではない点に注意。
     var beneficiaryIDList: [String] {
         get {
             (beneficiaryProfileIDs ?? "")

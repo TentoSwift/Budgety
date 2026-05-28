@@ -60,6 +60,8 @@ enum RecurringExpenseGenerator {
             // paidBy は denormalized キャッシュなので継承しない。表示は payerProfileID から動的解決される。
             expense.paidBy = nil
             expense.payerProfileID = rule.payerProfileID
+            // 割り勘 (受益者) を引き継ぐ。空なら割り勘オフ (支払者単独負担) のまま。
+            expense.beneficiaryProfileIDs = rule.beneficiaryProfileIDs
             expense.note = rule.note
             expense.date = date
             expense.createdAt = .now
