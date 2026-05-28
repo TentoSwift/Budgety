@@ -43,6 +43,30 @@ struct AddExpenseView: View {
         selectedPayer?.resolvedProfileID(forShare: contextShare)
     }
 
+    /// 保存時に書き込むべき支払者 ID。selectedPayer が nil の場合は自分にフォールバック。
+    /// Assistive Access / 新規ユーザー等で Member テーブルが空でも、preview が「自分」と
+    /// 表示している通りに自分の canonical ID を保存する。
+    @MainActor
+    private var effectivePayerProfileID: String? {
+        if let id = selectedPayerProfileID { return id }
+        // selfParticipantProfileInSheet があればその recordName を使う (= 共有シートで canonical)
+        if let pp = selfParticipantProfileInSheet,
+           let rn = pp.recordName, !rn.isEmpty { return rn }
+        if let cid = profile.canonicalSelfID(forShare: contextShare), !cid.isEmpty { return cid }
+        let urn = profile.userRecordName ?? ""
+        return urn.isEmpty ? nil : urn
+    }
+
+    /// 保存時に書き込むべき paidBy (legacy display name)。canonical ID が決まらない時の
+    /// 最終的なフォールバックとして自分の表示名を残しておく。
+    @MainActor
+    private var effectivePaidByFallback: String? {
+        if selectedPayer != nil { return nil }   // 通常選択経路では paidBy は使わない
+        if effectivePayerProfileID != nil { return nil }
+        let name = profile.resolvedDisplayName
+        return name.isEmpty ? nil : name
+    }
+
 
     @StateObject private var profile = UserProfileStore.shared
     @StateObject private var pub = PublicProfileSync.shared
@@ -868,9 +892,9 @@ struct AddExpenseView: View {
                 Circle()
                     .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .frame(width: 24, height: 24)
-                Image(systemName: "questionmark")
+                Image(systemName: "person.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
             }
             Text("未選択").foregroundStyle(.secondary)
         }
@@ -1603,8 +1627,8 @@ struct AddExpenseView: View {
             expense.kindRaw = kind.rawValue
             expense.currencyCode = currencyCode
             expense.categoryRaw = selectedCategory?.name
-            expense.paidBy = nil
-            expense.payerProfileID = selectedPayerProfileID
+            expense.paidBy = effectivePaidByFallback
+            expense.payerProfileID = effectivePayerProfileID
             expense.payerMemberID = selectedPayer?.id
             expense.date = date
             expense.note = note
@@ -1688,8 +1712,8 @@ struct AddExpenseView: View {
         rule.kindRaw = kind.rawValue
         rule.currencyCode = currencyCode
         rule.categoryRaw = selectedCategory?.name
-        rule.paidBy = nil
-        rule.payerProfileID = selectedPayerProfileID
+        rule.paidBy = effectivePaidByFallback
+        rule.payerProfileID = effectivePayerProfileID
         rule.note = note
         rule.frequency = frequency.rawValue
         rule.interval = Int32(recurringInterval)

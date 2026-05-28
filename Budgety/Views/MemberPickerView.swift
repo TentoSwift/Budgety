@@ -117,8 +117,8 @@ struct MemberPickerView: View {
                         Circle()
                             .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                             .frame(width: 36, height: 36)
-                        Image(systemName: "questionmark")
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "person.fill")
+                            .foregroundStyle(.tertiary)
                     }
                     Text("未選択")
                         .foregroundStyle(.primary)
@@ -277,7 +277,7 @@ struct MemberPickerView: View {
                             Circle()
                                 .fill(Color.platformTertiarySystemBackground)
                                 .frame(width: 36, height: 36)
-                            Image(systemName: "questionmark")
+                            Image(systemName: "clock.arrow.circlepath")
                                 .foregroundStyle(.secondary)
                         }
                         VStack(alignment: .leading, spacing: 2) {
