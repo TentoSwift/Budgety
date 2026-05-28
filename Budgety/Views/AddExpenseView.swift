@@ -1016,7 +1016,7 @@ struct AddExpenseView: View {
 
                 payerSection
 
-                if kind == .expense, shouldShowSharingFields, let sheet = contextSheet {
+                if kind == .expense, shouldShowSharingFields, !payerEffectivelyUnselected, let sheet = contextSheet {
                     Section {
                         Toggle("割り勘", isOn: Binding(
                             get: { splitEnabled },
@@ -1311,14 +1311,35 @@ struct AddExpenseView: View {
         }
     }
 
+    /// 現時点で payer が「未選択」として扱われているか。
+    /// - 誰か選択中なら false
+    /// - selectedPayer == nil でも create mode で flag 未立てなら自分へフォールバック → false
+    /// - 明示的に「未選択」を選んだ or edit 対象の元データが全部空 → true
+    @MainActor
+    private var payerEffectivelyUnselected: Bool {
+        if selectedPayer != nil { return false }
+        if payerExplicitlyCleared { return true }
+        if case .edit(let expense) = mode {
+            return (expense.payerProfileID ?? "").isEmpty
+                && expense.payerMemberID == nil
+                && (expense.paidBy ?? "").isEmpty
+        }
+        return false
+    }
+
     /// MemberPickerView 用の binding ラッパー。書き込み時に
     /// `payerExplicitlyCleared` を更新することで「明示的に未選択を選んだ」状態を捕捉する。
     /// (.onChange よりも body 複雑度を増やさない。)
+    /// 「未選択」を選んだら割り勘設定も自動的に解除する (= 未選択時は割り勘不可)。
     private var pickerPayerBinding: Binding<Member?> {
         Binding(
             get: { selectedPayer },
             set: { newValue in
                 payerExplicitlyCleared = (newValue == nil)
+                if newValue == nil {
+                    splitEnabled = false
+                    selectedBeneficiaries.removeAll()
+                }
                 selectedPayer = newValue
             }
         )
