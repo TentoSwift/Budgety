@@ -67,7 +67,7 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(profile.resolvedDisplayName)
                                     .foregroundStyle(.primary)
-                                Text("名前・写真・背景色を編集")
+                                Text("名前・写真を編集")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -159,6 +159,21 @@ struct SettingsView: View {
                     } label: {
                         Label("ライセンス", systemImage: "doc.text")
                     }
+                    Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/support.html")!) {
+                        Label {
+                            HStack {
+                                Text("サポート")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "questionmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
                     Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/")!) {
                         Label {
                             HStack {
@@ -243,9 +258,16 @@ struct SettingsView: View {
 }
 
 private extension Bundle {
+    /// App Store 配布版 (= 製品版) は短い "1.0" のみ。
+    /// Debug ビルド / TestFlight (sandboxReceipt) はビルド番号付き "1.0 (2026052804)"。
     var versionDisplay: String {
         let v = infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let b = infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        #if DEBUG
         return "\(v) (\(b))"
+        #else
+        let isTestFlight = appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        return isTestFlight ? "\(v) (\(b))" : v
+        #endif
     }
 }

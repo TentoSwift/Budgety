@@ -200,13 +200,16 @@ struct ExpensoApp: App {
                     }
                 }
         }
-        // WWDC 2025 #238 で導入された AssistiveAccess Scene。
-        // 端末が AA モード時はこちらが起動 (= ContentView ではなく簡易版が表示される)。
-        AssistiveAccess {
-            AssistiveAccessView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .environment(\.locale, Locale(identifier: "ja_JP"))
-        }
+        // WWDC 2025 #238 で導入された AssistiveAccess Scene は一旦無効化。
+        // 通常の ContentView では支払者デフォルト挙動などが想定どおりに動かないケースを
+        // 確認したため、別途専用 UI を再検討するまで AA 対応を保留する。
+        // 再有効化時は以下のブロックと Info.plist の UISupportsAssistiveAccess を戻す。
+        //
+        // AssistiveAccess {
+        //     AssistiveAccessView()
+        //         .environment(\.managedObjectContext, persistenceController.container.viewContext)
+        //         .environment(\.locale, Locale(identifier: "ja_JP"))
+        // }
     }
 
     private func showToast(_ message: String) {

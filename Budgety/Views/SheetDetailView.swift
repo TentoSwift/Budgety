@@ -571,6 +571,8 @@ struct SheetDetailView: View {
             systemImage: "yensign.circle",
             description: Text("右下の + から最初の取引を追加してください。")
         )
+        .listSectionSeparator(.hidden)
+        .listRowSeparator(.hidden)
     }
 
     /// 検索フォーカス直後 (未入力) の入力待ち表示。全件は出さない。
@@ -580,6 +582,8 @@ struct SheetDetailView: View {
             systemImage: "magnifyingglass",
             description: Text("支出・収入のタイトルや支払い者で検索できます。")
         )
+        .listSectionSeparator(.hidden)
+        .listRowSeparator(.hidden)
     }
 
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
