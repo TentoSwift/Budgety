@@ -169,6 +169,8 @@ struct AddExpenseIntent: AppIntent {
         }
 
         expense.sheet = coreSheet
+        // FX スナップショット (Shortcut 経由でも current FX で凍結)
+        expense.captureFXSnapshot()
 
         // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
         if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx) }

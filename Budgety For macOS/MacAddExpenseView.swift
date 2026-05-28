@@ -642,6 +642,8 @@ struct MacAddExpenseView: View {
                 target.payerMemberID = nil
             }
             target.beneficiaryIDList = effectiveBeneficiaryIDs
+            // FX スナップショット (amount / currencyCode / sheet 設定後に呼ぶ)
+            target.captureFXSnapshot()
         }
 
         PersistenceController.shared.save()
@@ -660,11 +662,17 @@ struct MacAddExpenseView: View {
         profile: UserProfileStore
     ) {
         if trimmedTitle != origTitle { expense.title = trimmedTitle }
-        if amountText != origAmountText {
+        let amountChanged = amountText != origAmountText
+        if amountChanged {
             expense.amount = NSDecimalNumber(decimal: amount)
         }
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
-        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        let currencyChanged = currencyCode != origCurrencyCode
+        if currencyChanged { expense.currencyCode = currencyCode }
+        // amount / currency が変わったら FX スナップショットを取り直す
+        if amountChanged || currencyChanged {
+            expense.captureFXSnapshot()
+        }
         if !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }

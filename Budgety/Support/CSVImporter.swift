@@ -123,6 +123,8 @@ enum CSVImporter {
                 if let pid = selfPID { e.payerProfileID = pid }
                 if let mid = profile.selfMemberID { e.payerMemberID = mid }
             }
+            // FX スナップショット (取り込み時の current FX で凍結)
+            e.captureFXSnapshot()
             created += 1
         }
         if created > 0 {

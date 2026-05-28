@@ -191,6 +191,48 @@ extension Expense {
         set { amount = NSDecimalNumber(decimal: newValue) }
     }
 
+    /// FX 換算スナップショット (= 作成 / 編集時に解決された target 通貨建ての金額)。
+    /// 設定されていれば SettlementCalculator は当時の値をそのまま使い、為替変動
+    /// による残高ドリフトを防ぐ。SettlementRecord の FX スナップショットと同じ役割。
+    var fxConvertedAmountDecimal: Decimal? {
+        get {
+            guard let n = fxConvertedAmount else { return nil }
+            return n as Decimal
+        }
+        set {
+            if let v = newValue { fxConvertedAmount = NSDecimalNumber(decimal: v) }
+            else { fxConvertedAmount = nil }
+        }
+    }
+
+    /// FX スナップショットが有効かつ現在の target と一致する時のみ返す。
+    /// 一致しない (シート既定通貨が変更された) 時は nil → 現行 FX で再計算。
+    func snapshotConvertedAmount(forTarget targetCode: String) -> Decimal? {
+        guard let snap = fxConvertedAmountDecimal,
+              let snapTarget = fxTargetCurrency,
+              snapTarget == targetCode else { return nil }
+        return snap
+    }
+
+    /// 現在の `amount` / `currencyCode` / `sheet.resolvedDefaultCurrencyCode` から
+    /// FX スナップショットを取り直して保存する。Expense 作成・編集時に呼ぶ。
+    /// レートが取得できなければスナップショットは nil にし、Calculator は
+    /// 現行 FX にフォールバックする (= 旧挙動)。
+    @MainActor
+    func captureFXSnapshot() {
+        guard let sheet else { return }
+        let target = sheet.resolvedDefaultCurrencyCode
+        if let converted = FXRatesService.shared.convert(
+            amountDecimal, from: resolvedCurrencyCode, to: target
+        ) {
+            fxConvertedAmountDecimal = converted
+            fxTargetCurrency = target
+        } else {
+            fxConvertedAmountDecimal = nil
+            fxTargetCurrency = nil
+        }
+    }
+
     /// 受益者の profileID リスト (誰の負担として扱うか)。
     /// 内部表現: `beneficiaryProfileIDs` カンマ区切り文字列。空文字 = 「シートの全メンバーで均等割り」。
     var beneficiaryIDList: [String] {

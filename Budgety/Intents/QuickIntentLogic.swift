@@ -229,6 +229,9 @@ enum QuickIntentLogic {
             expense.payerMemberID = memberID
         }
 
+        // FX スナップショット (MCP / Shortcuts 経由でも current FX を凍結)
+        expense.captureFXSnapshot()
+
         do {
             try ctx.save()
         } catch {

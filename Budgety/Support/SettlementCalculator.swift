@@ -262,7 +262,15 @@ enum SettlementCalculator {
             let from = e.resolvedCurrencyCode
             let rawPayer = e.payerProfileID ?? ""
             let rawBeneficiaries = e.resolvedBeneficiaryIDs()
-            let convertedOpt = fx.convert(e.amountDecimal, from: from, to: target)
+            // FX スナップショットがあればそれを優先 (= 記録時の target 換算額を
+            // 凍結することで為替変動による残高ドリフトを防ぐ)。無ければ
+            // 現行 FX で換算 (旧データの後方互換性)。
+            let convertedOpt: Decimal? = {
+                if let snap = e.snapshotConvertedAmount(forTarget: target) {
+                    return snap
+                }
+                return fx.convert(e.amountDecimal, from: from, to: target)
+            }()
             var included = false
             var skipReason: String? = nil
             var normalizedPayer: String = ""

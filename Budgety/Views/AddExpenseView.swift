@@ -1377,11 +1377,18 @@ struct AddExpenseView: View {
     private func applyChanges(toExpense expense: Expense, includeDate: Bool) {
         let newTitle = title.trimmingCharacters(in: .whitespaces)
         if newTitle != origTitle { expense.title = newTitle }
-        if amountText != origAmountText, let d = Decimal(string: amountText) {
+        let amountChanged = amountText != origAmountText
+        if amountChanged, let d = Decimal(string: amountText) {
             expense.amount = NSDecimalNumber(decimal: d)
         }
         if kind.rawValue != origKindRaw { expense.kindRaw = kind.rawValue }
-        if currencyCode != origCurrencyCode { expense.currencyCode = currencyCode }
+        let currencyChanged = currencyCode != origCurrencyCode
+        if currencyChanged { expense.currencyCode = currencyCode }
+        // amount または通貨が変わったら FX スナップショットを取り直す。
+        // 何も変わっていなければ元の snapshot をそのまま使う (= 当時のレート維持)。
+        if amountChanged || currencyChanged {
+            expense.captureFXSnapshot()
+        }
         if note != origNote { expense.note = note }
         if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
         if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
@@ -1611,6 +1618,9 @@ struct AddExpenseView: View {
                cat.objectID.persistentStore == sheetStore {
                 expense.category = cat
             }
+            // FX スナップショット: 為替変動による残高ドリフト防止。
+            // amount / currencyCode / sheet がセットされた後で呼ぶ必要がある。
+            expense.captureFXSnapshot()
             // 自分の ParticipantProfile を同シートに ensure (まだ無ければ作成、あれば更新)
             if BuildInfo.profileFeatureEnabled {
                 profile.ensureProfile(in: record, ctx: viewContext)

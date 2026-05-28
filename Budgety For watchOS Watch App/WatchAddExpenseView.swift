@@ -293,6 +293,12 @@ struct WatchAddExpenseView: View {
             expense.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
         }
         // オフの場合は beneficiaryProfileIDs を触らない (デフォルトの空のまま)
+
+        // FX スナップショット (= 為替変動による残高ドリフト防止)。
+        // watchOS では既定通貨を使うのでだいたい snapshot == amount だが、
+        // 共有シートで他端末が target を変えた時の整合性のため明示的に保存。
+        expense.captureFXSnapshot()
+
         do {
             try ctx.save()
             WKInterfaceDevice.current().play(.success)
