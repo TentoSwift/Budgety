@@ -543,7 +543,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Budgety-For-watchOS-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Budgety For watchOS";
+				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
@@ -579,7 +579,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Budgety-For-watchOS-Watch-App-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Budgety For watchOS";
+				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
