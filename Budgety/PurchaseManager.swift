@@ -101,6 +101,10 @@ final class PurchaseManager: ObservableObject {
 
     @discardableResult
     func purchase(_ product: Product) async -> Bool {
+        // 防御的ガード: 既に Premium を所有しているなら二重購入させない。
+        // 通常は PaywallView 側で購入 UI を隠しているが、別経路から呼ばれても
+        // 重複購入が通らないよう、モデル層でも弾く (買い切り×サブスク併売対策)。
+        guard !isPremium else { return false }
         isProcessing = true
         defer { isProcessing = false }
         do {
