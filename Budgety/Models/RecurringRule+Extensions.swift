@@ -5,6 +5,7 @@
 
 import Foundation
 import CoreData
+import CloudKit
 
 enum RecurrenceFrequency: String, CaseIterable, Identifiable {
     case daily, weekly, monthly, yearly
@@ -56,6 +57,24 @@ extension RecurringRule {
         set { amount = NSDecimalNumber(decimal: newValue) }
     }
 
+    /// 受益者 (誰の負担として扱うか) の profileID リスト。Expense と同じ CSV 表現。
+    /// 空 = 割り勘オフ (支払者単独負担)。生成される Expense にそのまま引き継がれる。
+    var beneficiaryIDList: [String] {
+        get {
+            (beneficiaryProfileIDs ?? "")
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            var seen = Set<String>()
+            let cleaned = newValue
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && seen.insert($0).inserted }
+            beneficiaryProfileIDs = cleaned.joined(separator: ",")
+        }
+    }
+
     var kind: TransactionKind {
         get { TransactionKind(rawValue: kindRaw ?? "") ?? .expense }
         set { kindRaw = newValue.rawValue }
@@ -82,4 +101,30 @@ extension RecurringRule {
         }
         return startDate
     }
+
+    /// 支払者の Member を引く (Expense.resolvedPayer と同じ解決ロジック)。
+    /// payerProfileID が canonical self ID 群と一致すれば selfMember、
+    /// それ以外は Member.recordName 一致で解決する。
+    #if !os(watchOS)
+    @MainActor
+    var resolvedPayer: Member? {
+        let pc = PersistenceController.shared
+        let ctx = managedObjectContext ?? pc.container.viewContext
+        guard let pid = payerProfileID, !pid.isEmpty else { return nil }
+
+        let share: CKShare? = sheet.flatMap { ShareCoordinator.shared.existingShare(for: $0) }
+        let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
+        if selfIDs.contains(pid),
+           let selfID = UserProfileStore.shared.selfMemberID {
+            let req = NSFetchRequest<Member>(entityName: "Member")
+            req.predicate = NSPredicate(format: "id == %@", selfID as CVarArg)
+            req.fetchLimit = 1
+            if let m = (try? ctx.fetch(req))?.first { return m }
+        }
+        let req = NSFetchRequest<Member>(entityName: "Member")
+        req.predicate = NSPredicate(format: "recordName == %@", pid)
+        req.fetchLimit = 1
+        return (try? ctx.fetch(req))?.first
+    }
+    #endif
 }
