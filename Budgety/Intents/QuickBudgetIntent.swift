@@ -45,7 +45,11 @@ struct QuickBudgetIntent: AppIntent {
         case "add":
             result = await QuickIntentLogic.add(parsed: parsed)
         case "recurring":
-            result = await QuickIntentLogic.addRecurring(parsed: parsed)
+            if BuildInfo.recurringFeatureEnabled {
+                result = await QuickIntentLogic.addRecurring(parsed: parsed)
+            } else {
+                result = ["ok": false, "error": "recurring feature is currently disabled"]
+            }
         case "members":
             result = QuickIntentLogic.members(parsed: parsed)
         default:

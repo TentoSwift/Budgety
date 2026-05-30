@@ -423,11 +423,13 @@ struct SheetDetailView: View {
                             }
                         }
                     }
-                    NavigationLink {
-                        RecurringListView(record: record)
-                            .sheetLockCover(record)
-                    } label: {
-                        Label("定期項目", systemImage: "repeat")
+                    if BuildInfo.recurringFeatureEnabled {
+                        NavigationLink {
+                            RecurringListView(record: record)
+                                .sheetLockCover(record)
+                        } label: {
+                            Label("定期項目", systemImage: "repeat")
+                        }
                     }
                     Divider()
                     Button {
@@ -1512,7 +1514,7 @@ private struct ExpenseRowContainer: View {
             Button(action: onEdit) {
                 Label("編集", systemImage: "pencil")
             }
-            if let onEditRule {
+            if BuildInfo.recurringFeatureEnabled, let onEditRule {
                 Button(action: onEditRule) {
                     Label("定期項目を編集", systemImage: "repeat")
                 }

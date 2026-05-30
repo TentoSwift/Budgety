@@ -19,6 +19,8 @@ enum RecurringExpenseGenerator {
     /// viewContext 上の全 RecurringRule を走査して未生成分を作成する。
     /// save まで含む。
     static func generateAll(in ctx: NSManagedObjectContext) {
+        // 定期項目が無効な間は、既存ルール (旧バージョン/他端末由来) からの自動生成も止める。
+        guard BuildInfo.recurringFeatureEnabled else { return }
         let req = NSFetchRequest<RecurringRule>(entityName: "RecurringRule")
         guard let rules = try? ctx.fetch(req), !rules.isEmpty else { return }
 

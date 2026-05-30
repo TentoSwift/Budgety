@@ -301,8 +301,10 @@ struct BudgetyMacSheetView: View {
                     Button { showingCategories = true } label: {
                         Label("カテゴリ管理", systemImage: "square.grid.2x2")
                     }
-                    Button { showingRecurring = true } label: {
-                        Label("繰り返し項目", systemImage: "repeat")
+                    if BuildInfo.recurringFeatureEnabled {
+                        Button { showingRecurring = true } label: {
+                            Label("繰り返し項目", systemImage: "repeat")
+                        }
                     }
                     Divider()
                     Button { showingShare = true } label: {

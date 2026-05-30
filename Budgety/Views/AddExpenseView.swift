@@ -637,7 +637,10 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var recurringSection: some View {
-        if case .edit(let expense) = mode, let rule = expense.relatedRule {
+        if !BuildInfo.recurringFeatureEnabled {
+            // 定期項目はリリースに向けて一旦無効化中。UI 導線を出さない。
+            EmptyView()
+        } else if case .edit(let expense) = mode, let rule = expense.relatedRule {
             // 既に Rule から生成された支出は、ここで Toggle / Stepper を編集させると
             // 「この項目だけ」と「Rule 全体」が混ざって混乱しやすい。
             // → 編集シートを閉じて、SheetDetailView 側で「定期項目」一覧 →
@@ -1412,7 +1415,10 @@ struct AddExpenseView: View {
     /// 保存ボタンタップ時のディスパッチ。定期由来の支出に変更があれば 3 択ダイアログ、
     /// それ以外は通常 save。
     private func trySave() {
-        if case .edit(let expense) = mode,
+        // 定期項目が無効な間は、過去に生成された支出も通常の支出として扱い、
+        // 3 択ダイアログを出さずにそのまま保存する。
+        if BuildInfo.recurringFeatureEnabled,
+           case .edit(let expense) = mode,
            expense.generatedFromRuleID != nil,
            expense.relatedRule != nil,
            hasAnyEditChanges {
@@ -1718,6 +1724,8 @@ struct AddExpenseView: View {
     /// - 既に Rule あり → 頻度・間隔・終了日の差分を Rule に書き戻し
     /// (Toggle が OFF にされるケースは isRecurringLocked で UI 側でブロック)
     private func applyRecurringChanges(for expense: Expense) {
+        // 定期項目が無効な間は Rule を一切作成・更新しない。
+        guard BuildInfo.recurringFeatureEnabled else { return }
         guard let sheet = expense.sheet else { return }
         if let rule = expense.relatedRule {
             // 既存 Rule の頻度・間隔・終了日を CRDT 差分で更新

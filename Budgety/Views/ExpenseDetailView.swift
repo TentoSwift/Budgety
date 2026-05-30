@@ -34,7 +34,7 @@ struct ExpenseDetailView: View {
                         .foregroundStyle(.primary)
                 }
             }
-            if expense.generatedFromRuleID != nil {
+            if BuildInfo.recurringFeatureEnabled, expense.generatedFromRuleID != nil {
                 Section {
                     Label("定期項目から作成されました", systemImage: "repeat")
                         .font(.subheadline)

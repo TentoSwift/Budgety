@@ -30,4 +30,10 @@ enum BuildInfo {
     /// PP は canonical ID (オーナーなら userRecordName、参加者なら "email:...") をキーに
     /// 共有相手に表示名・写真・色を伝搬する。
     static let profileFeatureEnabled: Bool = true
+
+    /// 定期項目 (RecurringRule / RecurringListView / RecurringExpenseGenerator 等) を有効化するか。
+    /// リリースに向けて一旦無効化している。Core Data モデル・CloudKit スキーマ・既存データは
+    /// そのまま温存しているため、この値を true に戻すだけで機能を復活できる。
+    /// false の間は UI 導線・自動生成・Intent の recurring op をすべて非表示/無効にする。
+    static let recurringFeatureEnabled: Bool = false
 }

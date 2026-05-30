@@ -140,7 +140,9 @@ struct ExpensoApp: App {
                     diagnoseAllShares(in: ctx)
                     #endif
                     // 定期項目の未生成 occurrence を Expense に展開
-                    RecurringExpenseGenerator.generateAll(in: ctx)
+                    if BuildInfo.recurringFeatureEnabled {
+                        RecurringExpenseGenerator.generateAll(in: ctx)
+                    }
                     // v0.x で UserDefaults に格納していたシートロック情報を Core Data 側へ移行
                     SheetLockManager.shared.migrateLegacyEntriesIfNeeded(context: ctx)
                     // 割り勘通知: 許可要求 + baseline 確定 (既存ぶんはサイレント既読化)。
@@ -176,7 +178,9 @@ struct ExpensoApp: App {
                         // iCloud サインイン状態を再取得 (設定でサインインして戻った場合に追従)
                         persistenceController.refreshAccountStatus()
                         let ctx = persistenceController.container.viewContext
-                        RecurringExpenseGenerator.generateAll(in: ctx)
+                        if BuildInfo.recurringFeatureEnabled {
+                            RecurringExpenseGenerator.generateAll(in: ctx)
+                        }
                         Task { @MainActor in
                             if (UserProfileStore.shared.userRecordName ?? "").isEmpty {
                                 await UserProfileStore.shared.ensureUserRecordNameLoaded()
