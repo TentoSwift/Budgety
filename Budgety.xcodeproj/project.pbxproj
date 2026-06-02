@@ -63,6 +63,7 @@
 				"Models/Member+Extensions.swift",
 				"Models/ParticipantProfile+Extensions.swift",
 				"Models/RecurringRule+Extensions.swift",
+				Support/RecurringOccurrenceService.swift,
 				"Models/SettlementRecord+Extensions.swift",
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
