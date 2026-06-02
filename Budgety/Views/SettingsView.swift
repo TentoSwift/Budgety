@@ -191,6 +191,16 @@ struct SettingsView: View {
                     }
                 }
 
+                if BuildInfo.isInternalBuild {
+                    Section("デバッグ") {
+                        NavigationLink {
+                            RecurringDiagnosticsView()
+                        } label: {
+                            Label("定期項目の診断", systemImage: "repeat.circle")
+                        }
+                    }
+                }
+
                 Section {
                     NavigationLink {
                         EraseAllDataView()
