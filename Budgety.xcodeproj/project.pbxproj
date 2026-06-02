@@ -160,6 +160,7 @@
 				Support/PDFReportView.swift,
 				Support/PublicProfileSync.swift,
 				Support/RecurringExpenseGenerator.swift,
+				Support/RecurringOccurrenceService.swift,
 				Support/SampleDataGenerator.swift,
 				Support/SettlementCalculator.swift,
 				Support/ShareParticipantCanonical.swift,

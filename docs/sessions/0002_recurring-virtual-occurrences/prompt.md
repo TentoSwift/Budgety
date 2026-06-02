@@ -29,6 +29,13 @@
   サインインしない）。`CODE_SIGNING_ALLOWED=NO` のコンパイル専用ビルドは CloudKit
   エンタイトルメント欠落で `CKContainer` init が EXC_BREAKPOINT する点も確認
   （実行するなら署名付きビルドが必要）。ユーザー判断でシミュレータ確認は中止。
+- **新規ファイルのマルチターゲット漏れ**: #262 を iOS ビルドだけ確認して merge したら
+  macOS ビルドが `cannot find 'RecurringOccurrenceService' in scope` で失敗。
+  `Budgety/` 同期グループの既定メンバーは iOS のみで、macOS/visionOS/watchOS は
+  pbxproj の例外セットに**個別列挙したファイルだけ**取り込む。新規 `Budgety/` 配下の
+  ファイルを共有する場合は **macOS 例外セットにも追記必須**（watchOS/visionOS は
+  generator 不使用なので今回は macOS のみ）。→ fix PR で対応。
+  教訓: 共有コードを触ったら **iOS だけでなく macOS も必ずビルド確認**する。
 
 ## 学び（→ MEMORY.md 反映候補）
 - 定期項目の冪等化キー = `(ruleID, scheduledDate)`。`NSPersistentCloudKitContainer` は
