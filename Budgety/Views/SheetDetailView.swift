@@ -311,7 +311,10 @@ struct SheetDetailView: View {
                     .listSectionSeparator(.hidden)
                 }
 
-                if !allExpenses.isEmpty {
+                // 実支出ゼロでも仮想 occurrence だけのシート (定期ルールのみ) で
+                // カテゴリ strip を出す。絞り込める対象 (カテゴリ or カテゴリなし) が
+                // あれば表示する (usedCategories/hasUncategorizedExpenses は仮想も含む)。
+                if !usedCategories.isEmpty || hasUncategorizedExpenses {
                     categoryPills
                         .listSectionSeparator(.hidden)
                 }
