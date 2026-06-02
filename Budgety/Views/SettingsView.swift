@@ -193,7 +193,7 @@ struct SettingsView: View {
                     }
                 }
 
-                if BuildInfo.isInternalBuild {
+                if BuildInfo.isInternalBuild, RecurringOccurrenceService.featureEnabled {
                     Section {
                         NavigationLink {
                             RecurringDiagnosticsView()

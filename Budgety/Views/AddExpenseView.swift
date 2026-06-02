@@ -641,6 +641,12 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var recurringSection: some View {
+        // 機能オフ時 (RecurringOccurrenceService.featureEnabled == false) は繰り返し UI を一切出さない (新規作成不可)。
+        if RecurringOccurrenceService.featureEnabled { recurringSectionContent }
+    }
+
+    @ViewBuilder
+    private var recurringSectionContent: some View {
         if case .edit(let expense) = mode, let rule = expense.relatedRule {
             // 既に Rule から生成された支出は、ここで Toggle / Stepper を編集させると
             // 「この項目だけ」と「Rule 全体」が混ざって混乱しやすい。
@@ -1415,7 +1421,9 @@ struct AddExpenseView: View {
     /// 保存ボタンタップ時のディスパッチ。定期由来の支出に変更があれば 3 択ダイアログ、
     /// それ以外は通常 save。
     private func trySave() {
-        if case .edit(let expense) = mode,
+        // 機能オフ時は既存の生成由来支出も通常編集として保存する (2 択ダイアログを出さない)。
+        if RecurringOccurrenceService.featureEnabled,
+           case .edit(let expense) = mode,
            expense.generatedFromRuleID != nil,
            expense.relatedRule != nil,
            hasAnyEditChanges {

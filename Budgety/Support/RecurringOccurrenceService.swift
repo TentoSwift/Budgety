@@ -72,6 +72,16 @@ enum LedgerItem: Identifiable {
 
 enum RecurringOccurrenceService {
 
+    /// 定期項目 (繰り返し / RecurringRule) 機能のマスタースイッチ。
+    /// **一旦オフにしてリリース** (2026-06: CloudKit 同期での重複問題を解消するまで)。
+    /// オフの間:
+    /// - 仮想 occurrence を一切出さない (`virtualOccurrences` が空)。生成 (`RecurringExpenseGenerator`) も走らない。
+    /// - 作成トグル・定期項目一覧への導線・編集の 2 択ダイアログを UI 側で隠す (新規作成不可)。
+    /// - 既存の RecurringRule / 生成済み Expense は**削除せず温存** (= true に戻せば復活)。
+    ///   既存の生成済み実 Expense は通常の支出として表示され続ける。
+    /// 全ターゲット (iOS/macOS/visionOS/watchOS) 共通で参照するためここに置く (BuildInfo は watch 等に未収録のため)。
+    static let featureEnabled: Bool = false
+
     /// 完全仮想化のフィーチャーフラグ (既定 OFF)。
     /// ON で「定期 occurrence を保存せず表示時に算出」へ切替: generator は実体化を止め、
     /// 各 consumer は仮想 occurrence を合流する。OFF の間は従来のハイブリッド (生成して保存)。
@@ -172,6 +182,7 @@ enum RecurringOccurrenceService {
         futureHorizon: Date? = nil,
         calendar: Calendar = .current
     ) -> [RecurringOccurrence] {
+        guard featureEnabled else { return [] }          // 機能オフ: 仮想ゼロ (既存ルールは休眠)
         guard virtualizationEnabled else { return [] }   // OFF: 完全ハイブリッド (仮想ゼロ)
         let rules = (sheet.recurringRules as? Set<RecurringRule>) ?? []
         guard !rules.isEmpty else { return [] }
