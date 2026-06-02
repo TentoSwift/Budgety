@@ -67,6 +67,12 @@ struct SheetListView: View {
     @State private var searchPeriod: SheetDetailView.Period = .all
     /// 検索結果からタップした支出 (= 全シート横断検索のヒット) を編集する。
     @State private var editingSearchExpense: Expense?
+    /// 全シート検索に仮想 occurrence を出すための表示専用 Expense 供給器 (子コンテキスト、never save)。
+    @State private var searchVirtualBacking = VirtualRowBacking()
+    /// 仮想 occurrence をタップして materialize した未保存 Expense (commit しなければ破棄)。
+    @State private var materializedSearchPending: Expense?
+    /// 直近のエディタで保存 (commit) されたか。materializedSearchPending の破棄判定に使う。
+    @State private var searchDidCommit = false
     /// 検索結果から解錠しようとしているロック中シート。
     @State private var unlockingSheet: ExpenseSheet?
     /// 行の長押しメニューから開くロック設定シート。
@@ -210,8 +216,19 @@ struct SheetListView: View {
             .sheet(isPresented: $showingAddSheet) {
                 AddSheetView()
             }
-            .sheet(item: $editingSearchExpense) { expense in
-                AddExpenseView(expense: expense)
+            .sheet(item: $editingSearchExpense, onDismiss: {
+                // 仮想 occurrence をタップして materialize した分は、エディタで実際に保存
+                // (commit) されなければ破棄する (= 見ただけ/キャンセルで expenses に保存しない)。
+                if let m = materializedSearchPending {
+                    materializedSearchPending = nil
+                    if !searchDidCommit {
+                        viewContext.delete(m)
+                        PersistenceController.shared.save()
+                    }
+                }
+                searchDidCommit = false
+            }) { expense in
+                AddExpenseView(expense: expense, onCommit: { searchDidCommit = true })
             }
             .sheet(item: $unlockingSheet) { sheet in
                 NavigationStack {
@@ -312,9 +329,20 @@ struct SheetListView: View {
 
     /// 検索ヒットをシートごとにまとめた1グループ。
     /// `net` はヒット項目だけの合計 (シート既定通貨に FX 換算; 収入 +, 支出 -)。
+    /// 検索ヒット 1 件。実支出 (occurrence == nil) か、仮想 occurrence (display は子コンテキストの
+    /// 表示専用 transient、tap 時に materialize する)。
+    private struct SearchItem: Identifiable {
+        let display: Expense
+        let occurrence: RecurringOccurrence?
+        var id: String {
+            if let occ = occurrence { return "o:" + occ.id }
+            return "e:" + display.objectID.uriRepresentation().absoluteString
+        }
+    }
+
     private struct ExpenseMatchGroup: Identifiable {
         let sheet: ExpenseSheet
-        let expenses: [Expense]
+        let items: [SearchItem]
         let net: Decimal
         let currency: String
         var id: NSManagedObjectID { sheet.objectID }
@@ -332,18 +360,29 @@ struct SheetListView: View {
         var groups: [ExpenseMatchGroup] = []
         for sheet in sheets {
             if lock.hasPassword(for: sheet) && !lock.isUnlocked(sheet) { continue }
-            guard let exps = sheet.expenses as? Set<Expense> else { continue }
-            let matched = exps
-                .filter { searchPeriod.contains($0.date) && matchesExpense($0, query: q) }
-                .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-            guard !matched.isEmpty else { continue }
+            var items: [SearchItem] = []
+            // 実支出
+            if let exps = sheet.expenses as? Set<Expense> {
+                for e in exps where searchPeriod.contains(e.date) && matchesExpense(e, query: q) {
+                    items.append(SearchItem(display: e, occurrence: nil))
+                }
+            }
+            // 仮想 occurrence (完全仮想化)。表示は子コンテキストの transient (never save)。
+            for occ in RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
+            where searchPeriod.contains(occ.date) && matchesOccurrence(occ, query: q, sheet: sheet) {
+                let display = searchVirtualBacking.displayExpense(for: occ, sheet: sheet)
+                items.append(SearchItem(display: display, occurrence: occ))
+            }
+            guard !items.isEmpty else { continue }
+            items.sort { ($0.display.date ?? .distantPast) > ($1.display.date ?? .distantPast) }
             let target = sheet.resolvedDefaultCurrencyCode
             var net: Decimal = 0
-            for e in matched {
+            for it in items {
+                let e = it.display
                 let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
                 net += (e.kind == .income) ? amt : -amt
             }
-            groups.append(ExpenseMatchGroup(sheet: sheet, expenses: matched, net: net, currency: target))
+            groups.append(ExpenseMatchGroup(sheet: sheet, items: items, net: net, currency: target))
         }
         return groups
     }
@@ -358,6 +397,48 @@ struct SheetListView: View {
             (e.note ?? "").lowercased()
         ]
         return fields.contains { $0.contains(q) }
+    }
+
+    /// 仮想 occurrence 1 件がクエリにマッチするか (matchesExpense と同じフィールド。note は無し)。
+    private func matchesOccurrence(_ occ: RecurringOccurrence, query q: String, sheet: ExpenseSheet) -> Bool {
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let catName = cats.first { $0.name == occ.categoryRaw }?.displayName
+            ?? (occ.categoryRaw.isEmpty ? "" : occ.categoryRaw)
+        let payerName = (occ.payerProfileID.flatMap { $0.isEmpty ? nil : sheet.memberDisplayInfo(for: $0).name }) ?? ""
+        let amountStr = ((occ.kind == .expense ? "-" : "+")
+            + CurrencyCatalog.format(occ.amount, code: occ.currencyCode)).lowercased()
+        let fields = [occ.title.lowercased(), catName.lowercased(), payerName.lowercased(), amountStr]
+        return fields.contains { $0.contains(q) }
+    }
+
+    /// 仮想 occurrence をタップ編集するため viewContext へ materialize (未保存)。
+    /// commit しなければ editingSearchExpense の onDismiss で破棄する。
+    @MainActor
+    private func materializeSearch(_ occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
+        let store = sheet.objectID.persistentStore
+        let e = Expense(context: viewContext)
+        if let store { viewContext.assign(e, to: store) }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.createdAt = .now
+        e.sheet = sheet
+        e.generatedFromRuleID = occ.ruleID
+        if !occ.categoryRaw.isEmpty,
+           let cats = sheet.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == store {
+            e.category = cat
+        }
+        materializedSearchPending = e
+        return e
     }
 
     // MARK: - Context Menu (シート行の長押し)
@@ -590,7 +671,8 @@ struct SheetListView: View {
         var currencies = Set<String>()
         var count = 0
         for group in groups {
-            for e in group.expenses {
+            for item in group.items {
+                let e = item.display
                 count += 1
                 currencies.insert(e.resolvedCurrencyCode)
                 let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
@@ -654,11 +736,17 @@ struct SheetListView: View {
             } else {
                 ForEach(groups) { group in
                     Section {
-                        ForEach(group.expenses, id: \.objectID) { expense in
+                        ForEach(group.items) { item in
                             Button {
-                                editingSearchExpense = expense
+                                if let occ = item.occurrence {
+                                    // 仮想は materialize (未保存) して編集。commit しなければ破棄。
+                                    searchDidCommit = false
+                                    editingSearchExpense = materializeSearch(occ, sheet: group.sheet)
+                                } else {
+                                    editingSearchExpense = item.display
+                                }
                             } label: {
-                                SearchResultRow(expense: expense, showSheetName: false)
+                                SearchResultRow(expense: item.display, showSheetName: false)
                             }
                             .buttonStyle(.plain)
                         }
