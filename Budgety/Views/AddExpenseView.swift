@@ -1524,6 +1524,17 @@ struct AddExpenseView: View {
         // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
         applyChanges(toExpense: expense, includeDate: true)
 
+        // 「この項目のみ」変更 = この回を定期から切り離して通常の支出にする (もう定期項目ではない)。
+        // ルールにこの日付を skip 記録 (仮想の重複防止) し、Expense からは定期リンクを外す。
+        if scope == .thisOnly, RecurringOccurrenceService.virtualizationEnabled,
+           let rule = expense.relatedRule, let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+            expense.generatedFromRuleID = nil
+            expense.scheduledDate = nil
+            // 通常の支出になったので FX を凍結する (定期は非凍結だが、切り離したら通常扱い)。
+            expense.captureFXSnapshot()
+        }
+
         // 2) ルールへ反映 (今後 / 全て)
         if scope != .thisOnly, let rule = expense.relatedRule {
             // 「今後のみ」= 完全仮想化では、過去 occurrence を「変更前の値」で実体化して凍結し、
