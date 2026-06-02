@@ -19,6 +19,17 @@ struct MacAddExpenseView: View {
 
     let sheet: ExpenseSheet
     let expense: Expense?
+    /// ユーザーが実際に保存 (commit) / 削除した時に呼ばれる。仮想 occurrence を materialize して
+    /// 編集する経路 (BudgetyMacSheetView) で、未 commit なら親が未保存行を破棄するために使う。
+    var onCommit: (() -> Void)? = nil
+
+    /// 定期項目から生成された支出を編集中に保存した時の適用範囲 (iOS と同じ 2 択)。
+    private enum RecurringSaveScope {
+        case thisOnly   // この 1 件だけ (定期から切り離して通常支出化)
+        case all        // ルールを変更して全 occurrence に反映
+    }
+    /// 定期由来の支出を編集して保存ボタンを押した時に出す 2 択ダイアログ。
+    @State private var showRecurringSaveChoice = false
 
     @State private var title: String = ""
     @State private var amountText: String = ""
@@ -281,7 +292,7 @@ struct MacAddExpenseView: View {
             HStack {
                 Button("キャンセル") { dismiss() }
                 Spacer()
-                Button("OK") { save() }
+                Button("OK") { trySave() }
                     .keyboardShortcut(.return)
                     .disabled(!canSave)
             }
@@ -322,6 +333,17 @@ struct MacAddExpenseView: View {
             Button("キャンセル", role: .cancel) {}
         } message: {
             Text("元に戻せません。")
+        }
+        .confirmationDialog(
+            "変更の適用範囲",
+            isPresented: $showRecurringSaveChoice,
+            titleVisibility: .visible
+        ) {
+            Button("この項目のみ保存") { performRecurringSave(scope: .thisOnly) }
+            Button("全ての定期項目で変更") { performRecurringSave(scope: .all) }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この支出は定期項目から生成されています。この項目だけ変更するか、定期項目全体を変更するか選んでください。")
         }
         .task { await loadShareAndDefaults() }
         .onAppear {
@@ -684,6 +706,102 @@ struct MacAddExpenseView: View {
         }
 
         PersistenceController.shared.save()
+        onCommit?()
+        dismiss()
+    }
+
+    /// 保存ボタンのディスパッチ。定期由来の支出に変更があれば 2 択ダイアログ、それ以外は通常 save。
+    private func trySave() {
+        if let expense, expense.generatedFromRuleID != nil,
+           expense.relatedRule != nil, hasAnyEditChanges {
+            showRecurringSaveChoice = true
+        } else {
+            save()
+        }
+    }
+
+    /// 編集モードで何かフィールドを変更したか。
+    private var hasAnyEditChanges: Bool {
+        guard expense != nil else { return false }
+        if title.trimmingCharacters(in: .whitespaces) != origTitle { return true }
+        if amountText != origAmountText { return true }
+        if kind.rawValue != origKindRaw { return true }
+        if currencyCode != origCurrencyCode { return true }
+        if note != origNote { return true }
+        if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
+        if payerProfileID != origPayerProfileID { return true }
+        if selectedCategory?.objectID != origCategoryObjectID { return true }
+        let newCSV = effectiveBeneficiaryIDs.sorted().joined(separator: ",")
+        let oldCSV = origBeneficiaryCSV
+            .split(separator: ",", omittingEmptySubsequences: true)
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .sorted().joined(separator: ",")
+        if newCSV != oldCSV { return true }
+        return false
+    }
+
+    /// RecurringRule に同じ差分を適用する (date / sheet / 頻度等は触らない。iOS と同じフィールド)。
+    private func applyChanges(toRule rule: RecurringRule) {
+        let newTitle = title.trimmingCharacters(in: .whitespaces)
+        if newTitle != origTitle { rule.title = newTitle }
+        if amountText != origAmountText,
+           let d = Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) {
+            rule.amount = NSDecimalNumber(decimal: d)
+        }
+        if kind.rawValue != origKindRaw { rule.kindRaw = kind.rawValue }
+        if currencyCode != origCurrencyCode { rule.currencyCode = currencyCode }
+        if note != origNote { rule.note = note }
+        if payerProfileID != origPayerProfileID {
+            rule.payerProfileID = payerProfileID.isEmpty ? nil : payerProfileID
+            rule.paidBy = nil
+        }
+        if selectedCategory?.objectID != origCategoryObjectID {
+            rule.categoryRaw = selectedCategory?.name
+        }
+    }
+
+    /// 「変更の適用範囲」ダイアログから呼ばれる (iOS の performRecurringSave と同じ挙動)。
+    @MainActor
+    private func performRecurringSave(scope: RecurringSaveScope) {
+        guard let expense else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard let amount = Decimal(string: amountText.replacingOccurrences(of: ",", with: "")) else { return }
+        let profile = UserProfileStore.shared
+        viewContext.refresh(expense, mergeChanges: true)
+
+        // 1) 編集中の Expense には常に反映 (この項目のみ / 全て 共通)
+        applyChanges(toExpense: expense, trimmedTitle: trimmed, amount: amount, profile: profile)
+
+        // この項目のみ = 定期から切り離して通常支出化 (もう定期項目ではない)。
+        if scope == .thisOnly, RecurringOccurrenceService.virtualizationEnabled,
+           let rule = expense.relatedRule, let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+            expense.generatedFromRuleID = nil
+            expense.scheduledDate = nil
+            expense.captureFXSnapshot()   // 通常支出になったので FX 凍結
+        }
+
+        // 全て = ルールを変更して全 occurrence に反映 (他の materialized にも反映)。
+        if scope == .all, let rule = expense.relatedRule {
+            applyChanges(toRule: rule)
+            if let ruleID = rule.id {
+                let req = NSFetchRequest<Expense>(entityName: "Expense")
+                req.predicate = NSPredicate(format: "generatedFromRuleID == %@", ruleID as CVarArg)
+                let others = (try? viewContext.fetch(req)) ?? []
+                for other in others where other.objectID != expense.objectID {
+                    applyChanges(toExpense: other, trimmedTitle: trimmed, amount: amount, profile: profile, includeDate: false)
+                }
+            }
+        }
+
+        // 全て: 編集内容はルールに反映済みなので、materialize した実 Expense は残さず削除し仮想のまま。
+        if scope == .all, RecurringOccurrenceService.virtualizationEnabled {
+            viewContext.delete(expense)
+        }
+
+        PersistenceController.shared.save()
+        RecurringExpenseGenerator.generateAll(in: viewContext)
+        onCommit?()
         dismiss()
     }
 
@@ -696,7 +814,8 @@ struct MacAddExpenseView: View {
         toExpense expense: Expense,
         trimmedTitle: String,
         amount: Decimal,
-        profile: UserProfileStore
+        profile: UserProfileStore,
+        includeDate: Bool = true
     ) {
         if trimmedTitle != origTitle { expense.title = trimmedTitle }
         let amountChanged = amountText != origAmountText
@@ -710,7 +829,7 @@ struct MacAddExpenseView: View {
         if amountChanged || currencyChanged {
             expense.captureFXSnapshot()
         }
-        if !Calendar.current.isDate(date, inSameDayAs: origDate) {
+        if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }
         if note != origNote { expense.note = note }
@@ -749,8 +868,15 @@ struct MacAddExpenseView: View {
 
     private func deleteExpense() {
         guard let e = expense else { return }
+        // 定期由来 (occurrence) の削除は、完全仮想化では行を消すだけだと仮想で復活するので、
+        // ルールにこの日付を skip 記録してから削除する (iOS SheetDetailView.deleteExpense と同じ)。
+        if RecurringOccurrenceService.virtualizationEnabled,
+           let rule = e.relatedRule, let day = e.scheduledDate ?? e.date {
+            rule.addSkippedDay(day)
+        }
         viewContext.delete(e)
         PersistenceController.shared.save()
+        onCommit?()
         dismiss()
     }
 }

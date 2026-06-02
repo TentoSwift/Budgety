@@ -38,6 +38,10 @@ struct BudgetyMacSheetView: View {
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
     @State private var detailExpense: Expense?
+    /// 仮想 occurrence をタップして materialize した未保存 Expense (commit しなければ詳細を閉じた時に破棄)。
+    @State private var materializedPending: Expense?
+    /// 詳細から実際に保存 (commit)/削除されたか。materializedPending の破棄判定に使う。
+    @State private var detailDidCommit = false
     @State private var showingSettlement = false
     @State private var showingCategories = false
     @State private var showingRecurring = false
@@ -410,8 +414,26 @@ struct BudgetyMacSheetView: View {
         .sheet(item: $editingExpense) { e in
             MacAddExpenseView(sheet: sheet, expense: e)
         }
-        .sheet(item: $detailExpense) { e in
-            MacModalSheet { ExpenseDetailView(expense: e) }
+        .sheet(item: $detailExpense, onDismiss: {
+            // 仮想 occurrence をタップして materialize した分は、commit (保存/削除) されなければ
+            // 破棄する (= 見ただけ/キャンセルで expenses に保存しない)。
+            if let m = materializedPending {
+                materializedPending = nil
+                if !detailDidCommit {
+                    viewContext.delete(m)
+                    PersistenceController.shared.save()
+                }
+            }
+            detailDidCommit = false
+        }) { e in
+            MacModalSheet {
+                ExpenseDetailView(expense: e, onCommit: {
+                    detailDidCommit = true
+                    // 編集/削除後はオブジェクトが変化/解放されるので詳細を閉じて一覧へ戻す
+                    // (仮想を materialize した場合のみ。実支出の詳細は閉じない)。
+                    if materializedPending != nil { detailExpense = nil }
+                })
+            }
         }
         .sheet(isPresented: $showingSettlement) {
             MacModalSheet { SettlementView(record: sheet) }
@@ -763,9 +785,11 @@ struct BudgetyMacSheetView: View {
                                 // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
                                 .transition(.identity)
                             case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。タップで定期項目一覧へ。
+                                // 仮想 occurrence (未実体化の定期分)。iOS と同じく、タップで materialize
+                                // (未保存) して実支出と同じ詳細へ。編集 commit しなければ閉じた時に破棄。
                                 Button {
-                                    showingRecurring = true
+                                    detailDidCommit = false
+                                    detailExpense = materialize(occ)
                                 } label: {
                                     virtualRow(occ)
                                 }
@@ -788,6 +812,35 @@ struct BudgetyMacSheetView: View {
         // Reduce Motion 時はアニメーションしない。
         .animation(reduceMotion ? nil : .default,
                    value: listExpenses.map { $0.objectID.uriRepresentation().absoluteString } + listVirtuals.map(\.id))
+    }
+
+    /// 仮想 occurrence をタップ編集するため viewContext へ materialize (未保存)。
+    /// commit (保存/削除) しなければ詳細を閉じた時に破棄する (materializedPending、commit-guard)。
+    private func materialize(_ occ: RecurringOccurrence) -> Expense {
+        let store = sheet.objectID.persistentStore
+        let e = Expense(context: viewContext)
+        if let store { viewContext.assign(e, to: store) }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.createdAt = .now
+        e.sheet = sheet
+        e.generatedFromRuleID = occ.ruleID
+        if !occ.categoryRaw.isEmpty,
+           let cats = sheet.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == store {
+            e.category = cat
+        }
+        materializedPending = e
+        return e
     }
 
     private func expenseRow(_ e: Expense) -> some View {
