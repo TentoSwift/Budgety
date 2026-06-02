@@ -1821,6 +1821,12 @@ private struct VirtualOccurrenceRow: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+                // 実支出行は NavigationLink なので開示シェブロンが付く。仮想行は Button だが
+                // タップで同じ詳細 View に遷移する (PR #273) ので、見た目を揃えるためシステムと
+                // 同じシェブロンを手動で付ける (金額カラムの右端位置も実体行と一致する)。
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }
