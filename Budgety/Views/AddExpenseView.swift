@@ -1702,16 +1702,19 @@ struct AddExpenseView: View {
             // 繰り返し ON: Rule を作成して、この Expense を「最初の occurrence」として連結する。
             if isRecurring {
                 let rule = makeRule(in: record, startDate: date, amount: amountDecimal)
-                rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
-                expense.generatedFromRuleID = rule.id
-                // この入力分を occurrence n=0 (seed) として明示キー付けする。
-                // 完全仮想化 ON でも以降は generateAll が止まり仮想表示になるが、
-                // この seed の日付は scheduledDate により仮想から除外される (二重表示防止)。
-                expense.scheduledDate = Calendar.current.startOfDay(for: date)
-                // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
-                // 直前の captureFXSnapshot() で付いたスナップショットをクリアする。
-                expense.fxConvertedAmountDecimal = nil
-                expense.fxTargetCurrency = nil
+                if RecurringOccurrenceService.virtualizationEnabled {
+                    // 完全仮想化: 入力分の実 Expense は作らず、ルールのみ作成する。
+                    // occurrence は n=0 (この日付) も含めてすべて仮想表示になる。
+                    viewContext.delete(expense)
+                } else {
+                    // ハイブリッド: 入力分を occurrence n=0 (seed) として実体化し連結する。
+                    rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
+                    expense.generatedFromRuleID = rule.id
+                    expense.scheduledDate = Calendar.current.startOfDay(for: date)
+                    // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
+                    expense.fxConvertedAmountDecimal = nil
+                    expense.fxTargetCurrency = nil
+                }
             }
         case .edit(let expense):
             // 通常編集 (定期項目以外、または「この項目のみ」)。差分のみ書き戻し。
@@ -1748,15 +1751,21 @@ struct AddExpenseView: View {
             }
         } else if isRecurring, !origIsRecurring,
                   let amount = amountDecimal {
-            // 単発 Expense を繰り返しに変換。この既存 Expense を occurrence n=0 (seed) として連結。
+            // 単発 Expense を繰り返しに変換。
             let rule = makeRule(in: sheet, startDate: date, amount: amount)
-            rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
-            expense.generatedFromRuleID = rule.id
-            expense.scheduledDate = Calendar.current.startOfDay(for: date)
-            // 繰り返しに変換したのでこの seed も定期 occurrence 扱い → FX 凍結を外す
-            // (定期は現行レートで精算する方針)。
-            expense.fxConvertedAmountDecimal = nil
-            expense.fxTargetCurrency = nil
+            if RecurringOccurrenceService.virtualizationEnabled {
+                // 完全仮想化: 既存 Expense は破棄してルールのみに。occurrence は全て仮想表示。
+                // (編集後の値は makeRule がフォーム state から取り込んでいるのでルールに反映済み)
+                viewContext.delete(expense)
+            } else {
+                // ハイブリッド: 既存 Expense を occurrence n=0 (seed) として連結。
+                rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
+                expense.generatedFromRuleID = rule.id
+                expense.scheduledDate = Calendar.current.startOfDay(for: date)
+                // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
+                expense.fxConvertedAmountDecimal = nil
+                expense.fxTargetCurrency = nil
+            }
         }
     }
 
