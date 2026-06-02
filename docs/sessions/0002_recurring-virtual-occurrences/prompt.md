@@ -21,7 +21,14 @@
   ハイブリッド（期日 materialize）が最小コストで成立。序盤共通・分岐は Phase 3 に隔離。
 
 ## ハマった点と解決
-- （記入待ち）
+- Phase 1 で生成を「materialized 集合に無ければ作る」だけにした結果、生成済み
+  occurrence を**単発削除すると次回生成で復活する**リグレッションが発生。
+  → Phase 2 で `lastGeneratedDate` 下限 (floor) を復活させ「floor 以下は再生成しない」
+  ようにして解決（削除を尊重）。冪等は materialized 集合、削除尊重は floor、と役割分担。
+- シミュレータ動作確認は **シート作成が iCloud サインイン必須**でブロック（方針上
+  サインインしない）。`CODE_SIGNING_ALLOWED=NO` のコンパイル専用ビルドは CloudKit
+  エンタイトルメント欠落で `CKContainer` init が EXC_BREAKPOINT する点も確認
+  （実行するなら署名付きビルドが必要）。ユーザー判断でシミュレータ確認は中止。
 
 ## 学び（→ MEMORY.md 反映候補）
 - 定期項目の冪等化キー = `(ruleID, scheduledDate)`。`NSPersistentCloudKitContainer` は

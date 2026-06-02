@@ -51,18 +51,24 @@ enum RecurringExpenseGenerator {
         let limit = min(today, endDate)
         guard cal.startOfDay(for: startDate) <= limit else { return 0 }
 
-        // 既に実体化済み (生成済み / オーバーライド / スキップ tombstone) の occurrence 日付。
+        // lastGeneratedDate を下限 (floor) に使う。これ以下の日付は再生成しない。
+        // → 生成済み occurrence を単発削除しても次回復活しない (= 削除を尊重)。
+        // (drift-free 計算 + この floor で、旧来のカーソル方式の「過去は触らない」挙動を維持)
+        let floor = rule.lastGeneratedDate
+
+        // 既に実体化済みの occurrence 日付。多端末で先に生成済みのものを冪等にスキップする
+        // (floor が CloudKit でまだ同期されていない短い窓の重複対策)。
         // scheduledDate が未設定の旧データは date で代替する (バックフィル前の保険)。
         let materialized = materializedDays(for: rule, in: ctx, cal: cal)
 
-        // drift-free な occurrence 日付列。既存分 + perRuleCap 件あれば、未生成分を
-        // 最大 perRuleCap 件カバーできる。
+        // drift-free な occurrence 日付列。floor より後 ～ limit までを最大 perRuleCap 件。
         let days = RecurringOccurrenceService.occurrenceDays(
             start: startDate,
             frequency: rule.resolvedFrequency,
             interval: rule.resolvedInterval,
+            after: floor,
             until: limit,
-            cap: materialized.count + perRuleCap,
+            cap: perRuleCap,
             calendar: cal
         )
 
@@ -77,8 +83,7 @@ enum RecurringExpenseGenerator {
 
         var generated = 0
         for day in days {
-            if generated >= perRuleCap { break }
-            if materialized.contains(day) { continue }   // 冪等: 同スロットが在ればスキップ
+            if materialized.contains(day) { continue }   // 冪等: 他端末生成済みはスキップ
 
             let expense = Expense(context: ctx)
             if let store = sheetStore { ctx.assign(expense, to: store) }

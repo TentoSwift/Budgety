@@ -30,6 +30,7 @@ enum RecurringOccurrenceService {
         start: Date,
         frequency: RecurrenceFrequency,
         interval: Int,
+        after lowerBound: Date? = nil,
         until limit: Date,
         cap: Int = .max,
         calendar: Calendar = .current
@@ -40,15 +41,21 @@ enum RecurringOccurrenceService {
         let anchor = calendar.startOfDay(for: start)
         let limitDay = calendar.startOfDay(for: limit)
         guard anchor <= limitDay else { return [] }
+        // `after` 以下の日付はスキップする (= 生成済み / 削除済みの過去を再生成しない下限)。
+        let afterDay = lowerBound.map { calendar.startOfDay(for: $0) }
 
         var result: [Date] = []
         var n = 0
-        while result.count < cap {
+        // 安全上限: 通常は day > limitDay で break するが、after で大量スキップする
+        // 極端なケース (古い daily ルール等) の無駄反復を抑える保険。
+        let safetyMax = 200_000
+        while result.count < cap && n < safetyMax {
             guard let raw = calendar.date(byAdding: component, value: n * step, to: anchor) else { break }
             let day = calendar.startOfDay(for: raw)
-            if day > limitDay { break }
-            result.append(day)
             n += 1
+            if day > limitDay { break }
+            if let afterDay, day <= afterDay { continue }
+            result.append(day)
         }
         return result
     }

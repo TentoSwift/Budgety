@@ -56,10 +56,16 @@
   - [x] 定期 occurrence は `captureFXSnapshot()` を呼ばない
   - [x] ビルド確認（iOS, `** BUILD SUCCEEDED **`）
   - → この時点で重複・ドリフトは解消（新規生成分）。実機/シミュレータでの動作確認は別途。
-- [ ] Phase 2 **編集モデル**
-  - [ ] 今後のみ = ルール分割、単発 = override、単発削除 = skip tombstone
-  - [ ] `EditRecurringRuleView` / `AddExpenseView` の3択を新モデルへ載せ替え
-  - [ ] ビルド確認
+- [x] Phase 2 **編集・削除の正しさ（ハイブリッド = materialized 前提）**
+  - [x] 生成に `lastGeneratedDate` 下限 (floor) を復活 → 単発削除した occurrence が
+        次回生成で復活しないよう修正（Phase 1 の冪等化で入ったリグレッション）。
+        `RecurringOccurrenceService.occurrenceDays` に `after:` 下限パラメータを追加。
+  - [x] FX 一貫性: 生成済み occurrence (`generatedFromRuleID != nil`) は編集・インライン
+        初回生成でも凍結しない（`AddExpenseView.applyChanges(toExpense:)` と create パス）。
+  - [x] ビルド確認（iOS, `** BUILD SUCCEEDED **`）
+  - 補足: this/今後/all の3択編集は既存ロジックがそのまま正しい（過去は実行として
+    凍結済みなのでルール分割不要）。**split-rule / override / skip tombstone は完全仮想化
+    (Phase 3 案B) 専用**なので、ハイブリッドを採る限り不要。
 - [ ] Phase 3 **表示方式（分岐・ユーザー確認ポイント）**
   - 案A ハイブリッド: 期日到来で実体化を継続（generateAll 維持）。occurrence service は
     「今後の予定」プレビューのみ。改修最小。
