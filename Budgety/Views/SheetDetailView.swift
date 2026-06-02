@@ -120,6 +120,9 @@ struct SheetDetailView: View {
     @State private var showingShare = false
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
+    /// 仮想 occurrence をタップして編集用に materialize した (未保存の) Expense。
+    /// エディタで保存されなければ (= temporary ID のまま) onDismiss で破棄する。
+    @State private var materializedPending: Expense?
     @State private var showingEditGroup = false
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
@@ -547,6 +550,15 @@ struct SheetDetailView: View {
             Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
+            // 仮想 occurrence をタップして materialize した Expense が、エディタで保存されず
+            // 閉じられた (キャンセル) 場合は未保存 (temporary ID) のまま残るので破棄する。
+            // → 「編集画面を開いただけで expenses に保存される」のを防ぐ。
+            if let m = materializedPending {
+                materializedPending = nil
+                if m.objectID.isTemporaryID {
+                    viewContext.delete(m)
+                }
+            }
             // 「定期項目を編集」経由で閉じた時だけ、RecurringListView に
             // 遷移して該当 Rule の編集シートを自動で開く。
             if let rule = pendingEditRule {
@@ -933,7 +945,9 @@ struct SheetDetailView: View {
            cat.objectID.persistentStore == store {
             e.category = cat
         }
-        PersistenceController.shared.save()
+        // ここでは保存しない (= 編集画面を開いただけで expenses に保存されないように)。
+        // エディタで実際に保存された時のみ永続化される。キャンセル時は onDismiss で破棄。
+        materializedPending = e
         return e
     }
 
