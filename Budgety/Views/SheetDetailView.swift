@@ -127,6 +127,9 @@ struct SheetDetailView: View {
     @State private var materializedPending: Expense?
     /// 直近のエディタで実際に保存 (commit) されたか。materializedPending の破棄判定に使う。
     @State private var pendingDidCommit = false
+    /// 仮想 occurrence を実支出と同じ ExpenseRowContainer で描くための表示専用 Expense 供給器
+    /// (子コンテキスト、never save)。参照型を @State で保持し view identity 間で安定させる。
+    @State private var virtualBacking = VirtualRowBacking()
     @State private var showingEditGroup = false
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
@@ -726,23 +729,32 @@ struct SheetDetailView: View {
                                 // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
                                 .transition(.identity)
                             case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。タップで実支出と同じ詳細へ遷移、
-                                // スワイプ削除で「この回だけ skip」(ルールに記録、以後出さない)。
-                                VirtualOccurrenceRow(occurrence: occ, sheet: record) {
-                                    // タップで materialize (未保存) して詳細へ push。編集 commit
-                                    // しなければ詳細を閉じた時に破棄する (= 見ただけでは保存しない)。
-                                    pendingDidCommit = false
-                                    detailExpense = materialize(occ)
-                                }
-                                .transition(.identity)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        skipOccurrence(occ)
-                                    } label: {
-                                        Label("削除", systemImage: "trash")
+                                // 仮想 occurrence (未実体化の定期分)。実支出と同じ ExpenseRowContainer で
+                                // 描画し、見た目 (シェブロン/レイアウト) もスワイプ/コンテキストメニューも統一する。
+                                // 表示は子コンテキストの transient Expense (never save)。操作は materialize
+                                // (commit-guard) や skip へ流す:
+                                //   タップ/編集 = materialize→詳細 or エディタ (commit しなければ破棄)
+                                //   削除 = この回だけ skip (ルールに記録)
+                                //   定期項目を編集 = 該当ルールの編集
+                                //   複製 = occurrence 値から独立した実支出コピーを作成
+                                ExpenseRowContainer(
+                                    expense: virtualBacking.displayExpense(for: occ, sheet: record),
+                                    pendingDelete: $pendingDeleteExpense,
+                                    onEdit: {
+                                        pendingDidCommit = false
+                                        editingExpense = materialize(occ)
+                                    },
+                                    onEditRule: { editingRule = ruleForOccurrence(occ) },
+                                    onDuplicate: { duplicateOccurrence(occ) },
+                                    onDelete: { skipOccurrence(occ) },
+                                    onTap: {
+                                        // タップで materialize (未保存) して詳細へ push。編集 commit
+                                        // しなければ詳細を閉じた時に破棄する (= 見ただけでは保存しない)。
+                                        pendingDidCommit = false
+                                        detailExpense = materialize(occ)
                                     }
-                                    .tint(.red)
-                                }
+                                )
+                                .transition(.identity)
                             }
                         }
                 } header: {
@@ -1084,6 +1096,39 @@ struct SheetDetailView: View {
         // 3) 関係 (同一ストア内のみ)
         copy.sheet = parentSheet
         if let cat = expense.category,
+           cat.objectID.persistentStore == parentStore {
+            copy.category = cat
+        }
+        // FX スナップショット (複製時の current FX を凍結)
+        copy.captureFXSnapshot()
+        pc.save()
+        Haptics.success()
+    }
+
+    /// 仮想 occurrence を独立した実支出としてコピーする (複製)。occurrence の値から新規 Expense を
+    /// 作り、定期との紐付け (generatedFromRuleID) は持たせない。元の occurrence は仮想のまま残る。
+    @MainActor
+    private func duplicateOccurrence(_ occ: RecurringOccurrence) {
+        let pc = PersistenceController.shared
+        let copy = Expense(context: viewContext)
+        let parentStore = record.objectID.persistentStore
+        if let store = parentStore { viewContext.assign(copy, to: store) }
+        copy.title = occ.title.isEmpty ? nil : occ.title
+        copy.amount = NSDecimalNumber(decimal: occ.amount)
+        copy.kindRaw = occ.kind.rawValue
+        copy.currencyCode = occ.currencyCode
+        copy.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        copy.paidBy = nil
+        copy.payerProfileID = occ.payerProfileID
+        // 複製は割り勘を引き継がない (支払者のみの負担)。
+        copy.beneficiaryProfileIDs = occ.payerProfileID
+        copy.date = .now
+        copy.note = ""
+        copy.createdAt = .now
+        copy.sheet = record
+        if !occ.categoryRaw.isEmpty,
+           let cats = record.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
            cat.objectID.persistentStore == parentStore {
             copy.category = cat
         }
@@ -1663,22 +1708,48 @@ private struct ExpenseRowContainer: View {
     let onEditRule: (() -> Void)?
     let onDuplicate: () -> Void
     let onDelete: () -> Void
+    /// 仮想 occurrence 行で使う。指定すると NavigationLink ではなく Button になり、
+    /// タップで materialize→詳細遷移 (commit-guard) のフローへ流す (PR #273)。見た目は
+    /// NavigationLink と同じになるよう開示シェブロンを手動付与する。nil なら従来どおり
+    /// NavigationLink で詳細へ push する (実支出行)。
+    var onTap: (() -> Void)? = nil
 
     /// この行が削除確認の対象か。
     private var isThisRowPending: Bool {
         pendingDelete?.objectID == expense.objectID
     }
 
-    var body: some View {
-        // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
-        NavigationLink {
-            // ロックは ExpenseDetailView 側で overlay 方式 (lockOverlay) で重ねる。
-            // ここで fullScreenCover 版 (sheetLockCover) を使うと、詳細から開く
-            // 編集シートと競合して編集画面が閉じてしまうため使わない。
-            ExpenseDetailView(expense: expense)
-        } label: {
-            ExpenseRowView(expense: expense)
+    /// タップ部分。実支出は NavigationLink、仮想は Button+シェブロン (見た目は同一)。
+    @ViewBuilder
+    private var tappableRow: some View {
+        if let onTap {
+            Button(action: onTap) {
+                HStack(spacing: 0) {
+                    ExpenseRowView(expense: expense)
+                    // 実支出行 (NavigationLink) と同じ開示シェブロンを手動付与する。
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 6)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
+            NavigationLink {
+                // ロックは ExpenseDetailView 側で overlay 方式 (lockOverlay) で重ねる。
+                // ここで fullScreenCover 版 (sheetLockCover) を使うと、詳細から開く
+                // 編集シートと競合して編集画面が閉じてしまうため使わない。
+                ExpenseDetailView(expense: expense)
+            } label: {
+                ExpenseRowView(expense: expense)
+            }
         }
+    }
+
+    var body: some View {
+        tappableRow
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // role: .destructive にすると確認前に行削除アニメが走るので付けない。
             // 見た目の赤は .tint(.red) で維持。
@@ -1742,104 +1813,70 @@ private struct ExpenseRowContainer: View {
     }
 }
 
-// MARK: - Virtual Occurrence Row (完全仮想化)
+// MARK: - Virtual Occurrence Display Backing (完全仮想化)
 
-/// 未実体化の定期 occurrence を一覧に表示する行。見た目は実支出 (ExpenseRowView) と同一:
-/// カテゴリアイコン (+支払者アバター) / カテゴリ名・タイトル・支払者 / repeat + 符号付き金額 + 通貨。
-private struct VirtualOccurrenceRow: View {
-    let occurrence: RecurringOccurrence
-    @ObservedObject var sheet: ExpenseSheet
-    let onTap: () -> Void
-    @ObservedObject private var pub = PublicProfileSync.shared
-    @ObservedObject private var profileStore = UserProfileStore.shared
+/// 仮想 occurrence を**実支出と同じ `ExpenseRowContainer`/`ExpenseRowView` で描画する**ための
+/// 表示専用 Expense 供給器。occurrence は値型なので、行を描くには `Expense` インスタンスが要る。
+///
+/// ここでは viewContext の**子コンテキスト** (parent=viewContext) に Expense を作る。子は
+/// **絶対に save しない**ので永続化されず、`ensureSelfMemberExists` 等の副次 save にも巻き込まれない
+/// (= 仮想化の「occurrence を保存しない」前提を壊さない)。sheet/category は親 (record) と同じ
+/// objectID を子で参照するので、`ExpenseRowView` の共有判定・支払者アバター・通貨・repeat アイコンが
+/// そのまま正しく描ける。タップ/編集は実体化 (materialize, commit-guard) へ流すので、この表示用
+/// Expense 自体は編集されない。
+///
+/// occurrence の内容 (金額/カテゴリ/支払者/タイトル等) を署名キーにしてキャッシュするので、
+/// ルール変更で値が変われば新しい行に作り直され、stale を防ぐ。
+@MainActor
+final class VirtualRowBacking {
+    private var context: NSManagedObjectContext?
+    private var cache: [String: Expense] = [:]
 
-    private var category: ExpenseCategory? {
-        guard !occurrence.categoryRaw.isEmpty,
-              let cats = sheet.categories as? Set<ExpenseCategory> else { return nil }
-        return cats.first { $0.name == occurrence.categoryRaw }
-    }
-    private var categoryName: String {
-        category?.displayName ?? (occurrence.categoryRaw.isEmpty ? "カテゴリなし" : occurrence.categoryRaw)
-    }
-    private var payerID: String { occurrence.payerProfileID ?? "" }
-    private var payerInfo: (name: String, colorHex: String, photoData: Data?)? {
-        payerID.isEmpty ? nil : sheet.memberDisplayInfo(for: payerID)
-    }
-    /// 支払者アバターを出すか (ExpenseRowView/CategoryPayerIconView と同じ判定)。
-    private var showAvatar: Bool {
-        guard !payerID.isEmpty else { return false }
-        let isSelf = UserProfileStore.shared
-            .canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: sheet))
-            .contains(payerID)
-        let isSolo = !sheet.hasAcceptedOtherMembers()
-        return !(isSolo && isSelf)
-    }
-    private var signedAmount: String {
-        (occurrence.kind == .expense ? "-" : "+") + CurrencyCatalog.format(occurrence.amount, code: occurrence.currencyCode)
-    }
-
-    @ViewBuilder
-    private var iconWithPayer: some View {
-        ZStack(alignment: .bottomTrailing) {
-            if let cat = category {
-                CategoryIconView(category: cat, size: 38)
-            } else {
-                CategoryIconView(symbol: "list.bullet", tint: .gray, size: 38)
-            }
-            if showAvatar, let info = payerInfo {
-                AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 18)
-                    .background(Circle().fill(Color.platformSystemBackground).padding(-2))
-                    .offset(x: 5, y: 5)
+    func displayExpense(for occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
+        let ctx = ensureContext(parent: sheet.managedObjectContext)
+        let key = signature(occ)
+        if let cached = cache[key] { return cached }
+        // 暴走防止: 長期スクロール等でキャッシュが膨らんだら一旦クリアする。
+        if cache.count > 400 {
+            cache.values.forEach { ctx.delete($0) }
+            cache.removeAll()
+        }
+        let e = Expense(context: ctx)
+        if let childSheet = try? ctx.existingObject(with: sheet.objectID) as? ExpenseSheet {
+            e.sheet = childSheet
+            if !occ.categoryRaw.isEmpty,
+               let cats = childSheet.categories as? Set<ExpenseCategory>,
+               let cat = cats.first(where: { $0.name == occ.categoryRaw }) {
+                e.category = cat
             }
         }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.generatedFromRuleID = occ.ruleID   // → ExpenseRowView が repeat アイコンを出す
+        cache[key] = e
+        return e
     }
 
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                iconWithPayer
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(categoryName)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                    if !occurrence.title.isEmpty {
-                        Text(occurrence.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if showAvatar, let info = payerInfo, !info.name.isEmpty {
-                        Text(info.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 4) {
-                        // 定期由来は実支出と同じく repeat アイコンを付ける。
-                        Image(systemName: "repeat")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(signedAmount)
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.primary)
-                    }
-                    if occurrence.currencyCode != sheet.resolvedDefaultCurrencyCode {
-                        Text(occurrence.currencyCode)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                // 実支出行は NavigationLink なので開示シェブロンが付く。仮想行は Button だが
-                // タップで同じ詳細 View に遷移する (PR #273) ので、見た目を揃えるためシステムと
-                // 同じシェブロンを手動で付ける (金額カラムの右端位置も実体行と一致する)。
-                Image(systemName: "chevron.forward")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+    private func ensureContext(parent: NSManagedObjectContext?) -> NSManagedObjectContext {
+        if let context { return context }
+        let ctx = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        ctx.parent = parent
+        // 親 (viewContext) の変更 (共有ロード・メンバー名変更等) を子の sheet に反映させる。
+        ctx.automaticallyMergesChangesFromParent = true
+        context = ctx
+        return ctx
+    }
+
+    private func signature(_ o: RecurringOccurrence) -> String {
+        "\(o.id)|\(o.amount)|\(o.categoryRaw)|\(o.payerProfileID ?? "")|\(o.beneficiaryProfileIDs)|\(o.title)|\(o.kind.rawValue)|\(o.currencyCode)"
     }
 }
 
