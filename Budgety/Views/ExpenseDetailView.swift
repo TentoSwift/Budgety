@@ -57,7 +57,7 @@ struct ExpenseDetailView: View {
         .sheet(isPresented: $showingEdit) {
             #if os(macOS)
             if let sheet = expense.sheet {
-                MacAddExpenseView(sheet: sheet, expense: expense)
+                MacAddExpenseView(sheet: sheet, expense: expense, onCommit: onCommit)
             }
             #else
             AddExpenseView(expense: expense, onCommit: onCommit)
