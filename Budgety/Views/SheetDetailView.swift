@@ -120,9 +120,11 @@ struct SheetDetailView: View {
     @State private var showingShare = false
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
-    /// 仮想 occurrence をタップして編集用に materialize した (未保存の) Expense。
-    /// エディタで保存されなければ (= temporary ID のまま) onDismiss で破棄する。
+    /// 仮想 occurrence をタップして編集用に materialize した Expense。
+    /// エディタで実際に保存 (commit) されなければ onDismiss で破棄する。
     @State private var materializedPending: Expense?
+    /// 直近のエディタで実際に保存 (commit) されたか。materializedPending の破棄判定に使う。
+    @State private var pendingDidCommit = false
     @State private var showingEditGroup = false
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
@@ -550,15 +552,19 @@ struct SheetDetailView: View {
             Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
-            // 仮想 occurrence をタップして materialize した Expense が、エディタで保存されず
-            // 閉じられた (キャンセル) 場合は未保存 (temporary ID) のまま残るので破棄する。
+            // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
+            // 保存 (commit) された時だけ残す。キャンセル時は破棄する。
             // → 「編集画面を開いただけで expenses に保存される」のを防ぐ。
+            // ※ onAppear の ensureSelfMemberExists 等が viewContext を save して保留中の
+            //   insert が永続化されることがあるため、temporary-ID ではなく commit 有無で判定する。
             if let m = materializedPending {
                 materializedPending = nil
-                if m.objectID.isTemporaryID {
+                if !pendingDidCommit {
                     viewContext.delete(m)
+                    PersistenceController.shared.save()
                 }
             }
+            pendingDidCommit = false
             // 「定期項目を編集」経由で閉じた時だけ、RecurringListView に
             // 遷移して該当 Rule の編集シートを自動で開く。
             if let rule = pendingEditRule {
@@ -569,6 +575,8 @@ struct SheetDetailView: View {
         }) { expense in
             AddExpenseView(expense: expense, onEditRule: { rule in
                 pendingEditRule = rule
+            }, onCommit: {
+                pendingDidCommit = true
             })
         }
         .sheet(item: $editingRule) { rule in

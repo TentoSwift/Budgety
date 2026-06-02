@@ -357,15 +357,20 @@ struct AddExpenseView: View {
     /// 「定期項目を編集」を押した時に呼ばれるコールバック。
     /// シートを閉じて、親 (= SheetDetailView) 側で定期項目 view へ遷移する経路を提供する。
     let onEditRule: ((RecurringRule) -> Void)?
+    /// ユーザーが実際に保存 (commit) した時に呼ばれる。仮想 occurrence を materialize して
+    /// 編集する経路で、キャンセル (未 commit) なら親側で未保存行を破棄するために使う。
+    let onCommit: (() -> Void)?
 
     init(record: ExpenseSheet) {
         self.mode = .create(record: record)
         self.onEditRule = nil
+        self.onCommit = nil
     }
 
-    init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil) {
+    init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil, onCommit: (() -> Void)? = nil) {
         self.mode = .edit(expense: expense)
         self.onEditRule = onEditRule
+        self.onCommit = onCommit
     }
 
     private var amountDecimal: Decimal? {
@@ -1539,6 +1544,7 @@ struct AddExpenseView: View {
 
         PersistenceController.shared.save()
         RecurringExpenseGenerator.generateAll(in: viewContext)
+        onCommit?()
         Haptics.success()
         dismiss()
     }
@@ -1727,6 +1733,7 @@ struct AddExpenseView: View {
         pc.save()
         // 繰り返しが付いた可能性があるので generator を回して未生成分を作る
         RecurringExpenseGenerator.generateAll(in: viewContext)
+        onCommit?()
         Haptics.success()
         dismiss()
     }
