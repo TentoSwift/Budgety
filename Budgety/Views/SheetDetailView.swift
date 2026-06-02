@@ -898,7 +898,16 @@ struct SheetDetailView: View {
 
     /// カテゴリ未設定 (= category == nil) の支出が含まれているか。
     private var hasUncategorizedExpenses: Bool {
-        allExpenses.contains { $0.category == nil }
+        allExpenses.contains { $0.category == nil && !isPendingMaterialized($0) }
+    }
+
+    /// 仮想 occurrence をタップして materialize した「未 commit」の Expense か。
+    /// これは詳細を見ているだけの一時的な実体で、閉じれば破棄される。フィルタ
+    /// (カテゴリ chip / 未分類) の母集合から外し、「見ただけでその支出のカテゴリ
+    /// フィルタが一時的に出る」のを防ぐ。@FetchRequest は pending 挿入も拾うため必要。
+    private func isPendingMaterialized(_ exp: Expense) -> Bool {
+        if let m = materializedPending, m === exp { return true }
+        return false
     }
 
     // MARK: - Helpers
@@ -995,7 +1004,7 @@ struct SheetDetailView: View {
     private var usedCategories: [ExpenseCategory] {
         var seen: Set<NSManagedObjectID> = []
         var result: [ExpenseCategory] = []
-        for exp in allExpenses {
+        for exp in allExpenses where !isPendingMaterialized(exp) {
             if let cat = exp.category, !seen.contains(cat.objectID) {
                 seen.insert(cat.objectID)
                 result.append(cat)
