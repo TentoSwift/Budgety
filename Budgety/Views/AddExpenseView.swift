@@ -347,11 +347,10 @@ struct AddExpenseView: View {
     /// 定期項目から生成された支出を編集中、保存ボタンを押した時に出る 3 択ダイアログ。
     @State private var showRecurringSaveChoice: Bool = false
 
-    /// 「定期項目に反映する」処理範囲
+    /// 「定期項目に反映する」処理範囲 (2 択: この項目のみ / 全て)
     private enum RecurringSaveScope {
-        case thisOnly   // この 1 件だけ
-        case future     // ルールも更新 (今後)
-        case all        // ルール + 過去に生成済みの全支出も更新
+        case thisOnly   // この 1 件だけ (定期から切り離して通常支出化)
+        case all        // ルールを変更して全 occurrence に反映
     }
 
     /// 「定期項目を編集」を押した時に呼ばれるコールバック。
@@ -1180,11 +1179,10 @@ struct AddExpenseView: View {
                 titleVisibility: .visible
             ) {
                 Button("この項目のみ保存") { performRecurringSave(scope: .thisOnly) }
-                Button("今後の定期項目で保存") { performRecurringSave(scope: .future) }
                 Button("全ての定期項目で変更") { performRecurringSave(scope: .all) }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("この支出は定期項目から生成されています。変更をどこまで反映するか選んでください。")
+                Text("この支出は定期項目から生成されています。この項目だけ変更するか、定期項目全体を変更するか選んでください。")
             }
             .confirmationDialog(
                 "この支出を削除しますか？",
@@ -1535,19 +1533,11 @@ struct AddExpenseView: View {
             expense.captureFXSnapshot()
         }
 
-        // 2) ルールへ反映 (今後 / 全て)
-        if scope != .thisOnly, let rule = expense.relatedRule {
-            // 「今後のみ」= 完全仮想化では、過去 occurrence を「変更前の値」で実体化して凍結し、
-            // それからルールを新値に変更する (過去は旧値の実データのまま、編集回以降は新値の仮想)。
-            // ルール変更前に materializePast を呼ぶ (= 旧値で凍結するため)。
-            if scope == .future, RecurringOccurrenceService.virtualizationEnabled,
-               let editDay = expense.scheduledDate ?? expense.date {
-                RecurringExpenseGenerator.materializePast(for: rule, before: editDay, in: viewContext)
-            }
+        // 2) 「全て」= ルールを変更して全 occurrence に反映する。
+        if scope == .all, let rule = expense.relatedRule {
             applyChanges(toRule: rule)
-
-            // 3) 過去に生成された他の支出にも反映 (全て)
-            if scope == .all, let ruleID = rule.id {
+            // 過去に実体化済みの他の支出 (override 等) にも反映する。
+            if let ruleID = rule.id {
                 let req = NSFetchRequest<Expense>(entityName: "Expense")
                 req.predicate = NSPredicate(format: "generatedFromRuleID == %@", ruleID as CVarArg)
                 let others = (try? viewContext.fetch(req)) ?? []
@@ -1560,9 +1550,9 @@ struct AddExpenseView: View {
         // 繰り返しの頻度・間隔・終了日の変更は scope に関わらず常に Rule に反映
         applyRecurringChanges(for: expense)
 
-        // 今後 / 全て: 編集内容はルールに反映済みなので、タップで materialize した実 Expense は
+        // 全て: 編集内容はルールに反映済みなので、タップで materialize した実 Expense は
         // 残さず削除し、その回も仮想 (= ルールから算出) のまま表示する。
-        if scope != .thisOnly, RecurringOccurrenceService.virtualizationEnabled {
+        if scope == .all, RecurringOccurrenceService.virtualizationEnabled {
             viewContext.delete(expense)
         }
 
