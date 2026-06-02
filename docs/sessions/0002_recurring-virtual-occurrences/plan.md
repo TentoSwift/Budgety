@@ -49,13 +49,13 @@
 
 ## フェーズ
 - [x] Phase 0: ブランチ + plan.md/prompt.md（本コミット）
-- [ ] Phase 1 **共通核（低リスク・両方式共通）**
-  - [ ] モデルに `scheduledDate` / `isSkipped` 追加 + バックフィル
-  - [ ] `RecurringOccurrenceService`: ルール→occurrence 日付列（drift-free）＋同キー実体化の抑制
-  - [ ] `RecurringExpenseGenerator` を冪等化（同キー存在ならスキップ）＋ drift 修正
-  - [ ] 定期 occurrence は `captureFXSnapshot()` を呼ばない
-  - [ ] ビルド確認
-  - → この時点で重複・ドリフトは解消
+- [x] Phase 1 **共通核（低リスク・両方式共通）**
+  - [x] モデルに `scheduledDate` / `isSkipped` 追加 + バックフィル（migration rev 1→2）
+  - [x] `RecurringOccurrenceService`: ルール→occurrence 日付列（drift-free, anchor 基準）
+  - [x] `RecurringExpenseGenerator` を冪等化（`(ruleID, scheduledDate)` 存在ならスキップ）＋ drift 修正
+  - [x] 定期 occurrence は `captureFXSnapshot()` を呼ばない
+  - [x] ビルド確認（iOS, `** BUILD SUCCEEDED **`）
+  - → この時点で重複・ドリフトは解消（新規生成分）。実機/シミュレータでの動作確認は別途。
 - [ ] Phase 2 **編集モデル**
   - [ ] 今後のみ = ルール分割、単発 = override、単発削除 = skip tombstone
   - [ ] `EditRecurringRuleView` / `AddExpenseView` の3択を新モデルへ載せ替え

@@ -37,7 +37,7 @@ final class PersistenceController: ObservableObject {
     /// 一度きりの seed/migration を実行済みかを記録する UserDefaults キー。
     /// 値は最後に実行したリビジョン番号。新しい migration を追加したらこの定数を上げる。
     private static let migrationRevisionKey = "expensoMigrationRevision"
-    private static let currentMigrationRevision = 1
+    private static let currentMigrationRevision = 2
 
     init(inMemory: Bool = false) {
         container = NSPersistentCloudKitContainer(name: "Expenso")
@@ -244,8 +244,25 @@ final class PersistenceController: ObservableObject {
         // ここから下は重い fetch を伴うので、リビジョン未達の起動でだけ実行する
         ensureCategoriesForExistingGroups()
         mergeDuplicateMembers()
+        backfillRecurringScheduledDates()
 
         UserDefaults.standard.set(Self.currentMigrationRevision, forKey: Self.migrationRevisionKey)
+    }
+
+    /// 既存の定期生成 Expense (`generatedFromRuleID != nil`) に `scheduledDate` を後付けする。
+    /// 新しい冪等生成は `(generatedFromRuleID, scheduledDate)` をキーに重複を防ぐため、
+    /// 既存履歴にも scheduledDate を埋めておく (= scheduledDate = date)。これにより
+    /// 旧データの occurrence も「実体化済み」として正しく再生成抑制される。
+    private func backfillRecurringScheduledDates() {
+        let ctx = container.viewContext
+        let req = NSFetchRequest<Expense>(entityName: "Expense")
+        req.predicate = NSPredicate(format: "generatedFromRuleID != nil AND scheduledDate == nil")
+        req.returnsObjectsAsFaults = false
+        guard let rows = try? ctx.fetch(req), !rows.isEmpty else { return }
+        for e in rows where e.scheduledDate == nil {
+            e.scheduledDate = e.date
+        }
+        if ctx.hasChanges { try? ctx.save() }
     }
 
     /// CKShare 作成時の zone 移動などで複製されたシートを検出し、
