@@ -1452,8 +1452,15 @@ struct AddExpenseView: View {
         if currencyChanged { expense.currencyCode = currencyCode }
         // amount または通貨が変わったら FX スナップショットを取り直す。
         // 何も変わっていなければ元の snapshot をそのまま使う (= 当時のレート維持)。
+        // ただし定期 occurrence (generatedFromRuleID != nil) は凍結しない方針なので、
+        // スナップショットを取らず現行レートで精算させる (既存があればクリア)。
         if amountChanged || currencyChanged {
-            expense.captureFXSnapshot()
+            if expense.generatedFromRuleID == nil {
+                expense.captureFXSnapshot()
+            } else {
+                expense.fxConvertedAmountDecimal = nil
+                expense.fxTargetCurrency = nil
+            }
         }
         if note != origNote { expense.note = note }
         if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
@@ -1697,6 +1704,10 @@ struct AddExpenseView: View {
                 let rule = makeRule(in: record, startDate: date, amount: amountDecimal)
                 rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
                 expense.generatedFromRuleID = rule.id
+                // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
+                // 直前の captureFXSnapshot() で付いたスナップショットをクリアする。
+                expense.fxConvertedAmountDecimal = nil
+                expense.fxTargetCurrency = nil
             }
         case .edit(let expense):
             // 通常編集 (定期項目以外、または「この項目のみ」)。差分のみ書き戻し。

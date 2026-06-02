@@ -89,6 +89,8 @@
         <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="generatedFromRuleID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="scheduledDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isSkipped" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="settledBeneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="payerMemberID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
