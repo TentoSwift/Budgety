@@ -23,26 +23,41 @@ struct BudgetyVisionSheetView: View {
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 
-    private var groupedByDate: [(date: Date, items: [Expense])] {
+    /// ルールから算出した仮想 occurrence (完全仮想化フラグ OFF なら空)。
+    private var allVirtuals: [RecurringOccurrence] {
+        RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
+    }
+
+    private var groupedByDate: [(date: Date, items: [LedgerItem])] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: allExpenses) { exp -> Date in
-            cal.startOfDay(for: exp.date ?? .now)
+        let items: [LedgerItem] = allExpenses.map { LedgerItem.expense($0) }
+            + allVirtuals.map { LedgerItem.occurrence($0) }
+        let dict = Dictionary(grouping: items) { item -> Date in
+            cal.startOfDay(for: item.date)
         }
         return dict
-            .map { (date: $0.key, items: $0.value) }
+            .map { (date: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
             .sorted { $0.date > $1.date }
     }
 
     private var monthlyTotal: Decimal {
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: .now)
-        return allExpenses
+        let expenseSum = allExpenses
             .filter { e in
                 guard let d = e.date, e.kind == .expense else { return false }
                 let c = cal.dateComponents([.year, .month], from: d)
                 return c.year == comps.year && c.month == comps.month
             }
             .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let virtualSum = allVirtuals
+            .filter { occ in
+                guard occ.kind == .expense else { return false }
+                let c = cal.dateComponents([.year, .month], from: occ.date)
+                return c.year == comps.year && c.month == comps.month
+            }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return expenseSum + virtualSum
     }
 
     var body: some View {
@@ -148,14 +163,20 @@ struct BudgetyVisionSheetView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     VStack(spacing: 0) {
-                        ForEach(group.items, id: \.objectID) { e in
-                            Button {
-                                editingExpense = e
-                            } label: {
-                                expenseRow(e)
+                        ForEach(group.items) { item in
+                            switch item {
+                            case .expense(let e):
+                                Button {
+                                    editingExpense = e
+                                } label: {
+                                    expenseRow(e)
+                                }
+                                .buttonStyle(.plain)
+                            case .occurrence(let occ):
+                                // visionOS には定期管理 UI が無いので表示のみ。
+                                virtualRow(occ)
                             }
-                            .buttonStyle(.plain)
-                            if e.objectID != group.items.last?.objectID {
+                            if item.id != group.items.last?.id {
                                 Divider().padding(.leading, 60)
                             }
                         }
@@ -223,11 +244,37 @@ struct BudgetyVisionSheetView: View {
         return df.string(from: d)
     }
 
-    private func daySigned(_ items: [Expense], code: String) -> String {
-        let total = items.reduce(Decimal(0)) { acc, e in
-            acc + (e.kind == .income ? e.amountDecimal : -e.amountDecimal)
+    private func daySigned(_ items: [LedgerItem], code: String) -> String {
+        let total = items.reduce(Decimal(0)) { acc, it in
+            acc + (it.kind == .income ? it.amountDecimal : -it.amountDecimal)
         }
         let sign = total >= 0 ? "+" : ""
         return sign + CurrencyCatalog.format(total, code: code)
+    }
+
+    /// 仮想 occurrence の行 (visionOS, 表示のみ・控えめ)。
+    private func virtualRow(_ occ: RecurringOccurrence) -> some View {
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let category = occ.categoryRaw.isEmpty ? nil : cats.first { $0.name == occ.categoryRaw }
+        return HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(Color.gray.opacity(0.2)).frame(width: 36, height: 36)
+                Image(systemName: "repeat").foregroundStyle(.gray).font(.callout)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(occ.title.isEmpty ? (category?.displayName ?? "定期項目") : occ.title)
+                    .font(.body).foregroundStyle(.primary)
+                Text(category?.displayName ?? (occ.categoryRaw.isEmpty ? "定期" : occ.categoryRaw))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(occ.kind == .income ? .green : .primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .opacity(0.85)
+        .contentShape(Rectangle())
     }
 }
