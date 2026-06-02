@@ -151,7 +151,6 @@
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
 				PurchaseManager.swift,
-				"Resources/Budgety MCP.shortcut",
 				ShareCoordinator.swift,
 				Support/AppUpdateChecker.swift,
 				Support/BuildInfo.swift,
@@ -185,7 +184,6 @@
 				Views/CategoryIconView.swift,
 				Views/CategoryListView.swift,
 				Views/CategoryPickerView.swift,
-				Views/ClaudeIntegrationView.swift,
 				Views/CSVImportView.swift,
 				Views/EditCategoryView.swift,
 				Views/EditRecurringRuleView.swift,
@@ -550,7 +548,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -586,7 +584,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -745,7 +743,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -794,7 +792,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -842,7 +840,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -884,7 +882,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -927,7 +925,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -966,7 +964,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026060203;
+				CURRENT_PROJECT_VERSION = 2026060204;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;

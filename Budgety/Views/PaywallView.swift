@@ -86,10 +86,13 @@ struct PaywallView: View {
                        color: Color(red: 0.00, green: 0.70, blue: 0.69),
                        title: "バーチャルメンバー",
                        detail: "アプリを使っていない人も追加して、旅行や食事会の割り勘対象にできます。")
+            // Claude / MCP 連携は macOS では提供しない (App Store Guideline 2.4.5(ii)) ので訴求も出さない。
+            #if !os(macOS)
             featureRow("sparkles",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
                        title: "Claude / MCP と連携",
                        detail: "「コーヒー 350 円」と話しかけるだけで支出を記録できます。")
+            #endif
             featureRow("lock.fill",
                        color: Color(red: 0.96, green: 0.26, blue: 0.33),
                        title: "パスワードでロック",
