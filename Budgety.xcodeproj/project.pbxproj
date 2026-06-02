@@ -151,6 +151,7 @@
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
 				PurchaseManager.swift,
+				"Resources/Budgety MCP.shortcut",
 				ShareCoordinator.swift,
 				Support/AppUpdateChecker.swift,
 				Support/BuildInfo.swift,
