@@ -908,9 +908,13 @@ struct SheetDetailView: View {
         }
     }
 
-    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。
+    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。仮想 occurrence も含める。
     private var hasUncategorizedExpenses: Bool {
-        allExpenses.contains { $0.category == nil && !isPendingMaterialized($0) }
+        if allExpenses.contains(where: { $0.category == nil && !isPendingMaterialized($0) }) {
+            return true
+        }
+        return RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+            .contains { $0.categoryRaw.isEmpty }
     }
 
     /// 仮想 occurrence をタップして materialize した「未 commit」の Expense か。
@@ -1016,11 +1020,19 @@ struct SheetDetailView: View {
     private var usedCategories: [ExpenseCategory] {
         var seen: Set<NSManagedObjectID> = []
         var result: [ExpenseCategory] = []
+        func add(_ cat: ExpenseCategory?) {
+            guard let cat, !seen.contains(cat.objectID) else { return }
+            seen.insert(cat.objectID)
+            result.append(cat)
+        }
         for exp in allExpenses where !isPendingMaterialized(exp) {
-            if let cat = exp.category, !seen.contains(cat.objectID) {
-                seen.insert(cat.objectID)
-                result.append(cat)
-            }
+            add(exp.category)
+        }
+        // 仮想 occurrence のカテゴリも含める (実支出に無く仮想にしか無いカテゴリも絞り込めるように)。
+        let cats = (record.categories as? Set<ExpenseCategory>) ?? []
+        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+        where !occ.categoryRaw.isEmpty {
+            add(cats.first { $0.name == occ.categoryRaw })
         }
         return result.sorted { $0.sortOrder < $1.sortOrder }
     }
