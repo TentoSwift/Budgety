@@ -6,6 +6,18 @@
 - 方針転換: ハイブリッド(生成して保存) → **完全仮想化(保存せず、表示時にルールから算出してマージ)**。
   ユーザーの当初からの希望「Expenses に増やさず定期項目から表示」を実装する。
 
+## 進捗 (2026-06-02, PR 提出時点) — フラグ化して安全に段階導入
+完全仮想化を **`RecurringOccurrenceService.virtualizationEnabled`（既定 OFF）** で囲い、
+OFF では従来ハイブリッドのまま無影響。内部ビルドの 設定→デバッグ でトグル可。
+- [x] Phase 1 基盤（`RecurringOccurrence` 値型 + `virtualOccurrences` マージ算出）
+- [x] フラグ + union 型 `LedgerItem` + generator のゲート（ON で実体化停止 = Phase 3 相当）
+- [x] Phase 2 consumer: **精算 / iOS・macOS・visionOS・watchOS 台帳 / MCP get**
+- [x] Phase 4 一部: iOS で **仮想タップ→実体化→既存3択編集**（この項目のみ/全て）、
+      **追加/編集からの繰り返し ON** の整合（seed=実データ・以降仮想）
+- [ ] 残: **今後=ルール分割 / 削除=skip / macOS等の occurrence 編集 / Stats・Export /
+      診断ビュー更新 / フラグ既定 ON（最終フリップ）**
+- 全ターゲット `BUILD SUCCEEDED`。実機検証は未（この PR で flag ON 検証予定）。
+
 ## 最終形
 - 定期 occurrence は **Expense として保存しない**。一覧・合計・割り勘・グラフ・MCP取得を
   表示/計算するたびに、ルールから occurrence を算出して実支出にマージして見せる。
