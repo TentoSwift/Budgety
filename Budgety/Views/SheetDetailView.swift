@@ -686,7 +686,8 @@ struct SheetDetailView: View {
                                 // 仮想 occurrence (未実体化の定期分)。タップで定期項目を編集。
                                 // (Phase 4 で per-occurrence の override 実体化に拡張予定)
                                 VirtualOccurrenceRow(occurrence: occ, sheet: record) {
-                                    editingRule = ruleForOccurrence(occ)
+                                    // タップで実体化 → 既存の編集フロー (この項目のみ/今後/全て) に乗せる。
+                                    editingExpense = materialize(occ)
                                 }
                                 .transition(.identity)
                             }
@@ -902,6 +903,38 @@ struct SheetDetailView: View {
     /// 仮想 occurrence の元になった RecurringRule を引く。
     private func ruleForOccurrence(_ occ: RecurringOccurrence) -> RecurringRule? {
         (record.recurringRules as? Set<RecurringRule>)?.first { $0.id == occ.ruleID }
+    }
+
+    /// 仮想 occurrence を実 Expense として実体化する (override 化)。
+    /// `(generatedFromRuleID, scheduledDate)` を持つので virtualOccurrences 側で
+    /// 以後この日付の仮想は出さなくなる。編集はこの実 Expense に対して既存フローで行う。
+    /// 定期 occurrence なので FX スナップショットは取らない (現行レートで精算)。
+    @MainActor
+    private func materialize(_ occ: RecurringOccurrence) -> Expense {
+        let e = Expense(context: viewContext)
+        let store = record.objectID.persistentStore
+        if let store { viewContext.assign(e, to: store) }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.createdAt = .now
+        e.sheet = record
+        e.generatedFromRuleID = occ.ruleID
+        if !occ.categoryRaw.isEmpty,
+           let cats = record.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == store {
+            e.category = cat
+        }
+        PersistenceController.shared.save()
+        return e
     }
 
     private var usedCategories: [ExpenseCategory] {
