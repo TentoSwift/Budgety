@@ -63,6 +63,7 @@
         <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="skippedDates" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="title" optional="YES" attributeType="String" defaultValueString=""/>
         <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="recurringRules" inverseEntity="ExpenseSheet"/>

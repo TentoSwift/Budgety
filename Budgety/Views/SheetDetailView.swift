@@ -703,13 +703,21 @@ struct SheetDetailView: View {
                                 // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
                                 .transition(.identity)
                             case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。タップで定期項目を編集。
-                                // (Phase 4 で per-occurrence の override 実体化に拡張予定)
+                                // 仮想 occurrence (未実体化の定期分)。タップで実体化して編集、
+                                // スワイプ削除で「この回だけ skip」(ルールに記録、以後出さない)。
                                 VirtualOccurrenceRow(occurrence: occ, sheet: record) {
                                     // タップで実体化 → 既存の編集フロー (この項目のみ/今後/全て) に乗せる。
                                     editingExpense = materialize(occ)
                                 }
                                 .transition(.identity)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        skipOccurrence(occ)
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                    .tint(.red)
+                                }
                             }
                         }
                 } header: {
@@ -993,7 +1001,23 @@ struct SheetDetailView: View {
     /// 指定 expense を削除する。確認ダイアログ経由でのみ呼ばれる。
     @MainActor
     private func deleteExpense(_ expense: Expense) {
+        // 定期由来の occurrence (生成/override/過去凍結) を削除する場合、完全仮想化では
+        // 行を消すだけだと仮想で復活してしまうので、ルール側に skip を記録してから削除する。
+        if RecurringOccurrenceService.virtualizationEnabled,
+           let ruleID = expense.generatedFromRuleID,
+           let rule = (record.recurringRules as? Set<RecurringRule>)?.first(where: { $0.id == ruleID }),
+           let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+        }
         viewContext.delete(expense)
+        PersistenceController.shared.save()
+        Haptics.warning()
+    }
+
+    /// 仮想 occurrence を「この回だけ削除 (skip)」する。ルールに記録し、以後仮想表示しない。
+    private func skipOccurrence(_ occ: RecurringOccurrence) {
+        guard let rule = ruleForOccurrence(occ) else { return }
+        rule.addSkippedDay(occ.date)
         PersistenceController.shared.save()
         Haptics.warning()
     }

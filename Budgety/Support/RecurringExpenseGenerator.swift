@@ -83,37 +83,86 @@ enum RecurringExpenseGenerator {
             return cat
         }()
 
+        let skipped = rule.skippedDaySet
         var generated = 0
         for day in days {
             if materialized.contains(day) { continue }   // 冪等: 他端末生成済みはスキップ
-
-            let expense = Expense(context: ctx)
-            if let store = sheetStore { ctx.assign(expense, to: store) }
-
-            expense.title = rule.title
-            expense.amount = rule.amount
-            expense.kindRaw = rule.kindRaw
-            expense.currencyCode = rule.currencyCode
-            expense.categoryRaw = rule.categoryRaw
-            // paidBy は denormalized キャッシュなので継承しない。表示は payerProfileID から動的解決。
-            expense.paidBy = nil
-            expense.payerProfileID = rule.payerProfileID
-            // 割り勘 (受益者) を引き継ぐ。空なら割り勘オフ (支払者単独負担) のまま。
-            expense.beneficiaryProfileIDs = rule.beneficiaryProfileIDs
-            expense.note = rule.note
-            expense.date = day
-            expense.scheduledDate = day              // ← occurrence 識別キー
-            expense.createdAt = .now
-            expense.sheet = sheet
-            expense.generatedFromRuleID = rule.id
-            if let cat = matchedCategory { expense.category = cat }
-            // 定期 occurrence は FX スナップショットを取らない (現行レートで精算)。
-
+            if skipped.contains(day) { continue }         // スキップ (削除) 済みは作らない
+            makeOccurrence(for: rule, on: day, sheet: sheet, category: matchedCategory, in: ctx)
             rule.lastGeneratedDate = day
             generated += 1
         }
 
         return generated
+    }
+
+    /// occurrence を 1 件、rule の現在値で作成する (FX スナップショットは取らない)。
+    /// `save` は呼び出し側で。generate と materializePast で共用。
+    @discardableResult
+    static func makeOccurrence(
+        for rule: RecurringRule,
+        on day: Date,
+        sheet: ExpenseSheet,
+        category: ExpenseCategory?,
+        in ctx: NSManagedObjectContext
+    ) -> Expense {
+        let expense = Expense(context: ctx)
+        if let store = sheet.objectID.persistentStore { ctx.assign(expense, to: store) }
+        expense.title = rule.title
+        expense.amount = rule.amount
+        expense.kindRaw = rule.kindRaw
+        expense.currencyCode = rule.currencyCode
+        expense.categoryRaw = rule.categoryRaw
+        // paidBy は denormalized キャッシュなので継承しない。表示は payerProfileID から動的解決。
+        expense.paidBy = nil
+        expense.payerProfileID = rule.payerProfileID
+        expense.beneficiaryProfileIDs = rule.beneficiaryProfileIDs
+        expense.note = rule.note
+        expense.date = day
+        expense.scheduledDate = day              // ← occurrence 識別キー
+        expense.createdAt = .now
+        expense.sheet = sheet
+        expense.generatedFromRuleID = rule.id
+        if let category { expense.category = category }
+        // 定期 occurrence は FX スナップショットを取らない (現行レートで精算)。
+        return expense
+    }
+
+    /// 「今後のみ変更」用: ルールの occurrence を [startDate, cutoff) の範囲で
+    /// 現在 (= 変更前) の値で実体化して凍結する。完全仮想化フラグに関係なく実体化する。
+    /// 既に実体化済み / スキップ済みの日付は作らない。`save` は呼び出し側で。
+    @discardableResult
+    static func materializePast(for rule: RecurringRule, before cutoff: Date, in ctx: NSManagedObjectContext) -> Int {
+        guard let startDate = rule.startDate, let sheet = rule.sheet else { return 0 }
+        let cal = Calendar.current
+        let cutoffDay = cal.startOfDay(for: cutoff)
+        guard cal.startOfDay(for: startDate) < cutoffDay else { return 0 }
+        let materialized = materializedDays(for: rule, in: ctx, cal: cal)
+        let skipped = rule.skippedDaySet
+        let sheetStore = sheet.objectID.persistentStore
+        let matchedCategory: ExpenseCategory? = {
+            guard let raw = rule.categoryRaw, !raw.isEmpty,
+                  let cats = sheet.categories as? Set<ExpenseCategory>,
+                  let cat = cats.first(where: { $0.name == raw }),
+                  cat.objectID.persistentStore == sheetStore else { return nil }
+            return cat
+        }()
+        let limit = cal.date(byAdding: .day, value: -1, to: cutoffDay) ?? cutoffDay
+        let days = RecurringOccurrenceService.occurrenceDays(
+            start: startDate,
+            frequency: rule.resolvedFrequency,
+            interval: rule.resolvedInterval,
+            until: limit,
+            cap: 600,
+            calendar: cal
+        )
+        var count = 0
+        for day in days where day < cutoffDay {
+            if materialized.contains(day) || skipped.contains(day) { continue }
+            makeOccurrence(for: rule, on: day, sheet: sheet, category: matchedCategory, in: ctx)
+            count += 1
+        }
+        return count
     }
 
     /// このルールから実体化済みの occurrence 日付集合 (startOfDay 正規化)。

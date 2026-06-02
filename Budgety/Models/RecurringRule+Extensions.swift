@@ -127,4 +127,36 @@ extension RecurringRule {
         return (try? ctx.fetch(req))?.first
     }
     #endif
+
+    // MARK: - スキップ (削除された occurrence の記録)
+
+    /// スキップ (削除) された occurrence の日付集合 (startOfDay)。
+    /// 内部表現: `skippedDates` = startOfDay の timeIntervalSince1970(Int) を "," 区切り。
+    /// 完全仮想化で「この回だけ削除」を、Expense を作らずルール側に記録するために使う。
+    var skippedDaySet: Set<Date> {
+        get {
+            let cal = Calendar.current
+            return Set((skippedDates ?? "")
+                .split(separator: ",")
+                .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                .map { cal.startOfDay(for: Date(timeIntervalSince1970: $0)) })
+        }
+        set {
+            let cal = Calendar.current
+            let ints = newValue.map { Int(cal.startOfDay(for: $0).timeIntervalSince1970) }.sorted()
+            skippedDates = ints.map(String.init).joined(separator: ",")
+        }
+    }
+
+    /// 指定日がスキップ済みか。
+    func isSkippedDay(_ date: Date, calendar: Calendar = .current) -> Bool {
+        skippedDaySet.contains(calendar.startOfDay(for: date))
+    }
+
+    /// 指定日の occurrence をスキップ (削除) として記録する。
+    func addSkippedDay(_ date: Date, calendar: Calendar = .current) {
+        var s = skippedDaySet
+        s.insert(calendar.startOfDay(for: date))
+        skippedDaySet = s
+    }
 }

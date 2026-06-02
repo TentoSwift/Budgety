@@ -78,7 +78,9 @@ enum RecurringOccurrenceService {
     /// デバッグ設定からトグルして検証し、全プラットフォーム対応後に既定 ON にする。
     static let virtualizationKey = "expensoRecurringVirtualization"
     static var virtualizationEnabled: Bool {
-        UserDefaults.standard.bool(forKey: virtualizationKey)
+        // 既定 ON (常に仮想モード)。デバッグで明示的に OFF にした時だけ false。
+        if UserDefaults.standard.object(forKey: virtualizationKey) == nil { return true }
+        return UserDefaults.standard.bool(forKey: virtualizationKey)
     }
 
     /// `start` を anchor として `frequency`×`interval` を n 回 (n = 0,1,2,…) 加算した
@@ -203,8 +205,10 @@ enum RecurringOccurrenceService {
                 cap: 600,
                 calendar: calendar
             )
+            let skipped = rule.skippedDaySet   // 「この回だけ削除」された日付
             for day in days {
                 if let range, !(range ~= day) { continue }
+                if skipped.contains(day) { continue }         // スキップ (削除) 済み → 出さない
                 let key = "\(ruleID.uuidString)#\(Int(day.timeIntervalSince1970))"
                 if materialized.contains(key) { continue }   // 実在行あり → 仮想は出さない
                 result.append(RecurringOccurrence(
