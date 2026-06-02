@@ -13,6 +13,9 @@ import UIKit
 
 struct ExpenseDetailView: View {
     @ObservedObject var expense: Expense
+    /// 仮想 occurrence を materialize して詳細表示している場合に、編集が実際に保存(commit)
+    /// されたことを親へ伝えるコールバック。未 commit で戻ったら親が未保存行を破棄する。
+    var onCommit: (() -> Void)? = nil
     /// 支払者名 (Public DB カスタム名) / 自分の名前変更で再描画させる。
     @ObservedObject private var pub = PublicProfileSync.shared
     @ObservedObject private var profileStore = UserProfileStore.shared
@@ -57,7 +60,7 @@ struct ExpenseDetailView: View {
                 MacAddExpenseView(sheet: sheet, expense: expense)
             }
             #else
-            AddExpenseView(expense: expense)
+            AddExpenseView(expense: expense, onCommit: onCommit)
             #endif
         }
         #if os(iOS)
