@@ -12,6 +12,22 @@
 //
 
 import Foundation
+import CoreData
+
+/// ルールから算出される「1回分の定期 occurrence」を表す値型 (Core Data には保存しない)。
+/// 完全仮想化方式で、一覧・集計・精算などの表示/計算時に実支出へマージするために使う。
+struct RecurringOccurrence: Identifiable {
+    let ruleID: UUID
+    let date: Date                      // 予定スロット日 (startOfDay)
+    let title: String
+    let amount: Decimal
+    let currencyCode: String
+    let kind: TransactionKind
+    let categoryRaw: String
+    let payerProfileID: String?
+    let beneficiaryProfileIDs: String   // CSV (空 = 割り勘オフ)
+    var id: String { "\(ruleID.uuidString)#\(Int(date.timeIntervalSince1970))" }
+}
 
 enum RecurringOccurrenceService {
 
@@ -88,5 +104,71 @@ enum RecurringOccurrenceService {
             n += 1
         }
         return nil
+    }
+
+    /// シート配下の全ルールから、まだ実体化されていない occurrence を算出して返す (完全仮想化用)。
+    /// - その `(ruleID, scheduledDate)` に**実在行がある日付は除外**する
+    ///   (= 既存の生成済み行・override・skip tombstone を尊重し、二重表示しない)。
+    /// - `includeFuture == false` なら今日まで。true なら `futureHorizon` まで (予算予測などの先読み用)。
+    /// - `range` を渡すとその期間内に絞る (両端含む)。
+    /// - 注: 値型を返すだけで Core Data には何も書き込まない。
+    @MainActor
+    static func virtualOccurrences(
+        for sheet: ExpenseSheet,
+        in range: ClosedRange<Date>? = nil,
+        includeFuture: Bool = false,
+        futureHorizon: Date? = nil,
+        calendar: Calendar = .current
+    ) -> [RecurringOccurrence] {
+        let rules = (sheet.recurringRules as? Set<RecurringRule>) ?? []
+        guard !rules.isEmpty else { return [] }
+
+        let today = calendar.startOfDay(for: Date())
+        // 実体化済み (生成済み/override/skip) の (ruleID, day) 集合。これらの日付は仮想を出さない。
+        var materialized = Set<String>()
+        for case let e as Expense in (sheet.expenses as? Set<Expense> ?? []) {
+            guard let rid = e.generatedFromRuleID else { continue }
+            let d = calendar.startOfDay(for: e.scheduledDate ?? e.date ?? .distantPast)
+            materialized.insert("\(rid.uuidString)#\(Int(d.timeIntervalSince1970))")
+        }
+
+        var result: [RecurringOccurrence] = []
+        for rule in rules {
+            guard let start = rule.startDate, let ruleID = rule.id else { continue }
+            let ruleEnd = rule.endDate.map { calendar.startOfDay(for: $0) } ?? .distantFuture
+            let upper: Date = {
+                let base = includeFuture ? (futureHorizon ?? today) : today
+                return min(base, ruleEnd)
+            }()
+            // range の上限も尊重 (先読みしすぎない)
+            let limit = range.map { min(upper, calendar.startOfDay(for: $0.upperBound)) } ?? upper
+            guard calendar.startOfDay(for: start) <= limit else { continue }
+
+            let days = occurrenceDays(
+                start: start,
+                frequency: rule.resolvedFrequency,
+                interval: rule.resolvedInterval,
+                until: limit,
+                cap: 600,
+                calendar: calendar
+            )
+            for day in days {
+                if let range, !(range ~= day) { continue }
+                let key = "\(ruleID.uuidString)#\(Int(day.timeIntervalSince1970))"
+                if materialized.contains(key) { continue }   // 実在行あり → 仮想は出さない
+                result.append(RecurringOccurrence(
+                    ruleID: ruleID,
+                    date: day,
+                    title: rule.title ?? "",
+                    amount: rule.amountDecimal,
+                    currencyCode: rule.resolvedCurrencyCode,
+                    kind: rule.kind,
+                    categoryRaw: rule.categoryRaw ?? "",
+                    payerProfileID: rule.payerProfileID,
+                    beneficiaryProfileIDs: rule.beneficiaryProfileIDs ?? ""
+                ))
+            }
+        }
+        return result
     }
 }
