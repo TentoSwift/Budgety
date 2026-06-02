@@ -1560,6 +1560,12 @@ struct AddExpenseView: View {
         // 繰り返しの頻度・間隔・終了日の変更は scope に関わらず常に Rule に反映
         applyRecurringChanges(for: expense)
 
+        // 今後 / 全て: 編集内容はルールに反映済みなので、タップで materialize した実 Expense は
+        // 残さず削除し、その回も仮想 (= ルールから算出) のまま表示する。
+        if scope != .thisOnly, RecurringOccurrenceService.virtualizationEnabled {
+            viewContext.delete(expense)
+        }
+
         PersistenceController.shared.save()
         RecurringExpenseGenerator.generateAll(in: viewContext)
         onCommit?()
