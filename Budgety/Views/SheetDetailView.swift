@@ -120,8 +120,10 @@ struct SheetDetailView: View {
     @State private var showingShare = false
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
-    /// 仮想 occurrence をタップして編集用に materialize した Expense。
-    /// エディタで実際に保存 (commit) されなければ onDismiss で破棄する。
+    /// 仮想 occurrence をタップした時に詳細へ push する Expense (materialize した未保存行)。
+    @State private var detailExpense: Expense?
+    /// 仮想 occurrence をタップして materialize した Expense。
+    /// 詳細から実際に保存 (commit) されなければ、詳細を閉じた時に破棄する。
     @State private var materializedPending: Expense?
     /// 直近のエディタで実際に保存 (commit) されたか。materializedPending の破棄判定に使う。
     @State private var pendingDidCommit = false
@@ -582,6 +584,27 @@ struct SheetDetailView: View {
         .sheet(item: $editingRule) { rule in
             EditRecurringRuleView(mode: .edit(rule: rule))
         }
+        // 仮想 occurrence をタップ → materialize した Expense の詳細へ push (実支出と同じ画面)。
+        .navigationDestination(item: $detailExpense) { exp in
+            // commit 時は詳細を閉じて一覧へ戻す。これにより「この項目のみ=切り離し」「今後/全て=
+            // edit-point 削除」のどちらでも、編集後に解放済み/変化したオブジェクトを描画しない。
+            ExpenseDetailView(expense: exp, onCommit: {
+                pendingDidCommit = true
+                detailExpense = nil
+            })
+        }
+        // 詳細を閉じた時、編集が commit されていなければ materialize した未保存行を破棄する
+        // (= 仮想を見ただけ/編集せず戻った場合は expenses に保存しない)。
+        .onChange(of: detailExpense) { _, newValue in
+            if newValue == nil, let m = materializedPending {
+                materializedPending = nil
+                if !pendingDidCommit {
+                    viewContext.delete(m)
+                    PersistenceController.shared.save()
+                }
+                pendingDidCommit = false
+            }
+        }
         .sheet(isPresented: $showingEditGroup) {
             EditSheetView(record: record)
         }
@@ -703,11 +726,13 @@ struct SheetDetailView: View {
                                 // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
                                 .transition(.identity)
                             case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。タップで実体化して編集、
+                                // 仮想 occurrence (未実体化の定期分)。タップで実支出と同じ詳細へ遷移、
                                 // スワイプ削除で「この回だけ skip」(ルールに記録、以後出さない)。
                                 VirtualOccurrenceRow(occurrence: occ, sheet: record) {
-                                    // タップで実体化 → 既存の編集フロー (この項目のみ/今後/全て) に乗せる。
-                                    editingExpense = materialize(occ)
+                                    // タップで materialize (未保存) して詳細へ push。編集 commit
+                                    // しなければ詳細を閉じた時に破棄する (= 見ただけでは保存しない)。
+                                    pendingDidCommit = false
+                                    detailExpense = materialize(occ)
                                 }
                                 .transition(.identity)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
