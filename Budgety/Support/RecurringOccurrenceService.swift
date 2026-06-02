@@ -29,7 +29,57 @@ struct RecurringOccurrence: Identifiable {
     var id: String { "\(ruleID.uuidString)#\(Int(date.timeIntervalSince1970))" }
 }
 
+/// 一覧表示用の union: 実 Expense か、ルールから算出した仮想 occurrence。
+enum LedgerItem: Identifiable {
+    case expense(Expense)
+    case occurrence(RecurringOccurrence)
+
+    var id: String {
+        switch self {
+        case .expense(let e):    return "e:" + e.objectID.uriRepresentation().absoluteString
+        case .occurrence(let o): return "o:" + o.id
+        }
+    }
+    var date: Date {
+        switch self {
+        case .expense(let e):    return e.date ?? .distantPast
+        case .occurrence(let o): return o.date
+        }
+    }
+    var amountDecimal: Decimal {
+        switch self {
+        case .expense(let e):    return e.amountDecimal
+        case .occurrence(let o): return o.amount
+        }
+    }
+    var kind: TransactionKind {
+        switch self {
+        case .expense(let e):    return e.kind
+        case .occurrence(let o): return o.kind
+        }
+    }
+    var currencyCode: String {
+        switch self {
+        case .expense(let e):    return e.resolvedCurrencyCode
+        case .occurrence(let o): return o.currencyCode
+        }
+    }
+    var isVirtual: Bool {
+        if case .occurrence = self { return true }
+        return false
+    }
+}
+
 enum RecurringOccurrenceService {
+
+    /// 完全仮想化のフィーチャーフラグ (既定 OFF)。
+    /// ON で「定期 occurrence を保存せず表示時に算出」へ切替: generator は実体化を止め、
+    /// 各 consumer は仮想 occurrence を合流する。OFF の間は従来のハイブリッド (生成して保存)。
+    /// デバッグ設定からトグルして検証し、全プラットフォーム対応後に既定 ON にする。
+    static let virtualizationKey = "expensoRecurringVirtualization"
+    static var virtualizationEnabled: Bool {
+        UserDefaults.standard.bool(forKey: virtualizationKey)
+    }
 
     /// `start` を anchor として `frequency`×`interval` を n 回 (n = 0,1,2,…) 加算した
     /// drift-free な occurrence 日付列を返す。
@@ -120,6 +170,7 @@ enum RecurringOccurrenceService {
         futureHorizon: Date? = nil,
         calendar: Calendar = .current
     ) -> [RecurringOccurrence] {
+        guard virtualizationEnabled else { return [] }   // OFF: 完全ハイブリッド (仮想ゼロ)
         let rules = (sheet.recurringRules as? Set<RecurringRule>) ?? []
         guard !rules.isEmpty else { return [] }
 

@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
+    /// デバッグ: 定期項目の完全仮想化フラグ (保存せず表示時に算出)。
+    @AppStorage(RecurringOccurrenceService.virtualizationKey) private var recurringVirtualization: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -192,12 +194,20 @@ struct SettingsView: View {
                 }
 
                 if BuildInfo.isInternalBuild {
-                    Section("デバッグ") {
+                    Section {
                         NavigationLink {
                             RecurringDiagnosticsView()
                         } label: {
                             Label("定期項目の診断", systemImage: "repeat.circle")
                         }
+                        Toggle(isOn: $recurringVirtualization) {
+                            Label("定期を仮想化 (保存しない)", systemImage: "wand.and.stars")
+                        }
+                    } header: {
+                        Text("デバッグ")
+                    } footer: {
+                        Text("ON で定期項目を保存せず、表示時にルールから算出します (実験的)。既存の生成済みデータはそのまま残ります。")
+                            .font(.caption)
                     }
                 }
 
