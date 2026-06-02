@@ -1710,48 +1710,93 @@ private struct ExpenseRowContainer: View {
 
 // MARK: - Virtual Occurrence Row (完全仮想化)
 
-/// 未実体化の定期 occurrence を一覧に表示する行 (読み取り中心、タップでルール編集)。
-/// 実支出より少し控えめ (opacity) に描画して「定期 (予定)」だと分かるようにする。
+/// 未実体化の定期 occurrence を一覧に表示する行。見た目は実支出 (ExpenseRowView) と同一:
+/// カテゴリアイコン (+支払者アバター) / カテゴリ名・タイトル・支払者 / repeat + 符号付き金額 + 通貨。
 private struct VirtualOccurrenceRow: View {
     let occurrence: RecurringOccurrence
     @ObservedObject var sheet: ExpenseSheet
     let onTap: () -> Void
+    @ObservedObject private var pub = PublicProfileSync.shared
+    @ObservedObject private var profileStore = UserProfileStore.shared
 
     private var category: ExpenseCategory? {
         guard !occurrence.categoryRaw.isEmpty,
               let cats = sheet.categories as? Set<ExpenseCategory> else { return nil }
         return cats.first { $0.name == occurrence.categoryRaw }
     }
-
     private var categoryName: String {
-        category?.displayName ?? (occurrence.categoryRaw.isEmpty ? "未分類" : occurrence.categoryRaw)
+        category?.displayName ?? (occurrence.categoryRaw.isEmpty ? "カテゴリなし" : occurrence.categoryRaw)
+    }
+    private var payerID: String { occurrence.payerProfileID ?? "" }
+    private var payerInfo: (name: String, colorHex: String, photoData: Data?)? {
+        payerID.isEmpty ? nil : sheet.memberDisplayInfo(for: payerID)
+    }
+    /// 支払者アバターを出すか (ExpenseRowView/CategoryPayerIconView と同じ判定)。
+    private var showAvatar: Bool {
+        guard !payerID.isEmpty else { return false }
+        let isSelf = UserProfileStore.shared
+            .canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: sheet))
+            .contains(payerID)
+        let isSolo = !sheet.hasAcceptedOtherMembers()
+        return !(isSolo && isSelf)
+    }
+    private var signedAmount: String {
+        (occurrence.kind == .expense ? "-" : "+") + CurrencyCatalog.format(occurrence.amount, code: occurrence.currencyCode)
+    }
+
+    @ViewBuilder
+    private var iconWithPayer: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let cat = category {
+                CategoryIconView(category: cat, size: 38)
+            } else {
+                CategoryIconView(symbol: "list.bullet", tint: .gray, size: 38)
+            }
+            if showAvatar, let info = payerInfo {
+                AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 18)
+                    .background(Circle().fill(Color.platformSystemBackground).padding(-2))
+                    .offset(x: 5, y: 5)
+            }
+        }
     }
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                if let cat = category {
-                    CategoryIconView(category: cat, size: 38)
-                } else {
-                    CategoryIconView(symbol: "repeat", tint: .gray, size: 38)
-                }
+                iconWithPayer
                 VStack(alignment: .leading, spacing: 2) {
                     Text(categoryName)
                         .font(.body)
                         .foregroundStyle(.primary)
-                    HStack(spacing: 4) {
-                        Image(systemName: "repeat")
-                        Text(occurrence.title.isEmpty ? "定期項目" : occurrence.title)
+                    if !occurrence.title.isEmpty {
+                        Text(occurrence.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    if showAvatar, let info = payerInfo, !info.name.isEmpty {
+                        Text(info.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
-                Text(CurrencyCatalog.format(occurrence.amount, code: occurrence.currencyCode))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(occurrence.kind == .income ? Color.green : Color.primary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    HStack(spacing: 4) {
+                        // 定期由来は実支出と同じく repeat アイコンを付ける。
+                        Image(systemName: "repeat")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(signedAmount)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.primary)
+                    }
+                    if occurrence.currencyCode != sheet.resolvedDefaultCurrencyCode {
+                        Text(occurrence.currencyCode)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
-            .opacity(0.85)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
