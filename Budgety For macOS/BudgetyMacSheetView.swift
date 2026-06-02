@@ -15,12 +15,15 @@ import UniformTypeIdentifiers
 
 /// 支出の支払い者が指定 profileID と一致するか。「自分」(selfIDs のいずれか) を
 /// 選んだ場合は、payerProfileID が selfIDs に含まれれば一致とみなす (旧 ID 対応)。
-fileprivate func macExpensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
-    let pid = exp.payerProfileID ?? ""
+fileprivate func macPayerMatches(_ pid: String, payerID: String, selfIDs: Set<String>) -> Bool {
     if selfIDs.contains(payerID) {
         return selfIDs.contains(pid)
     }
     return pid == payerID
+}
+
+fileprivate func macExpensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
+    macPayerMatches(exp.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs)
 }
 
 struct BudgetyMacSheetView: View {
@@ -152,6 +155,46 @@ struct BudgetyMacSheetView: View {
         return isSearching ? base.filter { period.contains($0.date) } : base
     }
 
+    // MARK: - 仮想 occurrence (完全仮想化。フラグ OFF なら全て空)
+
+    /// ルールから算出した仮想 occurrence。
+    private var allVirtuals: [RecurringOccurrence] {
+        RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
+    }
+
+    /// カテゴリ・支払い者・検索で絞る (期間は含めない)。Expense 版と同条件。
+    private func applyNonPeriodFiltersV(_ input: [RecurringOccurrence]) -> [RecurringOccurrence] {
+        var list = input
+        if let cat = selectedCategory {
+            let name = cat.name ?? ""
+            list = list.filter { $0.categoryRaw == name }
+        } else if filterUncategorized {
+            list = list.filter { $0.categoryRaw.isEmpty }
+        }
+        if let payerID = selectedPayerID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: sheet))
+            list = list.filter { macPayerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
+        }
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty {
+            list = list.filter { $0.title.lowercased().contains(q) }
+        }
+        return list
+    }
+
+    /// サマリー合計用の仮想 (期間 + フィルタ)。
+    private var summaryVirtuals: [RecurringOccurrence] {
+        applyNonPeriodFiltersV(allVirtuals.filter { period.contains($0.date) })
+    }
+
+    /// 一覧用の仮想 (検索中のみ期間を適用)。
+    private var listVirtuals: [RecurringOccurrence] {
+        let base = applyNonPeriodFiltersV(allVirtuals)
+        let isSearching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        return isSearching ? base.filter { period.contains($0.date) } : base
+    }
+
     /// 絞り込みが有効か。
     private var isFiltering: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil
@@ -176,12 +219,14 @@ struct BudgetyMacSheetView: View {
         return result.sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    private var groupedByDate: [(date: Date, items: [Expense])] {
+    private var groupedByDate: [(date: Date, items: [LedgerItem])] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: listExpenses) { exp -> Date in
-            cal.startOfDay(for: exp.date ?? .now)
+        let items: [LedgerItem] = listExpenses.map { LedgerItem.expense($0) }
+            + listVirtuals.map { LedgerItem.occurrence($0) }
+        let dict = Dictionary(grouping: items) { item -> Date in
+            cal.startOfDay(for: item.date)
         }
-        return dict.map { (date: $0.key, items: $0.value) }
+        return dict.map { (date: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
             .sorted { $0.date > $1.date }
     }
 
@@ -213,6 +258,16 @@ struct BudgetyMacSheetView: View {
             if e.kind == .expense { expense += amount }
             else if e.kind == .income { income += amount }
         }
+        // 今月の仮想 occurrence も予算/合計に反映。
+        for occ in allVirtuals {
+            let c = cal.dateComponents([.year, .month], from: occ.date)
+            guard c.year == comps.year && c.month == comps.month else { continue }
+            let from = occ.currencyCode
+            let converted = (from == target) ? occ.amount : fx.convert(occ.amount, from: from, to: target)
+            guard let amount = converted else { continue }
+            if occ.kind == .expense { expense += amount }
+            else if occ.kind == .income { income += amount }
+        }
         return (expense, income)
     }
 
@@ -235,6 +290,13 @@ struct BudgetyMacSheetView: View {
             guard let amount = converted else { continue }
             if e.kind == .expense { expense += amount }
             else if e.kind == .income { income += amount }
+        }
+        for occ in summaryVirtuals {
+            let from = occ.currencyCode
+            let converted = (from == target) ? occ.amount : fx.convert(occ.amount, from: from, to: target)
+            guard let amount = converted else { continue }
+            if occ.kind == .expense { expense += amount }
+            else if occ.kind == .income { income += amount }
         }
         return (expense, income)
     }
@@ -689,16 +751,28 @@ struct BudgetyMacSheetView: View {
                     .padding(.vertical, 8)
 
                     VStack(spacing: 0) {
-                        ForEach(group.items, id: \.objectID) { e in
-                            Button {
-                                detailExpense = e
-                            } label: {
-                                expenseRow(e)
+                        ForEach(group.items) { item in
+                            switch item {
+                            case .expense(let e):
+                                Button {
+                                    detailExpense = e
+                                } label: {
+                                    expenseRow(e)
+                                }
+                                .buttonStyle(.plain)
+                                // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                                .transition(.identity)
+                            case .occurrence(let occ):
+                                // 仮想 occurrence (未実体化の定期分)。タップで定期項目一覧へ。
+                                Button {
+                                    showingRecurring = true
+                                } label: {
+                                    virtualRow(occ)
+                                }
+                                .buttonStyle(.plain)
+                                .transition(.identity)
                             }
-                            .buttonStyle(.plain)
-                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
-                            .transition(.identity)
-                            if e.objectID != group.items.last?.objectID {
+                            if item.id != group.items.last?.id {
                                 Divider().padding(.leading, 60)
                             }
                         }
@@ -712,7 +786,8 @@ struct BudgetyMacSheetView: View {
         }
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
         // Reduce Motion 時はアニメーションしない。
-        .animation(reduceMotion ? nil : .default, value: listExpenses.map(\.objectID))
+        .animation(reduceMotion ? nil : .default,
+                   value: listExpenses.map { $0.objectID.uriRepresentation().absoluteString } + listVirtuals.map(\.id))
     }
 
     private func expenseRow(_ e: Expense) -> some View {
@@ -796,22 +871,53 @@ struct BudgetyMacSheetView: View {
         return df.string(from: d)
     }
 
-    private func daySigned(_ items: [Expense], code: String) -> String {
+    private func daySigned(_ items: [LedgerItem], code: String) -> String {
         let fx = FXRatesService.shared
         var total: Decimal = 0
-        for e in items {
-            let from = e.resolvedCurrencyCode
+        for it in items {
+            let from = it.currencyCode
             let converted: Decimal?
             if from == code {
-                converted = e.amountDecimal
+                converted = it.amountDecimal
             } else {
-                converted = fx.convert(e.amountDecimal, from: from, to: code)
+                converted = fx.convert(it.amountDecimal, from: from, to: code)
             }
             guard let amount = converted else { continue }
-            total += (e.kind == .income ? amount : -amount)
+            total += (it.kind == .income ? amount : -amount)
         }
         let sign = total >= 0 ? "+" : ""
         return sign + CurrencyCatalog.format(total, code: code)
+    }
+
+    /// 仮想 occurrence の行 (macOS, expenseRow に揃えたレイアウト・控えめ表示)。
+    private func virtualRow(_ occ: RecurringOccurrence) -> some View {
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let category = occ.categoryRaw.isEmpty ? nil : cats.first { $0.name == occ.categoryRaw }
+        return HStack(spacing: 12) {
+            if let cat = category {
+                CategoryIconView(category: cat, size: 32)
+            } else {
+                CategoryIconView(symbol: "repeat", tint: .gray, size: 32)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category?.displayName ?? (occ.categoryRaw.isEmpty ? "未分類" : occ.categoryRaw))
+                    .font(.body)
+                HStack(spacing: 4) {
+                    Image(systemName: "repeat")
+                    Text(occ.title.isEmpty ? "定期項目" : occ.title)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(occ.kind == .income ? Color.green : Color.primary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .opacity(0.85)
+        .contentShape(Rectangle())
     }
 }
 
