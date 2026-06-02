@@ -10,7 +10,25 @@
 import SwiftUI
 import CoreData
 
+/// 実エントリポイント。コマンドライン引数で動作を分岐する:
+/// - `--mcp`         : GUI を出さず、内蔵 MCP サーバー (stdio) として動作 (戻らない)。
+/// - `--mcp-install` : Claude Code 登録コマンドを stdout に出力して終了。
+/// - それ以外        : 通常の GUI アプリ (BudgetyMacApp) を起動。
 @main
+enum BudgetyMacEntry {
+    static func main() {
+        let args = CommandLine.arguments
+        if args.contains("--mcp") {
+            MCPServer.run()                 // 戻らない
+        }
+        if args.contains("--mcp-install") {
+            MCPServer.printInstallCommand()
+            exit(0)
+        }
+        BudgetyMacApp.main()                // 通常起動
+    }
+}
+
 struct BudgetyMacApp: App {
     let persistenceController = PersistenceController.shared
     @NSApplicationDelegateAdaptor(BudgetyMacAppDelegate.self) private var appDelegate
