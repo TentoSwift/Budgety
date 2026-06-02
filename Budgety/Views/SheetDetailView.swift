@@ -466,11 +466,13 @@ struct SheetDetailView: View {
                             }
                         }
                     }
-                    NavigationLink {
-                        RecurringListView(record: record)
-                            .sheetLockCover(record)
-                    } label: {
-                        Label("定期項目", systemImage: "repeat")
+                    if RecurringOccurrenceService.featureEnabled {
+                        NavigationLink {
+                            RecurringListView(record: record)
+                                .sheetLockCover(record)
+                        } label: {
+                            Label("定期項目", systemImage: "repeat")
+                        }
                     }
                     Divider()
                     Button {

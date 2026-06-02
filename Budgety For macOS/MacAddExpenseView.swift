@@ -712,7 +712,9 @@ struct MacAddExpenseView: View {
 
     /// 保存ボタンのディスパッチ。定期由来の支出に変更があれば 2 択ダイアログ、それ以外は通常 save。
     private func trySave() {
-        if let expense, expense.generatedFromRuleID != nil,
+        // 機能オフ時は既存の生成由来支出も通常編集として保存する (2 択ダイアログを出さない)。
+        if RecurringOccurrenceService.featureEnabled, let expense,
+           expense.generatedFromRuleID != nil,
            expense.relatedRule != nil, hasAnyEditChanges {
             showRecurringSaveChoice = true
         } else {
