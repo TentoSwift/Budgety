@@ -106,6 +106,7 @@
 				Support/Currency.swift,
 				Support/Notifications.swift,
 				Support/PublicProfileSync.swift,
+				Support/RecurringOccurrenceService.swift,
 				Support/SettlementCalculator.swift,
 				Support/ShareParticipantCanonical.swift,
 				Support/ShareParticipantDiagnostics.swift,
