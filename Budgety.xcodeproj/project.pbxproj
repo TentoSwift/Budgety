@@ -50,8 +50,8 @@
 		2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Budgety StoreKit.storekit"; sourceTree = "<group>"; };
 		2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = BudgetyIcon.icon; sourceTree = "<group>"; };
 		2DDCE11E2FA8974700A42F60 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For visionOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D18B4C22FB31605006F2C2A /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D18B4C22FB31605006F2C30 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -308,8 +308,8 @@
 			children = (
 				2DDCE11E2FA8974700A42F60 /* Budgety.app */,
 				2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */,
-				3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */,
-				4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */,
+				3D18B4C22FB31605006F2C2A /* Budgety.app */,
+				4D18B4C22FB31605006F2C30 /* Budgety.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -386,7 +386,7 @@
 			packageProductDependencies = (
 			);
 			productName = "Budgety For visionOS";
-			productReference = 3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */;
+			productReference = 3D18B4C22FB31605006F2C2A /* Budgety.app */;
 			productType = "com.apple.product-type.application";
 		};
 		4D18B4C12FB31605006F2C30 /* Budgety For macOS */ = {
@@ -409,7 +409,7 @@
 				4D8484602FADB766001AB1B7 /* CustomPicker */,
 			);
 			productName = "Budgety For macOS";
-			productReference = 4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */;
+			productReference = 4D18B4C22FB31605006F2C30 /* Budgety.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -548,7 +548,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -584,7 +584,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -743,7 +743,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -792,7 +792,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -840,7 +840,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -882,7 +882,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -925,7 +925,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -964,7 +964,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026060204;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
