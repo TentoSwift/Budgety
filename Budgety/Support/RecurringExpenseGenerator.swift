@@ -31,6 +31,8 @@ enum RecurringExpenseGenerator {
     /// viewContext 上の全 RecurringRule を走査して未生成分を作成する。
     /// save まで含む。
     static func generateAll(in ctx: NSManagedObjectContext) {
+        // 完全仮想化 ON 時は実体化しない (occurrence は表示時にルールから算出する)。
+        guard !RecurringOccurrenceService.virtualizationEnabled else { return }
         let req = NSFetchRequest<RecurringRule>(entityName: "RecurringRule")
         guard let rules = try? ctx.fetch(req), !rules.isEmpty else { return }
 

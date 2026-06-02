@@ -388,6 +388,64 @@ enum SettlementCalculator {
                 perShare: perShareOpt, included: included, skipReason: nil))
         }
 
+        // 4.5) 未実体化の定期 occurrence (仮想) も同じロジックで集計する (完全仮想化)。
+        //   - includeFuture:false → 今日まで。未来分は債務に含めない。
+        //   - 実在行がある日付は virtualOccurrences 側で除外済み (= 二重計上しない)。
+        //   - FX スナップショットは無いので現行レートで換算 (定期は凍結しない方針)。
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let resolvePayerID: (String?) -> String? = { pid in
+            guard let pid, !pid.isEmpty else { return nil }
+            if !selfCanonical.isEmpty {
+                if selfIDs.contains(pid) { return selfCanonical }
+                if let selfEmailID, pid == selfEmailID { return selfCanonical }
+            }
+            if let urn = emailToURN[pid] { return urn }
+            return pid
+        }
+        let virtualOccurrences = RecurringOccurrenceService.virtualOccurrences(
+            for: sheet, in: dateRange, includeFuture: false
+        )
+        for occ in virtualOccurrences where occ.kind == .expense {
+            guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
+                missing.insert(occ.currencyCode)
+                continue
+            }
+            // 受益者: CSV → 正規化 + 現参加者フィルタ + dedup (Expense ループと同じ扱い)
+            var seen = Set<String>()
+            let normalizedBeneficiaries = occ.beneficiaryProfileIDs
+                .split(separator: ",")
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map(normalize)
+                .filter { memberSet.contains($0) && seen.insert($0).inserted }
+            // payer 解決 (現参加者でなければスキップ)
+            guard let payer = resolvePayerID(occ.payerProfileID), memberSet.contains(payer) else {
+                continue
+            }
+            // 残高: 受益者がいる時のみ (割り勘オフは残高変動なし、カテゴリ集計のみ)
+            if !normalizedBeneficiaries.isEmpty {
+                let perShare = roundToCurrency(converted / Decimal(normalizedBeneficiaries.count), code: target)
+                balances[payer, default: 0] += perShare * Decimal(normalizedBeneficiaries.count)
+                for b in normalizedBeneficiaries { balances[b, default: 0] -= perShare }
+                includedCount += 1
+            }
+            // カテゴリ集計 (Expense ループと同じく displayName をキーに)
+            let cat = cats.first(where: { $0.name == occ.categoryRaw })
+            let catName = cat?.displayName ?? (occ.categoryRaw.isEmpty ? "カテゴリなし" : occ.categoryRaw)
+            if var agg = categoryAgg[catName] {
+                agg.total += converted
+                agg.count += 1
+                categoryAgg[catName] = agg
+            } else {
+                categoryAgg[catName] = CategoryAggregator(
+                    symbol: cat?.displaySymbol ?? "list.bullet",
+                    colorHex: cat?.colorHex,
+                    total: converted,
+                    count: 1
+                )
+            }
+        }
+
         // 5) ユーザーが記録した実送金 (SettlementRecord) を反映。
         //    「A → B に X 払った」= A の債務が減る = A の balance を +X、B を -X。
         //    期間フィルタは Expense と同じ条件 (record.date が dateRange に含まれる)。

@@ -15,12 +15,15 @@ import CustomNavigationTitle
 /// 支出の支払い者が指定 profileID と一致するか。
 /// 「自分」(selfIDs のいずれか) を選んだ場合は、payerProfileID が selfIDs に
 /// 含まれれば一致とみなす（旧 ID でも自分として拾えるように）。
-fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
-    let pid = exp.payerProfileID ?? ""
+fileprivate func payerMatches(_ pid: String, payerID: String, selfIDs: Set<String>) -> Bool {
     if selfIDs.contains(payerID) {
         return selfIDs.contains(pid)
     }
     return pid == payerID
+}
+
+fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
+    payerMatches(exp.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs)
 }
 
 struct SheetDetailView: View {
@@ -245,6 +248,32 @@ struct SheetDetailView: View {
         return list
     }
 
+    /// 一覧に混ぜる仮想 occurrence (完全仮想化フラグ OFF なら空)。
+    /// `filteredExpenses` と同じ条件 (カテゴリ/支払者/検索/検索期間) で絞り込む。
+    private var filteredVirtuals: [RecurringOccurrence] {
+        var list = RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+        guard !list.isEmpty else { return [] }
+        if let cat = selectedCategory {
+            let name = cat.name ?? ""
+            list = list.filter { $0.categoryRaw == name }
+        } else if filterUncategorized {
+            list = list.filter { $0.categoryRaw.isEmpty }
+        }
+        if let payerID = selectedPayerID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter { payerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
+        }
+        if isSearchActive {
+            list = list.filter { searchPeriod.contains($0.date) }
+        }
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty {
+            list = list.filter { $0.title.lowercased().contains(q) }
+        }
+        return list
+    }
+
     var body: some View {
         List {
             Section {
@@ -277,12 +306,12 @@ struct SheetDetailView: View {
                         .listSectionSeparator(.hidden)
                 }
 
-                if allExpenses.isEmpty {
+                if allExpenses.isEmpty && filteredVirtuals.isEmpty {
                     emptyStateInitial
                 } else if searchFocused && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     // 検索フォーカス直後 (未入力) は全件ではなく 0 件 (入力待ち) を表示。
                     emptyStateSearchPrompt
-                } else if filteredExpenses.isEmpty {
+                } else if filteredExpenses.isEmpty && filteredVirtuals.isEmpty {
                     emptyStateFiltered
                 } else {
                     sectionedList
@@ -291,7 +320,8 @@ struct SheetDetailView: View {
         .listStyle(.plain)
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
         // Reduce Motion 時はアニメーションしない。
-        .animation(reduceMotion ? nil : .default, value: filteredExpenses.map(\.objectID))
+        .animation(reduceMotion ? nil : .default,
+                   value: filteredExpenses.map { $0.objectID.uriRepresentation().absoluteString } + filteredVirtuals.map(\.id))
         #if os(iOS)
         // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
         .scrollAwareTitle(record.displayName)
@@ -634,22 +664,33 @@ struct SheetDetailView: View {
     private var sectionedList: some View {
             ForEach(groupedByDay(), id: \.key) { section in
                 Section {
-                        ForEach(Array(section.value.enumerated()), id: \.element.objectID) { idx, expense in
-                            // 削除確認は各支出行に .confirmationDialog を付ける。
-                            // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
-                            // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
-                            ExpenseRowContainer(
-                                expense: expense,
-                                pendingDelete: $pendingDeleteExpense,
-                                onEdit: { editingExpense = expense },
-                                onEditRule: expense.generatedFromRuleID != nil
-                                    ? { editingRule = expense.relatedRule }
-                                    : nil,
-                                onDuplicate: { duplicate(expense) },
-                                onDelete: { deleteExpense(expense) }
-                            )
-                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
-                            .transition(.identity)
+                        ForEach(section.value) { item in
+                            switch item {
+                            case .expense(let expense):
+                                // 削除確認は各支出行に .confirmationDialog を付ける。
+                                // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
+                                // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
+                                ExpenseRowContainer(
+                                    expense: expense,
+                                    pendingDelete: $pendingDeleteExpense,
+                                    onEdit: { editingExpense = expense },
+                                    onEditRule: expense.generatedFromRuleID != nil
+                                        ? { editingRule = expense.relatedRule }
+                                        : nil,
+                                    onDuplicate: { duplicate(expense) },
+                                    onDelete: { deleteExpense(expense) }
+                                )
+                                // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                                .transition(.identity)
+                            case .occurrence(let occ):
+                                // 仮想 occurrence (未実体化の定期分)。タップで定期項目を編集。
+                                // (Phase 4 で per-occurrence の override 実体化に拡張予定)
+                                VirtualOccurrenceRow(occurrence: occ, sheet: record) {
+                                    // タップで実体化 → 既存の編集フロー (この項目のみ/今後/全て) に乗せる。
+                                    editingExpense = materialize(occ)
+                                }
+                                .transition(.identity)
+                            }
                         }
                 } header: {
                     DateHeaderView(label: section.dayLabel,
@@ -813,13 +854,16 @@ struct SheetDetailView: View {
         let key: String
         let dayLabel: String
         let dayNet: Decimal
-        let value: [Expense]
+        let value: [LedgerItem]
     }
 
     private func groupedByDay() -> [DaySection] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
-            cal.startOfDay(for: exp.date ?? .now)
+        // 実 Expense + 仮想 occurrence を union にまとめて日別グループ化する。
+        let items: [LedgerItem] = filteredExpenses.map { LedgerItem.expense($0) }
+            + filteredVirtuals.map { LedgerItem.occurrence($0) }
+        let dict = Dictionary(grouping: items) { item -> Date in
+            cal.startOfDay(for: item.date)
         }
         // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
         let currentYear = cal.component(.year, from: .now)
@@ -833,18 +877,64 @@ struct SheetDetailView: View {
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
 
-        let sections = dict.map { (day, items) -> DaySection in
+        let sections = dict.map { (day, dayItems) -> DaySection in
             let year = cal.component(.year, from: day)
             let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
             var net: Decimal = 0
-            for e in items {
-                let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
-                net += (e.kind == .income) ? amt : -amt
+            for it in dayItems {
+                let amt = fx.convert(it.amountDecimal, from: it.currencyCode, to: target) ?? it.amountDecimal
+                net += (it.kind == .income) ? amt : -amt
+            }
+            // 日内の並び順は一覧の並びに合わせる (実支出は時刻あり、仮想は 0:00)。
+            let sorted = dayItems.sorted { a, b in
+                switch (sortField, sortAscending) {
+                case (.date, true):    return a.date < b.date
+                case (.date, false):   return a.date > b.date
+                case (.amount, true):  return a.amountDecimal < b.amountDecimal
+                case (.amount, false): return a.amountDecimal > b.amountDecimal
+                }
             }
             let key = ISO8601DateFormatter().string(from: day)
-            return DaySection(key: key, dayLabel: label, dayNet: net, value: items)
+            return DaySection(key: key, dayLabel: label, dayNet: net, value: sorted)
         }
         return sections.sorted { $0.key > $1.key }
+    }
+
+    /// 仮想 occurrence の元になった RecurringRule を引く。
+    private func ruleForOccurrence(_ occ: RecurringOccurrence) -> RecurringRule? {
+        (record.recurringRules as? Set<RecurringRule>)?.first { $0.id == occ.ruleID }
+    }
+
+    /// 仮想 occurrence を実 Expense として実体化する (override 化)。
+    /// `(generatedFromRuleID, scheduledDate)` を持つので virtualOccurrences 側で
+    /// 以後この日付の仮想は出さなくなる。編集はこの実 Expense に対して既存フローで行う。
+    /// 定期 occurrence なので FX スナップショットは取らない (現行レートで精算)。
+    @MainActor
+    private func materialize(_ occ: RecurringOccurrence) -> Expense {
+        let e = Expense(context: viewContext)
+        let store = record.objectID.persistentStore
+        if let store { viewContext.assign(e, to: store) }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.createdAt = .now
+        e.sheet = record
+        e.generatedFromRuleID = occ.ruleID
+        if !occ.categoryRaw.isEmpty,
+           let cats = record.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == store {
+            e.category = cat
+        }
+        PersistenceController.shared.save()
+        return e
     }
 
     private var usedCategories: [ExpenseCategory] {
@@ -1007,6 +1097,23 @@ private struct SummaryCard: View {
                 continue
             }
             switch e.kind {
+            case .expense: expenseSum += converted
+            case .income:  incomeSum += converted
+            }
+        }
+        // 仮想 occurrence (完全仮想化 ON 時のみ非空) も同条件で合計に反映する。
+        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+            where period.contains(occ.date) {
+            if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
+            if let payerID = selectedPayerID,
+               !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
+            if !q.isEmpty, !occ.title.lowercased().contains(q) { continue }
+            hitCount += 1
+            guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
+                missing.insert(occ.currencyCode)
+                continue
+            }
+            switch occ.kind {
             case .expense: expenseSum += converted
             case .income:  incomeSum += converted
             }
@@ -1552,6 +1659,56 @@ private struct ExpenseRowContainer: View {
         } message: { exp in
             Text("「\(exp.displayTitle.isEmpty ? exp.categoryDisplayName : exp.displayTitle)」を削除します。元に戻せません。")
         }
+    }
+}
+
+// MARK: - Virtual Occurrence Row (完全仮想化)
+
+/// 未実体化の定期 occurrence を一覧に表示する行 (読み取り中心、タップでルール編集)。
+/// 実支出より少し控えめ (opacity) に描画して「定期 (予定)」だと分かるようにする。
+private struct VirtualOccurrenceRow: View {
+    let occurrence: RecurringOccurrence
+    @ObservedObject var sheet: ExpenseSheet
+    let onTap: () -> Void
+
+    private var category: ExpenseCategory? {
+        guard !occurrence.categoryRaw.isEmpty,
+              let cats = sheet.categories as? Set<ExpenseCategory> else { return nil }
+        return cats.first { $0.name == occurrence.categoryRaw }
+    }
+
+    private var categoryName: String {
+        category?.displayName ?? (occurrence.categoryRaw.isEmpty ? "未分類" : occurrence.categoryRaw)
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                if let cat = category {
+                    CategoryIconView(category: cat, size: 38)
+                } else {
+                    CategoryIconView(symbol: "repeat", tint: .gray, size: 38)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(categoryName)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "repeat")
+                        Text(occurrence.title.isEmpty ? "定期項目" : occurrence.title)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(CurrencyCatalog.format(occurrence.amount, code: occurrence.currencyCode))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(occurrence.kind == .income ? Color.green : Color.primary)
+            }
+            .opacity(0.85)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
