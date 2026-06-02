@@ -28,6 +28,7 @@ struct PaywallView: View {
                         plansSection
                     }
                     actions
+                    legalFooter
                 }
                 .padding()
             }
@@ -180,8 +181,14 @@ struct PaywallView: View {
                     Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                         .foregroundStyle(.white)
                         .font(.title3)
-                    Text(plan.label)
-                        .font(.body.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(plan.label)
+                            .font(.body.weight(.semibold))
+                        // 期間・自動更新の有無を明示 (Guideline 3.1.2)。
+                        Text(plan.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if !isAX { Spacer() }
                 }
                 if let product {
@@ -264,6 +271,28 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
             }
         }
+    }
+
+    /// サブスクリプションの必須表記 (Guideline 3.1.2): 自動更新の説明 +
+    /// 利用規約 (EULA) / プライバシーポリシーへの有効なリンク。
+    private var legalFooter: some View {
+        VStack(spacing: 10) {
+            Text("月額・年額プランは自動更新サブスクリプションです。期間終了の24時間以上前に解約しない限り自動更新され、購入確定時に Apple ID へ請求されます。解約・管理は「設定 > Apple ID > サブスクリプション」から行えます。買い切りプランは一度のお支払いで永続します。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Link("利用規約 (EULA)",
+                     destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                Text("·").foregroundStyle(.secondary)
+                Link("プライバシーポリシー",
+                     destination: URL(string: "https://tentoswift.github.io/budgety-privacy/")!)
+            }
+            .font(.caption)
+        }
+        .padding(.horizontal)
+        .padding(.top, 4)
     }
 }
 
