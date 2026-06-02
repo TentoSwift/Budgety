@@ -1022,7 +1022,6 @@ struct BudgetyMacSettingsView: View {
     @State private var acceptMessage: String?
     @State private var showingPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
-    @State private var showingClaudeIntegration: Bool = false
 
     var body: some View {
         Form {
@@ -1122,29 +1121,9 @@ struct BudgetyMacSettingsView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Section {
-                Button {
-                    showingClaudeIntegration = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(.purple.gradient)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Claude と連携")
-                                .foregroundStyle(.primary)
-                            Text("自然言語で支出を記録")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+            // Claude / MCP 連携の導線は macOS では非表示 (App Store Guideline 2.4.5(ii):
+            // MCP サーバー等の追加コードを共有場所にインストールさせる機能は Mac App Store 不可)。
+            // セットアップ方法はサポートページに記載する。iOS では引き続き提供。
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
             }
@@ -1155,12 +1134,6 @@ struct BudgetyMacSettingsView: View {
         }
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
-        }
-        .sheet(isPresented: $showingClaudeIntegration) {
-            MacModalSheet {
-                ClaudeIntegrationView()
-                    .padding()
-            }
         }
     }
 
