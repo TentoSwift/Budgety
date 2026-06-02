@@ -1526,6 +1526,13 @@ struct AddExpenseView: View {
 
         // 2) ルールへ反映 (今後 / 全て)
         if scope != .thisOnly, let rule = expense.relatedRule {
+            // 「今後のみ」= 完全仮想化では、過去 occurrence を「変更前の値」で実体化して凍結し、
+            // それからルールを新値に変更する (過去は旧値の実データのまま、編集回以降は新値の仮想)。
+            // ルール変更前に materializePast を呼ぶ (= 旧値で凍結するため)。
+            if scope == .future, RecurringOccurrenceService.virtualizationEnabled,
+               let editDay = expense.scheduledDate ?? expense.date {
+                RecurringExpenseGenerator.materializePast(for: rule, before: editDay, in: viewContext)
+            }
             applyChanges(toRule: rule)
 
             // 3) 過去に生成された他の支出にも反映 (全て)
