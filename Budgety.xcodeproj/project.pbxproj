@@ -156,6 +156,7 @@
 				Support/BuildInfo.swift,
 				"Support/Calendar+Month.swift",
 				Support/CategoryAISuggestor.swift,
+				Support/CategoryHistorySuggestor.swift,
 				"Support/Color+Hex.swift",
 				Support/CSVImporter.swift,
 				Support/Currency.swift,

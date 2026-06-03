@@ -67,10 +67,15 @@ struct MacAddExpenseView: View {
     @State private var origNote: String = ""
     @State private var origBeneficiaryCSV: String = ""
 
-    // AI カテゴリ提案 (FoundationModels)
+    // カテゴリ提案 (履歴学習 or FoundationModels)
     @State private var aiCategorySuggestion: ExpenseCategory?
+    /// 提案の出所が「過去の自分の分類履歴」か (true) 「AI 推測」か (false)。
+    @State private var suggestionFromHistory: Bool = false
     @State private var isComputingAICategory: Bool = false
     @State private var aiSuggestTask: Task<Void, Never>?
+
+    private var suggestionIcon: String { suggestionFromHistory ? "clock.arrow.circlepath" : "apple.intelligence" }
+    private var suggestionTitle: String { suggestionFromHistory ? "前回の分類" : "提案" }
 
     private var categories: [ExpenseCategory] {
         let set = (sheet.categories as? Set<ExpenseCategory>) ?? []
@@ -393,10 +398,10 @@ struct MacAddExpenseView: View {
                         aiCategorySuggestion = nil
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "apple.intelligence")
-                                .foregroundStyle(Color.purple)
+                            Image(systemName: suggestionIcon)
+                                .foregroundStyle(suggestionFromHistory ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.purple))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(Image(systemName: "apple.intelligence")) 提案")
+                                Text("\(Image(systemName: suggestionIcon)) \(suggestionTitle)")
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                 HStack(spacing: 6) {
@@ -426,11 +431,20 @@ struct MacAddExpenseView: View {
         aiSuggestTask?.cancel()
         aiSuggestTask = nil
         aiCategorySuggestion = nil
+        suggestionFromHistory = false
         isComputingAICategory = false
 
         guard expense == nil else { return }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 2 else { return }
+        // 1) 過去の自分の分類履歴を最優先で提案 (例: クスリのアオキ→食費)。即時・同期。
+        if let hist = CategoryHistorySuggestor.suggest(title: trimmed, kind: kind, in: sheet),
+           selectedCategory?.objectID != hist.objectID {
+            aiCategorySuggestion = hist
+            suggestionFromHistory = true
+            return
+        }
+        // 2) 履歴が無ければ AI (FoundationModels) で推測。
         guard CategoryAISuggestor.isAvailable else { return }
 
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
