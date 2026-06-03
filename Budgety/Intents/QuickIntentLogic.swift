@@ -137,8 +137,9 @@ enum QuickIntentLogic {
         let allKindCats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
             .filter { $0.kind == kind }
             .sorted { $0.sortOrder < $1.sortOrder }
-        var aiSuggested: ExpenseCategory? = nil
-        if CategoryAISuggestor.isAvailable {
+        // カテゴリ決定: ①過去の自分の分類履歴 → ②AI 提案 → ③同 kind の先頭
+        var picked: ExpenseCategory? = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet)
+        if picked == nil, CategoryAISuggestor.isAvailable {
             let names = allKindCats.map { $0.displayName }
             if !names.isEmpty,
                let suggestedName = await CategoryAISuggestor.suggest(
@@ -146,10 +147,10 @@ enum QuickIntentLogic {
                 kind: kind,
                 categories: names
                ) {
-                aiSuggested = allKindCats.first(where: { $0.displayName == suggestedName })
+                picked = allKindCats.first(where: { $0.displayName == suggestedName })
             }
         }
-        let firstCategory = aiSuggested ?? allKindCats.first
+        let firstCategory = picked ?? allKindCats.first
 
         // 永続化
         let expense = Expense(context: ctx)
