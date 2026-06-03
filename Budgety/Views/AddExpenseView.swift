@@ -132,7 +132,7 @@ struct AddExpenseView: View {
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
 
-    /// FoundationModels が推測したカテゴリ。
+    /// 提案中のカテゴリ (出所は履歴学習 or FoundationModels だが、表示は「AI 提案」で統一する)。
     @State private var aiCategorySuggestion: ExpenseCategory?
     @State private var isComputingAICategory: Bool = false
     /// 現在進行中の AI 推測 Task。新しいキーストロークでキャンセルする。
@@ -525,6 +525,14 @@ struct AddExpenseView: View {
         guard case .create(let sheet) = mode else { return }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 2 else { return }
+        // 1) 過去の自分の分類履歴を最優先で提案 (例: クスリのアオキ→食費)。即時・同期。
+        // (出所は履歴だが、表示は AI 提案として統一する。)
+        if let hist = CategoryHistorySuggestor.suggest(title: trimmed, kind: kind, in: sheet),
+           selectedCategory?.objectID != hist.objectID {
+            aiCategorySuggestion = hist
+            return
+        }
+        // 2) 履歴が無ければ AI (FoundationModels) で推測。
         kickAICategorySuggest(title: trimmed, in: sheet)
     }
 

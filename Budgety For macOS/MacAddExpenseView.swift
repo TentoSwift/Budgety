@@ -67,7 +67,7 @@ struct MacAddExpenseView: View {
     @State private var origNote: String = ""
     @State private var origBeneficiaryCSV: String = ""
 
-    // AI カテゴリ提案 (FoundationModels)
+    // カテゴリ提案 (出所は履歴学習 or FoundationModels だが、表示は「AI 提案」で統一)
     @State private var aiCategorySuggestion: ExpenseCategory?
     @State private var isComputingAICategory: Bool = false
     @State private var aiSuggestTask: Task<Void, Never>?
@@ -431,6 +431,14 @@ struct MacAddExpenseView: View {
         guard expense == nil else { return }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 2 else { return }
+        // 1) 過去の自分の分類履歴を最優先で提案 (例: クスリのアオキ→食費)。即時・同期。
+        // (出所は履歴だが、表示は AI 提案として統一する。)
+        if let hist = CategoryHistorySuggestor.suggest(title: trimmed, kind: kind, in: sheet),
+           selectedCategory?.objectID != hist.objectID {
+            aiCategorySuggestion = hist
+            return
+        }
+        // 2) 履歴が無ければ AI (FoundationModels) で推測。
         guard CategoryAISuggestor.isAvailable else { return }
 
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []

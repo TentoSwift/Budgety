@@ -214,8 +214,11 @@ struct AddExpenseIntent: AppIntent {
         // 「未分類」→ カテゴリなし
         if chosen.id == Self.skipCategoryID { return nil }
 
-        // 「AI 提案」→ FoundationModels で推測
+        // 「AI 提案」→ ①過去の自分の分類履歴 → ②FoundationModels で推測
         if chosen.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
+            if let hist = CategoryHistorySuggestor.suggest(title: title, kind: .expense, in: sheet) {
+                return hist
+            }
             let names = kindCats.map { $0.displayName }
             guard !names.isEmpty,
                   CategoryAISuggestor.isAvailable,
