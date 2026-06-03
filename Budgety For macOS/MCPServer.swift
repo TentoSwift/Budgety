@@ -97,12 +97,13 @@ enum MCPServer {
         [
             [
                 "name": "add_expense",
-                "description": "Record an expense or income entry in Budgety. kind defaults to 'expense'; pass 'income' for salary, refunds, etc.",
+                "description": "Record an expense or income entry in Budgety. kind defaults to 'expense'; pass 'income' for salary, refunds, etc. To categorize, call list_categories first to see the sheet's categories, then pass the chosen one via `category`. If `category` is omitted, the app falls back to the user's past classification of the same title (no on-device AI guessing).",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
                         "amount": ["type": "number", "description": "Amount (plain number, no currency symbol)."],
                         "title": ["type": "string", "description": "Short label (店名・品目)."],
+                        "category": ["type": "string", "description": "Category name for this entry. Use list_categories to get valid names for the sheet/kind. Must match an existing category name; otherwise it is ignored. Omit to let the app infer from past history."],
                         "kind": ["type": "string", "enum": ["expense", "income"], "description": "expense (default) or income."],
                         "sheet": ["type": "string", "description": "Sheet name. Optional, defaults to the oldest sheet."],
                         "currency": ["type": "string", "description": "ISO 4217 code. Optional, defaults to sheet currency."],
@@ -110,6 +111,17 @@ enum MCPServer {
                         "password": ["type": "string", "description": "Sheet password if the sheet is locked."]
                     ],
                     "required": ["amount", "title"]
+                ]
+            ],
+            [
+                "name": "list_categories",
+                "description": "List a sheet's categories (valid names for add_expense's `category`). Call this before add_expense to choose the right category yourself instead of relying on auto-classification.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "sheet": ["type": "string", "description": "Sheet name. Optional, defaults to the oldest sheet."],
+                        "kind": ["type": "string", "enum": ["expense", "income"], "description": "Filter by kind. Optional (default both)."]
+                    ]
                 ]
             ],
             [
@@ -139,6 +151,8 @@ enum MCPServer {
             resultDict = callOnMainActorAsync { await QuickIntentLogic.add(parsed: args) }
         case "get_expenses":
             resultDict = callOnMainActorSync { QuickIntentLogic.get(parsed: args) }
+        case "list_categories":
+            resultDict = callOnMainActorSync { QuickIntentLogic.categories(parsed: args) }
         default:
             send(errorCode: -32602, message: "Unknown tool: \(name)", id: id)
             return

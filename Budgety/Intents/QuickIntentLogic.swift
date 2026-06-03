@@ -133,24 +133,23 @@ enum QuickIntentLogic {
             }
         }
 
-        // カテゴリ決定 (= kind に応じて AI 提案 / 最初の同 kind カテゴリ)
+        // カテゴリ決定: ①Claude が指定した category → ②過去の自分の分類履歴 → ③未分類。
+        //  MCP では FoundationModel による自動分類は行わない (Claude に list_categories で
+        //  候補を見せ、category 引数で明示指定させる方針)。指定も履歴も無ければ未分類のまま。
         let allKindCats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
             .filter { $0.kind == kind }
             .sorted { $0.sortOrder < $1.sortOrder }
-        // カテゴリ決定: ①過去の自分の分類履歴 → ②AI 提案 → ③同 kind の先頭
-        var picked: ExpenseCategory? = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet)
-        if picked == nil, CategoryAISuggestor.isAvailable {
-            let names = allKindCats.map { $0.displayName }
-            if !names.isEmpty,
-               let suggestedName = await CategoryAISuggestor.suggest(
-                title: title,
-                kind: kind,
-                categories: names
-               ) {
-                picked = allKindCats.first(where: { $0.displayName == suggestedName })
-            }
+        var picked: ExpenseCategory? = nil
+        if let catName = (parsed["category"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !catName.isEmpty {
+            let target = catName.lowercased()
+            picked = allKindCats.first(where: { $0.displayName.lowercased() == target })
+                ?? allKindCats.first(where: { ($0.name ?? "").lowercased() == target })
         }
-        let firstCategory = picked ?? allKindCats.first
+        if picked == nil {
+            picked = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet)
+        }
+        let firstCategory = picked
 
         // 永続化
         let expense = Expense(context: ctx)
@@ -536,6 +535,65 @@ enum QuickIntentLogic {
             "sheet": sheet.displayName,
             "count": members.count,
             "members": members
+        ]
+    }
+
+    /// シート内のカテゴリ一覧を返す (MCP の add_expense で `category` に渡す候補)。
+    /// 出力: { ok, sheet, count, categories: [{ name, kind, color }] }
+    @MainActor
+    static func categories(parsed: [String: Any]) -> [String: Any] {
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        let sheetName = (parsed["sheet"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // シート決定 (add/get/members と同じく最古シートフォールバック)
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        sheetReq.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: true)]
+        let sheet: ExpenseSheet
+        if !sheetName.isEmpty {
+            sheetReq.predicate = NSPredicate(format: "name == %@", sheetName)
+            if let s = (try? ctx.fetch(sheetReq))?.first {
+                sheet = s
+            } else {
+                sheetReq.predicate = nil
+                sheetReq.fetchLimit = 1
+                guard let fallback = (try? ctx.fetch(sheetReq))?.first else {
+                    return ["ok": false, "error": "no sheet found"]
+                }
+                sheet = fallback
+            }
+        } else {
+            sheetReq.fetchLimit = 1
+            guard let s = (try? ctx.fetch(sheetReq))?.first else {
+                return ["ok": false, "error": "no sheet found"]
+            }
+            sheet = s
+        }
+
+        // kind フィルタ (任意): expense / income
+        let kindFilter: TransactionKind? = {
+            guard let k = (parsed["kind"] as? String)?.lowercased() else { return nil }
+            if k == "income" { return .income }
+            if k == "expense" { return .expense }
+            return nil
+        }()
+
+        let cats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
+            .filter { kindFilter == nil || $0.kind == kindFilter }
+            .sorted { ($0.kindRaw ?? "", $0.sortOrder, $0.displayName) < ($1.kindRaw ?? "", $1.sortOrder, $1.displayName) }
+        let list: [[String: Any]] = cats.map { c in
+            [
+                "name": c.displayName,
+                "kind": c.kind == .income ? "income" : "expense",
+                "color": c.colorHex ?? ""
+            ]
+        }
+        return [
+            "ok": true,
+            "sheet": sheet.displayName,
+            "count": list.count,
+            "categories": list
         ]
     }
 
