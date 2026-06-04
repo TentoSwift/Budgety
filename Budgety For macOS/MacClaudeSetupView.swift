@@ -21,8 +21,6 @@ struct MacClaudeSetupView: View {
         return "claude mcp add budgety -- \"\(path)\" --mcp"
     }
 
-    private static let claudeInstallCommand = "brew install anthropic/cli/claude-code"
-
     var body: some View {
         Form {
             Section {
@@ -34,33 +32,23 @@ struct MacClaudeSetupView: View {
                         Text("Claude から支出を記録")
                             .font(.headline)
                     }
-                    Text("「コーヒー 350 円を追加」のように自然言語で Claude に頼むと、Budgety に直接記録されます。Budgety アプリ自体が MCP サーバーになるので、追加のインストールは不要です。")
+                    Text("「コーヒー 350 円を追加」のように自然言語で Claude に頼むと、Budgety に直接記録できます。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                    Label("Budgety アプリ自体が MCP サーバーです。MCP サーバーやその他のソフトウェアを新たにインストールすることはありません。お使いの Claude クライアントに、この Budgety を登録するだけです。", systemImage: "checkmark.shield")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.vertical, 4)
             }
 
             Section {
-                stepRow(
-                    number: 1,
-                    title: "Claude Code を用意",
-                    detail: "未インストールならターミナルで以下を実行 (既に入っていれば不要)。"
-                ) {
-                    copyableCommand(Self.claudeInstallCommand, key: "brew")
-                }
-            }
-
-            Section {
-                stepRow(
-                    number: 2,
-                    title: "Budgety を MCP サーバーとして登録",
-                    detail: "ターミナルで以下を実行。Budgety アプリ本体をそのまま MCP サーバーとして登録します。"
-                ) {
-                    copyableCommand(registerCommand, key: "register")
-                }
+                copyableCommand(registerCommand, key: "register")
+            } header: {
+                Text("Claude に Budgety を登録")
             } footer: {
-                Text("登録後、Claude Code を再起動すると `mcp__budgety__add_expense` `mcp__budgety__get_expenses` が使えます。")
+                Text("お使いの Claude クライアント (Claude Code など) で上記コマンドを実行すると、この Budgety アプリ本体が MCP サーバーとして登録されます。新しいソフトウェアはインストールされません。登録後にクライアントを再起動すると mcp__budgety__add_expense / get_expenses / list_categories が使えます。")
                     .font(.caption)
             }
 
@@ -76,30 +64,6 @@ struct MacClaudeSetupView: View {
     }
 
     // MARK: - Subviews
-
-    @ViewBuilder
-    private func stepRow<Content: View>(
-        number: Int,
-        title: String,
-        detail: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("\(number)")
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(.tint))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            content()
-        }
-        .padding(.vertical, 4)
-    }
 
     @ViewBuilder
     private func copyableCommand(_ command: String, key: String) -> some View {

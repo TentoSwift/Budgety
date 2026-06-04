@@ -134,23 +134,8 @@ struct SettingsView: View {
                     }
                 }
 
-                Section {
-                    NavigationLink {
-                        ClaudeIntegrationView()
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Claude と連携")
-                                Text("自然言語で支出を記録")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.purple.gradient)
-                        }
-                    }
-                }
+                // Claude / MCP 連携は macOS 専用 (アプリ本体を MCP サーバーとして登録する方式)。
+                // iOS はバイナリを CLI 起動できないため、この導線は macOS のみに置く。
 
                 Section("バージョン") {
                     infoRow("Budgety") {

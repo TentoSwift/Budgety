@@ -1094,34 +1094,6 @@ struct BudgetyMacSettingsView: View {
                 }
             }
 
-            Section {
-                TextField("https://www.icloud.com/share/...", text: $shareURLText)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Button {
-                        Task { await acceptURL() }
-                    } label: {
-                        if acceptInProgress {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("URL を貼り付けて参加")
-                        }
-                    }
-                    .disabled(shareURLText.isEmpty || acceptInProgress)
-                    Spacer()
-                }
-                if let acceptMessage {
-                    Text(acceptMessage)
-                        .font(.caption)
-                        .foregroundStyle(acceptMessage.contains("失敗") ? .red : .secondary)
-                }
-            } header: {
-                Text("共有シートに参加")
-            } footer: {
-                Text("メールで届いた共有リンク (https://www.icloud.com/share/... または cloudkit-... など) を貼り付けて参加できます。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
             // Claude / MCP 連携。macOS は外部 npm ではなく「アプリ本体を MCP サーバーとして登録」
             // する方式 (App Store 2.4.5(ii) 準拠: 追加コードを共有場所にインストールしない)。
             Section {
