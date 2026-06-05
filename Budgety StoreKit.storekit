@@ -1,0 +1,121 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "4D69E933",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "39.99",
+      "familyShareable" : true,
+      "internalID" : "6768556738",
+      "localizations" : [
+        {
+          "description" : "一度の購入で永続的に全機能を使えます。",
+          "displayName" : "Premium ライフタイムプラン",
+          "locale" : "ja"
+        }
+      ],
+      "productID" : "com.tento.Budgety.premium.lifetime",
+      "referenceName" : "Premium Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6768543053",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_developerTeamID" : "LV3H7Q68W6",
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 802092646.90681505,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "22082946",
+      "localizations" : [
+
+      ],
+      "name" : "Budgety Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "1.99",
+          "familyShareable" : true,
+          "groupNumber" : 3,
+          "internalID" : "6768548005",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "全機能を月間プランでアンロック。",
+              "displayName" : "Premium 月間プラン",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "com.tento.Budgety.subscription.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Premium Monthly",
+          "subscriptionGroupID" : "22082946",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "19.99",
+          "familyShareable" : true,
+          "groupNumber" : 2,
+          "internalID" : "6768547165",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "全機能を年間プランでアンロック。",
+              "displayName" : "Premium 年間プラン",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "com.tento.Budgety.subscription.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Premium Yearly",
+          "subscriptionGroupID" : "22082946",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
