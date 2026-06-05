@@ -16,6 +16,7 @@
 
 import Foundation
 import CoreData
+import AppKit
 
 enum MCPServer {
     static let serverName = "budgety"
@@ -29,6 +30,10 @@ enum MCPServer {
     /// (add/get) で `PersistenceController.shared` 経由で読み込む。これにより initialize /
     /// tools/list は CloudKit 無しでも応答でき、データ操作時のみストアを開く。
     static func run() -> Never {
+        // .app バンドルのバイナリを直接起動すると macOS は「GUI アプリ起動」として扱い、Dock に
+        // 2 つ目の Budgety が出る / この --mcp プロセスは通常の AppKit イベントループを回さないため
+        // 「応答なし」になる。バックグラウンドエージェント化 (.prohibited) して Dock/UI に出さない。
+        NSApplication.shared.setActivationPolicy(.prohibited)
         log("Budgety MCP server starting…")
         // 読み取りループは別スレッド (readLine がブロックするため)。main スレッドは RunLoop を
         // 回して @MainActor (= main スレッド) のツール実行を処理させる。
