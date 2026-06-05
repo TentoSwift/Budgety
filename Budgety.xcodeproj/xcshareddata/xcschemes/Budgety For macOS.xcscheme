@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2620"
+   LastUpgradeVersion = "2630"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "2DDCE11D2FA8974700A42F60"
+               BlueprintIdentifier = "4D18B4C12FB31605006F2C30"
                BuildableName = "Budgety.app"
-               BlueprintName = "Budgety"
+               BlueprintName = "Budgety For macOS"
                ReferencedContainer = "container:Budgety.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -44,9 +44,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "2DDCE11D2FA8974700A42F60"
+            BlueprintIdentifier = "4D18B4C12FB31605006F2C30"
             BuildableName = "Budgety.app"
-            BlueprintName = "Budgety"
+            BlueprintName = "Budgety For macOS"
             ReferencedContainer = "container:Budgety.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -64,9 +64,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "2DDCE11D2FA8974700A42F60"
+            BlueprintIdentifier = "4D18B4C12FB31605006F2C30"
             BuildableName = "Budgety.app"
-            BlueprintName = "Budgety"
+            BlueprintName = "Budgety For macOS"
             ReferencedContainer = "container:Budgety.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
