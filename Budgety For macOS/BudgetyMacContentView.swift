@@ -34,6 +34,8 @@ struct BudgetyMacContentView: View {
     @State private var unlockingSheet: ExpenseSheet?
     /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
     @State private var searchTotalCurrency: String = CurrencyCatalog.defaultCode
+    /// アーカイブ済みセクションの開閉状態。折りたたみ可能・端末に永続化。
+    @AppStorage("macArchivedSectionExpanded") private var archivedExpanded = true
     @StateObject private var lockManager = SheetLockManager.shared
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -141,7 +143,8 @@ struct BudgetyMacContentView: View {
                     .tag(sheet)
                 }
                 if !archivedSheets.isEmpty {
-                    Section("アーカイブ済み") {
+                    // 折りたたみ可能なセクション (一覧を閉じられる)。開閉状態は永続化。
+                    Section("アーカイブ済み", isExpanded: $archivedExpanded) {
                         ForEach(archivedSheets) { sheet in
                             NavigationLink(value: sheet) {
                                 sheetRow(sheet)
@@ -232,8 +235,12 @@ struct BudgetyMacContentView: View {
                     .foregroundStyle(.white)
                     .font(.callout.weight(.semibold))
             }
+            // アーカイブ済みは一覧で控えめに見せる (アイコンを減光・名前を secondary)。
+            .opacity(sheet.archived ? 0.5 : 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(sheet.displayName).font(.body.weight(.medium))
+                Text(sheet.displayName)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(sheet.archived ? .secondary : .primary)
                 Text(monthlyLabel(for: sheet))
                     .font(.caption)
                     .foregroundStyle(.secondary)
