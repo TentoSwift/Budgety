@@ -558,9 +558,16 @@ struct BudgetyMacSheetView: View {
     /// 一覧は通常時は全期間を表示する (検索中のみ一覧にも反映)。
     private var periodMenu: some View {
         Menu {
-            Picker("期間", selection: effectivePeriodBinding) {
-                ForEach(Period.allCases) { p in
-                    Text(p.label).tag(p)
+            // Picker をネストすると macOS では「期間」サブメニュー化して 2 段階に
+            // なるため、各期間を直接 Button にして 1 タップで選べるようにする (iOS と同じ)。
+            ForEach(Period.allCases) { p in
+                Button {
+                    effectivePeriodBinding.wrappedValue = p
+                } label: {
+                    HStack {
+                        Text(p.label)
+                        if p == effectivePeriod { Image(systemName: "checkmark") }
+                    }
                 }
             }
         } label: {
