@@ -73,6 +73,8 @@ struct BudgetyMacSheetView: View {
     @State private var selectedPayerID: String?
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
+    /// 検索中だけ使う期間。永続化せず、検索のたびに全期間から始める (iOS と同じ)。
+    @State private var searchPeriod: Period = .all
 
     /// 集計・一覧の対象期間 (iOS の SheetDetailView.Period 相当)。
     enum Period: String, CaseIterable, Identifiable {
@@ -146,18 +148,32 @@ struct BudgetyMacSheetView: View {
         return list
     }
 
-    /// サマリー合計用の支出。期間ピッカーで選んだ期間 + カテゴリ・支払い者・検索を適用。
-    /// 期間は「合計のみ」に反映するため、こちらは常に period で絞り込む。
+    /// 検索中か (在シート検索のテキストが入っている)。
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+    /// 有効な期間。検索中は searchPeriod、通常時は永続化された period (iOS と同じ)。
+    private var effectivePeriod: Period { isSearching ? searchPeriod : period }
+    /// 期間メニュー用バインディング。検索中は searchPeriod、通常時は period を読み書き。
+    private var effectivePeriodBinding: Binding<Period> {
+        Binding(
+            get: { isSearching ? searchPeriod : period },
+            set: { newValue in
+                if isSearching { searchPeriod = newValue } else { period = newValue }
+            }
+        )
+    }
+
+    /// サマリー合計用の支出。期間 (検索中は searchPeriod) + カテゴリ・支払い者・検索を適用。
     private var summaryExpenses: [Expense] {
-        applyNonPeriodFilters(allExpenses.filter { period.contains($0.date) })
+        applyNonPeriodFilters(allExpenses.filter { effectivePeriod.contains($0.date) })
     }
 
     /// 一覧表示用の支出。通常時は期間を適用せず全期間を表示する
     /// (期間ピッカーは合計のみに反映)。検索中のみ期間も適用する (iOS の挙動に合わせる)。
     private var listExpenses: [Expense] {
         let base = applyNonPeriodFilters(allExpenses)
-        let isSearching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        return isSearching ? base.filter { period.contains($0.date) } : base
+        return isSearching ? base.filter { effectivePeriod.contains($0.date) } : base
     }
 
     // MARK: - 仮想 occurrence (完全仮想化。フラグ OFF なら全て空)
@@ -190,14 +206,13 @@ struct BudgetyMacSheetView: View {
 
     /// サマリー合計用の仮想 (期間 + フィルタ)。
     private var summaryVirtuals: [RecurringOccurrence] {
-        applyNonPeriodFiltersV(allVirtuals.filter { period.contains($0.date) })
+        applyNonPeriodFiltersV(allVirtuals.filter { effectivePeriod.contains($0.date) })
     }
 
     /// 一覧用の仮想 (検索中のみ期間を適用)。
     private var listVirtuals: [RecurringOccurrence] {
         let base = applyNonPeriodFiltersV(allVirtuals)
-        let isSearching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        return isSearching ? base.filter { period.contains($0.date) } : base
+        return isSearching ? base.filter { effectivePeriod.contains($0.date) } : base
     }
 
     /// 絞り込みが有効か。
@@ -324,6 +339,12 @@ struct BudgetyMacSheetView: View {
             .frame(maxWidth: .infinity)
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: Text("支出・収入を検索"))
+        // 検索が空に戻ったら次の検索に備えて期間を全期間へ (iOS と同じ挙動)。
+        .onChange(of: searchText) { _, newValue in
+            if newValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                searchPeriod = .all
+            }
+        }
         // 別シートへ切り替わったらフィルタ (検索・カテゴリ・支払者) を解除する。
         // detail の BudgetyMacSheetView は位置が同じため再生成されず @State が残るので、
         // sheet の変化を検知して明示的にクリアする。
@@ -498,6 +519,7 @@ struct BudgetyMacSheetView: View {
         selectedCategory = nil
         filterUncategorized = false
         selectedPayerID = nil
+        searchPeriod = .all
     }
 
     private enum ExportFormat { case csv, pdf }
@@ -536,14 +558,14 @@ struct BudgetyMacSheetView: View {
     /// 一覧は通常時は全期間を表示する (検索中のみ一覧にも反映)。
     private var periodMenu: some View {
         Menu {
-            Picker("期間", selection: $period) {
+            Picker("期間", selection: effectivePeriodBinding) {
                 ForEach(Period.allCases) { p in
                     Text(p.label).tag(p)
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Text(period.label)
+                Text(effectivePeriod.label)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2)
             }
