@@ -40,6 +40,8 @@ struct MacAddExpenseView: View {
     @State private var kind: TransactionKind = .expense
     @State private var note: String = ""
     @State private var selectedCategory: ExpenseCategory?
+    /// カテゴリの新規追加シート表示。
+    @State private var showingNewCategory = false
     @State private var payerProfileID: String = ""
     @State private var selectedBeneficiaries: Set<String> = []
     /// 割り勘トグル。オフ = 支払者のみの負担 (受益者 = 支払者)。
@@ -212,6 +214,14 @@ struct MacAddExpenseView: View {
                         }
                     }
                     .tint(sheet.tint)
+                    // iOS の CategoryPickerView と同様、ここからカテゴリを新規追加できる。
+                    Button {
+                        showingNewCategory = true
+                    } label: {
+                        Label("新しいカテゴリを追加", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(sheet.tint)
                 }
                 aiCategorySuggestionSection
                 Section(kind == .income ? "受取者" : "支払い者") {
@@ -306,6 +316,12 @@ struct MacAddExpenseView: View {
         .frame(width: 560, height: 720)
         .tint(sheet.tint)
         .sheet(isPresented: $showMemberPaywall) { PaywallView() }
+        .sheet(isPresented: $showingNewCategory) {
+            // 支出追加画面からカテゴリを新規作成し、作成後はそれを選択する。
+            MacEditCategoryView(mode: .create(record: sheet, defaultKind: kind)) { newCat in
+                selectedCategory = newCat
+            }
+        }
         .alert(editingMemberID == nil ? "メンバーを追加" : "名前を変更",
                isPresented: $showAddMemberPrompt) {
             TextField("名前", text: $newMemberName)
