@@ -617,6 +617,10 @@ struct BudgetyMacSheetView: View {
                            color: remaining < 0 ? .red : .primary)
                     .padding(.top, 4)
             }
+            // 月予算プログレスバー (残予算と同条件 = 今月 + 予算設定 + 非フィルタ)。
+            if let budget = sheet.monthlyBudgetDecimal, budget > 0, remaining != nil {
+                macBudgetBar(spent: monthlyTotal, budget: budget, code: code)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
@@ -643,6 +647,36 @@ struct BudgetyMacSheetView: View {
     private func signedAmount(_ v: Decimal, code: String) -> String {
         let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
         return sign + CurrencyCatalog.format(v.magnitude, code: code)
+    }
+
+    /// 月予算の進捗バー (iOS の cleanBudgetBar と同じ見た目)。
+    @ViewBuilder
+    private func macBudgetBar(spent: Decimal, budget: Decimal, code: String) -> some View {
+        let ratio = budget > 0 ? NSDecimalNumber(decimal: spent / budget).doubleValue : 0
+        let clamped = max(0, min(1, ratio))
+        let isOver = spent > budget
+        let color: Color = isOver ? .red : (ratio >= 0.8 ? .orange : .primary)
+        VStack(spacing: 8) {
+            HStack {
+                Text("予算 \(CurrencyCatalog.format(budget, code: code))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(Int((ratio * 100).rounded())) %")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(color)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.15))
+                    Capsule()
+                        .fill(color)
+                        .frame(width: geo.size.width * clamped)
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(.top, 4)
     }
 
     /// シートの参加者一覧 (Apple ID 名 + アバター)。
@@ -938,7 +972,10 @@ struct BudgetyMacSheetView: View {
     private func dayHeader(_ d: Date) -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "ja_JP")
-        df.dateFormat = "yyyy年M月d日 (E)"
+        // 今年は「M月d日 (E)」、それ以外は年付き「yyyy年M月d日 (E)」(iOS の一覧と統一)。
+        let cal = Calendar.current
+        let isCurrentYear = cal.component(.year, from: d) == cal.component(.year, from: .now)
+        df.dateFormat = isCurrentYear ? "M月d日 (E)" : "yyyy年M月d日 (E)"
         return df.string(from: d)
     }
 
