@@ -20,6 +20,8 @@ struct MacEditCategoryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let mode: Mode
+    /// 新規作成時、作成した ExpenseCategory を呼び出し元へ渡す (支出追加画面で自動選択する等)。
+    var onCreate: ((ExpenseCategory) -> Void)? = nil
 
     @State private var name: String = ""
     @State private var selectedColor: String = "#FF9500"
@@ -362,6 +364,7 @@ struct MacEditCategoryView: View {
             cat.sortOrder = nextSortOrder(in: sheet)
             cat.sheet = sheet
             PersistenceController.shared.save()
+            onCreate?(cat)
         case .edit(let category):
             viewContext.refresh(category, mergeChanges: true)
             category.name = trimmed
