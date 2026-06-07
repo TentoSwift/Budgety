@@ -146,6 +146,21 @@ struct SettingsView: View {
                     } label: {
                         Label("ライセンス", systemImage: "doc.text")
                     }
+                    Link(destination: URL(string: "https://apps.apple.com/app/id6768543053?action=write-review")!) {
+                        Label {
+                            HStack {
+                                Text("App Store でレビュー")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(.yellow)
+                        }
+                    }
                     Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/support.html")!) {
                         Label {
                             HStack {
