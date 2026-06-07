@@ -224,6 +224,9 @@ struct AddExpenseView: View {
         // AX サイズだと SF Symbol + padding が巨大化して UI が崩れるので、
         // バー全体の Dynamic Type を .xxLarge までにキャップする。
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        // 演算子 / = ボタンをシートの色で塗る。safeAreaInset 内なので List 側の
+        // .tint(sheetTint) を継承せず既定色になるため、ここで明示的に適用する。
+        .tint(sheetTint)
     }
 
     /// バー上に出す計算式 ("1000 + 200" 等)。
