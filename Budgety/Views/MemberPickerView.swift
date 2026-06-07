@@ -561,10 +561,13 @@ struct MemberPickerView: View {
     /// 識別子が永続化され、精算画面で他端末からも解決できるようになる。
     private func selectFromParticipant(_ info: ParticipantInfo) {
         let matched: Member? = {
-            if let rn = info.recordName, !rn.isEmpty,
-               let m = allMembers.first(where: { $0.recordName == rn }) {
-                return m
+            // recordName があるとき (バーチャルメンバー / CKShare 参加者) は recordName 一致のみで
+            // 解決する。一致が無ければ新規作成に回し、同名の別メンバーへ名前フォールバックで
+            // 誤マッチ (別人を支払者にする / 別人 Member の recordName を上書きする) のを防ぐ。
+            if let rn = info.recordName, !rn.isEmpty {
+                return allMembers.first(where: { $0.recordName == rn })
             }
+            // recordName を持たない旧データのみ名前一致でフォールバックする。
             return allMembers.first(where: { $0.name == info.name })
         }()
         if let existing = matched {
