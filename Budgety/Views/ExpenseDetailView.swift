@@ -52,6 +52,10 @@ struct ExpenseDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("編集") { showingEdit = true }
+                    #if os(macOS)
+                    // macOS の編集ボタンをシートの色で塗る (iOS は従来の nav tint のまま)。
+                    .tint(expense.sheet?.tint)
+                    #endif
             }
         }
         .sheet(isPresented: $showingEdit) {
