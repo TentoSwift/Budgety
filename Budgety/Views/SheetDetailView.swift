@@ -114,7 +114,9 @@ struct SheetDetailView: View {
         }
     }
 
-    @State private var period: Period = .thisMonth
+    // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
+    // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
+    @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
