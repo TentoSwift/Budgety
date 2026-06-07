@@ -71,7 +71,8 @@ struct BudgetyMacSheetView: View {
     /// 「カテゴリなし」(= category == nil) でフィルタ中か。selectedCategory と相互排他。
     @State private var filterUncategorized: Bool = false
     @State private var selectedPayerID: String?
-    @State private var period: Period = .thisMonth
+    // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
+    @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
 
     /// 集計・一覧の対象期間 (iOS の SheetDetailView.Period 相当)。
     enum Period: String, CaseIterable, Identifiable {
