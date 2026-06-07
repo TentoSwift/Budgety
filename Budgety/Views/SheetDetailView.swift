@@ -842,77 +842,73 @@ struct SheetDetailView: View {
         }
     }
 
+    /// カテゴリ絞り込みのチップ列。macOS 26 のメール風に「非選択 = アイコンのみ /
+    /// 選択 = カテゴリ色の背景 + ラベルに展開」する (選択切替はアニメーション)。
     private var categoryPills: some View {
         let isAllSelected = selectedCategory == nil && !filterUncategorized
-        let uncategorizedTint = Color.gray
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button {
+                filterPill(icon: "square.grid.2x2.fill", label: "すべて",
+                           color: record.tint, selected: isAllSelected) {
                     selectedCategory = nil
                     filterUncategorized = false
-                } label: {
-                    Text("すべて")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(isAllSelected ? record.tint : Color.platformSecondarySystemFill)
-                        )
-                        // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(isAllSelected ? Color.platformSystemBackground : .primary)
                 }
-                .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
-                    Button {
-                        if selectedCategory?.objectID == cat.objectID {
+                    let isSelected = selectedCategory?.objectID == cat.objectID
+                    filterPill(icon: cat.displaySymbol, label: cat.displayName,
+                               color: cat.tint, selected: isSelected) {
+                        if isSelected {
                             selectedCategory = nil
                         } else {
                             selectedCategory = cat
                             filterUncategorized = false
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: cat.displaySymbol)
-                            Text(cat.displayName)
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformSecondarySystemFill)
-                        )
-                        // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 // カテゴリなしの支出が 1 件でもあれば「カテゴリなし」ピルを出す。
                 if hasUncategorizedExpenses {
-                    Button {
+                    filterPill(icon: "tag.slash", label: "カテゴリなし",
+                               color: .gray, selected: filterUncategorized) {
                         filterUncategorized.toggle()
                         if filterUncategorized { selectedCategory = nil }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "list.bullet")
-                            Text("カテゴリなし")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(filterUncategorized ? uncategorizedTint : Color.platformSecondarySystemFill)
-                        )
-                        .foregroundStyle(filterUncategorized ? Color.platformSystemBackground : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 2)
+            .animation(.snappy, value: selectedCategory)
+            .animation(.snappy, value: filterUncategorized)
         }
+    }
+
+    /// メール風フィルタピル。非選択はアイコンのみ、選択時に color 背景 + ラベルへ展開する。
+    /// アイコンのみの時も VoiceOver でラベルを読み上げる。
+    @ViewBuilder
+    private func filterPill(icon: String, label: String, color: Color,
+                            selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                if selected {
+                    Text(label).lineLimit(1).fixedSize()
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, selected ? 12 : 9)
+            .padding(.vertical, 6)
+            .frame(minHeight: 28)
+            .background(
+                Capsule()
+                    .fill(selected ? color : Color.platformSecondarySystemFill)
+            )
+            // 選択中は塗り (color) の上に背景色のテキスト/アイコンを抜き文字で乗せる。
+            .foregroundStyle(selected ? Color.platformSystemBackground : .primary)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     /// カテゴリ未設定 (= category == nil) の支出が含まれているか。仮想 occurrence も含める。
