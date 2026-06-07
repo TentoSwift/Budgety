@@ -896,8 +896,8 @@ struct SheetDetailView: View {
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, selected ? 12 : 9)
-            .padding(.vertical, 6)
-            .frame(minHeight: 28)
+            // 高さは固定にして、アイコン (SF Symbol) の高さに依らず全ピルで揃える。
+            .frame(height: 28)
             .background(
                 Capsule()
                     .fill(selected ? color : Color.platformSecondarySystemFill)
