@@ -199,7 +199,10 @@ struct MacAddExpenseView: View {
                         .labelsHidden()
                 }
                 Section("日付") {
+                    // macOS の DatePicker / Picker / Toggle は親の .tint を継承しないため、
+                    // 各コントロールへ直接 sheet.tint を適用する。
                     DatePicker("日付", selection: $date, displayedComponents: .date)
+                        .tint(sheet.tint)
                 }
                 Section("カテゴリ") {
                     Picker("カテゴリ", selection: $selectedCategory) {
@@ -208,6 +211,7 @@ struct MacAddExpenseView: View {
                             Text(c.displayName).tag(Optional(c))
                         }
                     }
+                    .tint(sheet.tint)
                 }
                 aiCategorySuggestionSection
                 Section(kind == .income ? "受取者" : "支払い者") {
@@ -229,6 +233,7 @@ struct MacAddExpenseView: View {
                                 }
                             }
                         ))
+                        .tint(sheet.tint)
                         if splitEnabled {
                             beneficiariesList
                             Button {
