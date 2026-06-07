@@ -1311,10 +1311,10 @@ private struct SummaryCard: View {
                 }
             }
 
-            // 大型の収支 (収入 − 支出)。黒字 = 緑 / 赤字 = 赤。Mac と同じ rounded font
+            // 大型の収支 (収入 − 支出)。色分けはしない (primary)。Mac と同じ rounded font
             Text(signedAmount(net))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(netColor(net))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(net)))
@@ -1450,11 +1450,6 @@ private struct SummaryCard: View {
     private func signedAmount(_ v: Decimal) -> String {
         let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
         return sign + CurrencyCatalog.format(v.magnitude, code: code)
-    }
-
-    /// 収支の色 (黒字 = green / 赤字 = red / 0 = primary)。
-    private func netColor(_ v: Decimal) -> Color {
-        v > 0 ? .green : (v < 0 ? .red : .primary)
     }
 
     private enum DotStyle {

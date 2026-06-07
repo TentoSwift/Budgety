@@ -592,11 +592,11 @@ struct BudgetyMacSheetView: View {
                 }
             }
             periodMenu
-            // 大型の収支 (収入 − 支出)。黒字 = 緑 / 赤字 = 赤。
+            // 大型の収支 (収入 − 支出)。色分けはしない (primary)。
             Text(signedAmount(net, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(netColor(net))
+                .foregroundStyle(.primary)
                 .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: net).doubleValue))
                 .animation(reduceMotion ? nil : .snappy, value: net)
 
@@ -643,11 +643,6 @@ struct BudgetyMacSheetView: View {
     private func signedAmount(_ v: Decimal, code: String) -> String {
         let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
         return sign + CurrencyCatalog.format(v.magnitude, code: code)
-    }
-
-    /// 収支の色 (黒字 = green / 赤字 = red / 0 = primary)。
-    private func netColor(_ v: Decimal) -> Color {
-        v > 0 ? .green : (v < 0 ? .red : .primary)
     }
 
     /// シートの参加者一覧 (Apple ID 名 + アバター)。
