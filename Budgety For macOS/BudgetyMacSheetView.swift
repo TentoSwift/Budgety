@@ -758,67 +758,68 @@ struct BudgetyMacSheetView: View {
         .padding(.horizontal, 8)
     }
 
-    /// カテゴリ絞り込みのチップ列 (すべて + 使用中カテゴリ)。
+    /// カテゴリ絞り込みのチップ列。macOS 26 のメール風に「非選択 = アイコンのみ /
+    /// 選択 = カテゴリ色の背景 + ラベルに展開」する (選択切替はアニメーション)。
     private var categoryPills: some View {
         let isAllSelected = selectedCategory == nil && !filterUncategorized
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button {
+                filterPill(icon: "square.grid.2x2.fill", label: "すべて",
+                           color: sheet.tint, selected: isAllSelected) {
                     selectedCategory = nil
                     filterUncategorized = false
-                } label: {
-                    Text("すべて")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(isAllSelected ? sheet.tint : Color.gray.opacity(0.2)))
-                        .foregroundStyle(isAllSelected ? .white : .primary)
                 }
-                .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
                     let isSelected = selectedCategory?.objectID == cat.objectID
-                    Button {
+                    filterPill(icon: cat.displaySymbol, label: cat.displayName,
+                               color: cat.tint, selected: isSelected) {
                         if isSelected {
                             selectedCategory = nil
                         } else {
                             selectedCategory = cat
                             filterUncategorized = false
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: cat.displaySymbol)
-                            Text(cat.displayName)
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(isSelected ? cat.tint : Color.gray.opacity(0.2)))
-                        .foregroundStyle(isSelected ? .white : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 if hasUncategorizedExpenses {
-                    Button {
+                    filterPill(icon: "tag.slash", label: "カテゴリなし",
+                               color: .gray, selected: filterUncategorized) {
                         filterUncategorized.toggle()
                         if filterUncategorized { selectedCategory = nil }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "list.bullet")
-                            Text("カテゴリなし")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(filterUncategorized ? Color.gray : Color.gray.opacity(0.2)))
-                        .foregroundStyle(filterUncategorized ? .white : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 8)
+            .animation(.snappy, value: selectedCategory)
+            .animation(.snappy, value: filterUncategorized)
         }
+    }
+
+    /// メール風フィルタピル。非選択はアイコンのみ、選択時に color 背景 + ラベルへ展開する。
+    /// アイコンのみの時も VoiceOver でラベルを読み上げる。
+    @ViewBuilder
+    private func filterPill(icon: String, label: String, color: Color,
+                            selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                if selected {
+                    Text(label).lineLimit(1).fixedSize()
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, selected ? 12 : 9)
+            .padding(.vertical, 6)
+            .frame(minHeight: 28)
+            .background(Capsule().fill(selected ? color : Color.gray.opacity(0.2)))
+            .foregroundStyle(selected ? .white : .primary)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private var expensesList: some View {
