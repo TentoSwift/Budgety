@@ -1153,6 +1153,9 @@ struct BudgetyMacSettingsView: View {
             }
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
+                Link(destination: URL(string: "https://apps.apple.com/app/id6768543053?action=write-review")!) {
+                    Label("App Store でレビュー", systemImage: "star.fill")
+                }
             }
         }
         .formStyle(.grouped)
