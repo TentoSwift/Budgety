@@ -921,14 +921,8 @@ struct AddExpenseView: View {
     /// 「？マーク dashed circle」+ 「未選択」テキストを薄色で出す。
     private var unspecifiedPayerPreview: some View {
         Group {
-            ZStack {
-                Circle()
-                    .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(width: 24, height: 24)
-                Image(systemName: "person.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
+            // 他のアバターと同じ @ScaledMetric スケーリングにするため共通コンポーネントを使う。
+            UnspecifiedAvatarView(size: 24)
             Text("未選択").foregroundStyle(.secondary)
         }
     }

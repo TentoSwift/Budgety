@@ -113,13 +113,8 @@ struct MemberPickerView: View {
                 dismiss()
             } label: {
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "person.fill")
-                            .foregroundStyle(.tertiary)
-                    }
+                    // 他のメンバー行のアバター (size 36) と同じ @ScaledMetric スケーリングにする。
+                    UnspecifiedAvatarView(size: 36)
                     Text("未選択")
                         .foregroundStyle(.primary)
                     Spacer()
