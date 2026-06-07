@@ -571,6 +571,7 @@ struct MacAddSheetView: View {
     @State private var colorHex: String = "#5B8DEF"
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    @State private var budgetText: String = ""
 
     var body: some View {
         MacSheetFormDialog(
@@ -579,6 +580,7 @@ struct MacAddSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
+            budgetText: $budgetText,
             primaryActionLabel: "OK",
             onCancel: { dismiss() },
             onSave: { save() }
@@ -591,6 +593,7 @@ struct MacAddSheetView: View {
         sheet.colorHex = colorHex
         sheet.symbol = symbol
         sheet.defaultCurrencyCode = currencyCode
+        sheet.monthlyBudgetDecimal = Decimal(string: budgetText)
         sheet.createdAt = .now
         PersistenceController.seedDefaultCategories(for: sheet, in: viewContext)
         PersistenceController.shared.save()
@@ -615,6 +618,7 @@ struct MacEditSheetView: View {
     @State private var colorHex: String = "#5B8DEF"
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    @State private var budgetText: String = ""
     /// 編集ドラフト。「保存」を押すまで record には書かない。
     @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
@@ -634,6 +638,7 @@ struct MacEditSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
+            budgetText: $budgetText,
             archiveBinding: $archivedDraft,
             manageMembersAction: { showingMembers = true },
             primaryActionLabel: "保存",
@@ -685,6 +690,9 @@ struct MacEditSheetView: View {
         colorHex = record.colorHex ?? "#5B8DEF"
         symbol = record.symbol ?? "person.2.fill"
         currencyCode = record.resolvedDefaultCurrencyCode
+        if let budget = record.monthlyBudgetDecimal, budget > 0 {
+            budgetText = NSDecimalNumber(decimal: budget).stringValue
+        }
         archivedDraft = record.archived
     }
 
@@ -695,6 +703,7 @@ struct MacEditSheetView: View {
         record.colorHex = colorHex
         record.symbol = symbol
         record.defaultCurrencyCode = currencyCode
+        record.monthlyBudgetDecimal = Decimal(string: budgetText)
         if record.archived != archivedDraft { record.archived = archivedDraft }
         PersistenceController.shared.save()
         dismiss()
@@ -710,6 +719,8 @@ private struct MacSheetFormDialog: View {
     @Binding var colorHex: String
     @Binding var symbol: String
     @Binding var currencyCode: String
+    /// 月予算 (任意・空 or 0 で予算なし)。「今月」表示時に進捗バーで残額を可視化。
+    @Binding var budgetText: String
     /// nil でない時のみアーカイブ Toggle 行を出す (= Edit のみ)。
     /// Add 時はシートがまだ存在しないので非表示。
     var archiveBinding: Binding<Bool>? = nil
@@ -796,6 +807,16 @@ private struct MacSheetFormDialog: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(maxWidth: 320, alignment: .leading)
+                        Spacer(minLength: 0)
+                    }
+
+                    Divider().padding(.top, 4)
+
+                    // 月予算 (任意・「今月」表示時に進捗バーで残額を可視化)
+                    formRow(label: "月予算:") {
+                        TextField("", text: $budgetText, prompt: Text("0 (なし)"))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 160)
                         Spacer(minLength: 0)
                     }
 
