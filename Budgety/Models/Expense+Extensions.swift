@@ -165,9 +165,12 @@ extension Expense {
         }
         // 2) displayName 一致 (旧データ移行用)。同名が複数いると Set の列挙順次第で
         //    別人を拾い、背景色がチカチカ入れ替わるため、recordName でソートして決定的に選ぶ。
+        //    バーチャルメンバーは除外する: payerProfileID を持たない旧支出に対し、後から
+        //    同名のバーチャルメンバーを追加しても (名前一致で) その支払者表示を乗っ取らない
+        //    ようにする。バーチャルが支払者の支出は payerProfileID で 1) により解決される。
         guard let name = paidBy, !name.isEmpty else { return nil }
         return profiles
-            .filter { $0.displayName == name }
+            .filter { $0.displayName == name && !UserProfileStore.isVirtualRecordName($0.recordName ?? "") }
             .sorted { ($0.recordName ?? "") < ($1.recordName ?? "") }
             .first
     }
