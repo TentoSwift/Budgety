@@ -117,6 +117,8 @@ struct SheetDetailView: View {
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
+    /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 28
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
@@ -896,8 +898,8 @@ struct SheetDetailView: View {
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, selected ? 12 : 9)
-            // 高さは固定にして、アイコン (SF Symbol) の高さに依らず全ピルで揃える。
-            .frame(height: 28)
+            // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
+            .frame(height: filterPillHeight)
             .background(
                 Capsule()
                     .fill(selected ? color : Color.platformSecondarySystemFill)
