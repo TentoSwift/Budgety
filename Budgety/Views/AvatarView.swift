@@ -186,3 +186,30 @@ struct PayerAvatar: View {
         }
     }
 }
+
+/// 「未選択」を表す破線サークル + person アイコン。
+/// AvatarView と同じ @ScaledMetric (body 基準・最大 1.5x) でスケールするので、
+/// アクセシビリティ文字サイズ拡大時も他のアバターと同じ大きさになる。
+struct UnspecifiedAvatarView: View {
+    private let baseSize: CGFloat
+    @ScaledMetric private var scaledSize: CGFloat
+
+    init(size: CGFloat = 40) {
+        self.baseSize = size
+        self._scaledSize = ScaledMetric(wrappedValue: size, relativeTo: .body)
+    }
+
+    private var size: CGFloat { min(scaledSize, baseSize * 1.5) }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: size, height: size)
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.45, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(width: size, height: size)
+    }
+}
