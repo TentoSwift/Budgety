@@ -867,6 +867,10 @@ struct AddExpenseView: View {
                 ObservedMemberAvatar(member: m, size: 24)
                 Text(m.displayName).foregroundStyle(.secondary)
             }
+        } else if payerExplicitlyCleared {
+            // ユーザーが picker で明示的に「未選択」を選んだ場合は、create / edit を
+            // 問わず自分へフォールバックせず「未選択」を表示する。
+            unspecifiedPayerPreview
         } else if case .edit(let expense) = mode,
                   let pid = expense.payerProfileID, !pid.isEmpty {
             // selectedPayer が解決失敗。編集対象 Expense の payerProfileID を canonical として
