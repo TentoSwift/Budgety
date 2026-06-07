@@ -95,6 +95,10 @@ struct ExpenseDetailView: View {
             .padding(.vertical, 8)
         }
         .listRowBackground(Color.clear)
+        #if os(macOS)
+        // ヘッダー (金額・タイトル) 下の区切り線を消す。
+        .listRowSeparator(.hidden)
+        #endif
     }
 
     // MARK: - Details
