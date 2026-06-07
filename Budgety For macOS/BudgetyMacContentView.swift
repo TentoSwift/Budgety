@@ -257,6 +257,10 @@ struct BudgetyMacContentView: View {
     }
 
     private func monthlyLabel(for sheet: ExpenseSheet) -> String {
+        // ロック中のシートは合計金額を一覧に出さない (解錠するまで隠す)。
+        if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
+            return "ロック中"
+        }
         let cal = Calendar.current
         let now = Date()
         let comps = cal.dateComponents([.year, .month], from: now)
