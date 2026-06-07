@@ -1311,19 +1311,19 @@ private struct SummaryCard: View {
                 }
             }
 
-            // 大型の支出合計 (Mac と同じ rounded font)
-            Text(CurrencyCatalog.format(t.expense, code: code))
+            // 大型の収支 (収入 − 支出)。黒字 = 緑 / 赤字 = 赤。Mac と同じ rounded font
+            Text(signedAmount(net))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.primary)
+                .foregroundStyle(netColor(net))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(t.expense)))
-                .animation(reduceMotion ? nil : .snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(net)))
+                .animation(reduceMotion ? nil : .snappy, value: net)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
-            // メトリクス列 (収支 / 残予算)
+            // メトリクス (残予算)。収支はヘッドライン (大きい金額) で表示
             metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
                        showRemaining: showBudgetMetrics)
 
@@ -1431,33 +1431,18 @@ private struct SummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// メトリクス列。収支 (収入があるとき) と残予算 (今月 + 予算設定時) を横並びで表示。
-    /// ヘッドラインは支出のみなので、収入を加味した差引はここで見せる。
+    /// メトリクス。残予算のみ表示 (今月 + 予算設定時のみ)。
+    /// 収支はヘッドライン (大きい金額) 側で表示する。
     @ViewBuilder
     private func metricsRow(income: Decimal, expense: Decimal, net: Decimal, budget: Decimal?, showRemaining: Bool) -> some View {
-        // 収入がある期間/絞り込みのときだけ収支を出す (収入 0 なら net = -支出 で見出しと重複するため)
-        let showNet = income > 0
-        if showNet || showRemaining {
-            HStack(alignment: .top, spacing: 24) {
-                if showNet {
-                    metricColumn(
-                        label: "収支",
-                        value: signedAmount(net),
-                        dotStyle: .filled(netColor(net)),
-                        valueColor: netColor(net)
-                    )
-                }
-                if showRemaining {
-                    let remaining = (budget ?? 0) - expense
-                    metricColumn(
-                        label: "残予算",
-                        value: CurrencyCatalog.format(remaining, code: code),
-                        dotStyle: .filled(remaining < 0 ? .red : .primary),
-                        valueColor: remaining < 0 ? .red : .primary
-                    )
-                }
-                Spacer(minLength: 0)
-            }
+        if showRemaining {
+            let remaining = (budget ?? 0) - expense
+            metricColumn(
+                label: "残予算",
+                value: CurrencyCatalog.format(remaining, code: code),
+                dotStyle: .filled(remaining < 0 ? .red : .primary),
+                valueColor: remaining < 0 ? .red : .primary
+            )
         }
     }
 

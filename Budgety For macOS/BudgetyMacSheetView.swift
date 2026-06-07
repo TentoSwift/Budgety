@@ -592,11 +592,13 @@ struct BudgetyMacSheetView: View {
                 }
             }
             periodMenu
-            Text(CurrencyCatalog.format(t.expense, code: code))
+            // 大型の収支 (収入 − 支出)。黒字 = 緑 / 赤字 = 赤。
+            Text(signedAmount(net, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: t.expense).doubleValue))
-                .animation(reduceMotion ? nil : .snappy, value: t.expense)
+                .foregroundStyle(netColor(net))
+                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: net).doubleValue))
+                .animation(reduceMotion ? nil : .snappy, value: net)
 
             // 合計の下に「+収入 | -支出」のサマリ行 (左寄せ)
             HStack(spacing: 12) {
@@ -608,21 +610,12 @@ struct BudgetyMacSheetView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // メトリクス: 収支 (収入があるとき) + 残予算 (今月 + 予算設定時 + 非フィルタ時)。
-            // ヘッドラインは支出のみなので、収入を加味した差引はここで見せる。
-            if t.income > 0 || remaining != nil {
-                HStack(spacing: 24) {
-                    if t.income > 0 {
-                        metricChip(label: "収支", value: signedAmount(net, code: code), color: netColor(net))
-                    }
-                    if let remaining {
-                        metricChip(label: "残予算",
-                                   value: CurrencyCatalog.format(remaining, code: code),
-                                   color: remaining < 0 ? .red : .primary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.top, 4)
+            // 残予算 (今月 + 予算設定時 + 非フィルタ時のみ)。収支はヘッドラインで表示。
+            if let remaining {
+                metricChip(label: "残予算",
+                           value: CurrencyCatalog.format(remaining, code: code),
+                           color: remaining < 0 ? .red : .primary)
+                    .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
