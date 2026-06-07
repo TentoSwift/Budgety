@@ -558,6 +558,9 @@ struct BudgetyMacSheetView: View {
         // 期間 + 検索/カテゴリ/支払い者の絞り込みを反映した合計。
         let t = filteredTotals
         let code = sheet.resolvedDefaultCurrencyCode
+        let net = t.income - t.expense
+        // 残予算は今月 + 非フィルタ時のみ (予算未設定なら monthlyRemainingBudget が nil)
+        let remaining: Decimal? = (period == .thisMonth && !filtering) ? monthlyRemainingBudget : nil
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ZStack(alignment: .bottomTrailing) {
@@ -589,11 +592,13 @@ struct BudgetyMacSheetView: View {
                 }
             }
             periodMenu
-            Text(CurrencyCatalog.format(t.expense, code: code))
+            // 大型の収支 (収入 − 支出)。色分けはしない (primary)。
+            Text(signedAmount(net, code: code))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: t.expense).doubleValue))
-                .animation(reduceMotion ? nil : .snappy, value: t.expense)
+                .foregroundStyle(.primary)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: NSDecimalNumber(decimal: net).doubleValue))
+                .animation(reduceMotion ? nil : .snappy, value: net)
 
             // 合計の下に「+収入 | -支出」のサマリ行 (左寄せ)
             HStack(spacing: 12) {
@@ -605,20 +610,12 @@ struct BudgetyMacSheetView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 残予算 (今月 + 予算設定時 + 非フィルタ時のみ)
-            if period == .thisMonth, !filtering, let remaining = monthlyRemainingBudget {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(remaining < 0 ? Color.red : Color.primary)
-                        .frame(width: 8, height: 8)
-                    Text("残予算")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(CurrencyCatalog.format(remaining, code: code))
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(remaining < 0 ? .red : .primary)
-                }
-                .padding(.top, 4)
+            // 残予算 (今月 + 予算設定時 + 非フィルタ時のみ)。収支はヘッドラインで表示。
+            if let remaining {
+                metricChip(label: "残予算",
+                           value: CurrencyCatalog.format(remaining, code: code),
+                           color: remaining < 0 ? .red : .primary)
+                    .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -627,6 +624,25 @@ struct BudgetyMacSheetView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(sheet.tint.opacity(0.12))
         )
+    }
+
+    /// メトリクス 1 項目 (●ラベル 値)。収支 / 残予算で共用。
+    private func metricChip(label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.monospacedDigit().weight(.semibold))
+                .foregroundStyle(color)
+        }
+    }
+
+    /// 収支の符号付き表記 ("+¥1,000" / "-¥500" / "¥0")。
+    private func signedAmount(_ v: Decimal, code: String) -> String {
+        let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(v.magnitude, code: code)
     }
 
     /// シートの参加者一覧 (Apple ID 名 + アバター)。

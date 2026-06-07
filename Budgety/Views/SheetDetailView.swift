@@ -1311,19 +1311,19 @@ private struct SummaryCard: View {
                 }
             }
 
-            // 大型の支出合計 (Mac と同じ rounded font)
-            Text(CurrencyCatalog.format(t.expense, code: code))
+            // 大型の収支 (収入 − 支出)。色分けはしない (primary)。Mac と同じ rounded font
+            Text(signedAmount(net))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(t.expense)))
-                .animation(reduceMotion ? nil : .snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(net)))
+                .animation(reduceMotion ? nil : .snappy, value: net)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
-            // メトリクス列 (収入 / 残予算 / 収支)
+            // メトリクス (残予算)。収支はヘッドライン (大きい金額) で表示
             metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
                        showRemaining: showBudgetMetrics)
 
@@ -1432,6 +1432,7 @@ private struct SummaryCard: View {
     }
 
     /// メトリクス。残予算のみ表示 (今月 + 予算設定時のみ)。
+    /// 収支はヘッドライン (大きい金額) 側で表示する。
     @ViewBuilder
     private func metricsRow(income: Decimal, expense: Decimal, net: Decimal, budget: Decimal?, showRemaining: Bool) -> some View {
         if showRemaining {
@@ -1443,6 +1444,12 @@ private struct SummaryCard: View {
                 valueColor: remaining < 0 ? .red : .primary
             )
         }
+    }
+
+    /// 収支の符号付き表記 ("+¥1,000" / "-¥500" / "¥0")。
+    private func signedAmount(_ v: Decimal) -> String {
+        let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(v.magnitude, code: code)
     }
 
     private enum DotStyle {
