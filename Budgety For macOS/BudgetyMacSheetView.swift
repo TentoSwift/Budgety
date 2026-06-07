@@ -558,6 +558,9 @@ struct BudgetyMacSheetView: View {
         // 期間 + 検索/カテゴリ/支払い者の絞り込みを反映した合計。
         let t = filteredTotals
         let code = sheet.resolvedDefaultCurrencyCode
+        let net = t.income - t.expense
+        // 残予算は今月 + 非フィルタ時のみ (予算未設定なら monthlyRemainingBudget が nil)
+        let remaining: Decimal? = (period == .thisMonth && !filtering) ? monthlyRemainingBudget : nil
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ZStack(alignment: .bottomTrailing) {
@@ -605,18 +608,19 @@ struct BudgetyMacSheetView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 残予算 (今月 + 予算設定時 + 非フィルタ時のみ)
-            if period == .thisMonth, !filtering, let remaining = monthlyRemainingBudget {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(remaining < 0 ? Color.red : Color.primary)
-                        .frame(width: 8, height: 8)
-                    Text("残予算")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(CurrencyCatalog.format(remaining, code: code))
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(remaining < 0 ? .red : .primary)
+            // メトリクス: 収支 (収入があるとき) + 残予算 (今月 + 予算設定時 + 非フィルタ時)。
+            // ヘッドラインは支出のみなので、収入を加味した差引はここで見せる。
+            if t.income > 0 || remaining != nil {
+                HStack(spacing: 24) {
+                    if t.income > 0 {
+                        metricChip(label: "収支", value: signedAmount(net, code: code), color: netColor(net))
+                    }
+                    if let remaining {
+                        metricChip(label: "残予算",
+                                   value: CurrencyCatalog.format(remaining, code: code),
+                                   color: remaining < 0 ? .red : .primary)
+                    }
+                    Spacer(minLength: 0)
                 }
                 .padding(.top, 4)
             }
@@ -627,6 +631,30 @@ struct BudgetyMacSheetView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(sheet.tint.opacity(0.12))
         )
+    }
+
+    /// メトリクス 1 項目 (●ラベル 値)。収支 / 残予算で共用。
+    private func metricChip(label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.monospacedDigit().weight(.semibold))
+                .foregroundStyle(color)
+        }
+    }
+
+    /// 収支の符号付き表記 ("+¥1,000" / "-¥500" / "¥0")。
+    private func signedAmount(_ v: Decimal, code: String) -> String {
+        let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(v.magnitude, code: code)
+    }
+
+    /// 収支の色 (黒字 = green / 赤字 = red / 0 = primary)。
+    private func netColor(_ v: Decimal) -> Color {
+        v > 0 ? .green : (v < 0 ? .red : .primary)
     }
 
     /// シートの参加者一覧 (Apple ID 名 + アバター)。

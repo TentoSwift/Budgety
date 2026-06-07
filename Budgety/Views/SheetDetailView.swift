@@ -1323,7 +1323,7 @@ private struct SummaryCard: View {
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
-            // メトリクス列 (収入 / 残予算 / 収支)
+            // メトリクス列 (収支 / 残予算)
             metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
                        showRemaining: showBudgetMetrics)
 
@@ -1431,18 +1431,45 @@ private struct SummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// メトリクス。残予算のみ表示 (今月 + 予算設定時のみ)。
+    /// メトリクス列。収支 (収入があるとき) と残予算 (今月 + 予算設定時) を横並びで表示。
+    /// ヘッドラインは支出のみなので、収入を加味した差引はここで見せる。
     @ViewBuilder
     private func metricsRow(income: Decimal, expense: Decimal, net: Decimal, budget: Decimal?, showRemaining: Bool) -> some View {
-        if showRemaining {
-            let remaining = (budget ?? 0) - expense
-            metricColumn(
-                label: "残予算",
-                value: CurrencyCatalog.format(remaining, code: code),
-                dotStyle: .filled(remaining < 0 ? .red : .primary),
-                valueColor: remaining < 0 ? .red : .primary
-            )
+        // 収入がある期間/絞り込みのときだけ収支を出す (収入 0 なら net = -支出 で見出しと重複するため)
+        let showNet = income > 0
+        if showNet || showRemaining {
+            HStack(alignment: .top, spacing: 24) {
+                if showNet {
+                    metricColumn(
+                        label: "収支",
+                        value: signedAmount(net),
+                        dotStyle: .filled(netColor(net)),
+                        valueColor: netColor(net)
+                    )
+                }
+                if showRemaining {
+                    let remaining = (budget ?? 0) - expense
+                    metricColumn(
+                        label: "残予算",
+                        value: CurrencyCatalog.format(remaining, code: code),
+                        dotStyle: .filled(remaining < 0 ? .red : .primary),
+                        valueColor: remaining < 0 ? .red : .primary
+                    )
+                }
+                Spacer(minLength: 0)
+            }
         }
+    }
+
+    /// 収支の符号付き表記 ("+¥1,000" / "-¥500" / "¥0")。
+    private func signedAmount(_ v: Decimal) -> String {
+        let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(v.magnitude, code: code)
+    }
+
+    /// 収支の色 (黒字 = green / 赤字 = red / 0 = primary)。
+    private func netColor(_ v: Decimal) -> Color {
+        v > 0 ? .green : (v < 0 ? .red : .primary)
     }
 
     private enum DotStyle {
