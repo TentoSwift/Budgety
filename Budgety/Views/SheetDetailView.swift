@@ -368,16 +368,20 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
-            // 検索バーの左にフィルタボタン。絞り込み中はアイコンを塗り。
+            // 検索バーの左にフィルタボタン。絞り込み中は背景に塗りつぶし円 (写真アプリ風)。
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     showingFilters = true
                 } label: {
-                    Image(systemName: isFilterActive
-                          ? "line.3.horizontal.decrease.circle.fill"
-                          : "line.3.horizontal.decrease.circle")
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .foregroundStyle(isFilterActive ? Color.white : record.tint)
+                        .padding(7)
+                        .background {
+                            if isFilterActive {
+                                Circle().fill(record.tint)
+                            }
+                        }
                 }
-                .tint(record.tint)
                 .accessibilityLabel("フィルタ")
             }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
