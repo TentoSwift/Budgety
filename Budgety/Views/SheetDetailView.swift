@@ -311,7 +311,8 @@ struct SheetDetailView: View {
                 if hasAcceptedOtherMembers {
                     Section {
                         membersStrip
-                            .ignoresSafeArea(.container, edges: .horizontal)
+                            // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -321,7 +322,8 @@ struct SheetDetailView: View {
                 // あれば表示する (usedCategories/hasUncategorizedExpenses は仮想も含む)。
                 if !usedCategories.isEmpty || hasUncategorizedExpenses {
                     categoryPills
-                        .ignoresSafeArea(.container, edges: .horizontal)
+                        // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                         .listSectionSeparator(.hidden)
                 }
 
@@ -815,7 +817,7 @@ struct SheetDetailView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 16)
         }
     }
 
@@ -880,7 +882,7 @@ struct SheetDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, 16)
             .animation(.snappy, value: selectedCategory)
             .animation(.snappy, value: filterUncategorized)
         }
