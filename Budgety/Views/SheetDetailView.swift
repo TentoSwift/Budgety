@@ -369,20 +369,28 @@ struct SheetDetailView: View {
         }
         .toolbar {
             // 検索バーの左にフィルタボタン。絞り込み中は背景に塗りつぶし円 (写真アプリ風)。
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    showingFilters = true
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
-                        .foregroundStyle(isFilterActive ? Color.white : record.tint)
-                        .padding(7)
-                        .background {
-                            if isFilterActive {
-                                Circle().fill(record.tint)
-                            }
-                        }
+            if isFilterActive {
+                ToolbarItem(placement: .bottomBar) {
+                    Button(role: .confirm) {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                    .tint(isFilterActive ? record.tint : Color.clear)
                 }
-                .accessibilityLabel("フィルタ")
+            } else {
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                }
+            }
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+            } else {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
             }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
@@ -397,9 +405,11 @@ struct SheetDetailView: View {
                 Button(role: .confirm) {
                     showingAddExpense = true
                 } label: {
-                    Label("追加", systemImage: "plus")
+                    Label("項目を追加", systemImage: "plus")
                 }
                 .tint(record.tint)
+                .accessibilityLabel("項目を追加")
+                .accessibilityHint("支出や収入を記録する")
             }
             // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
             if lockManager.hasPassword(for: record) {
@@ -528,7 +538,7 @@ struct SheetDetailView: View {
                         Button(role: .destructive) {
                             showingLeaveConfirm = true
                         } label: {
-                            Label("このシートから離脱", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label("このシートから退出", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     }
                 } label: {
@@ -586,10 +596,10 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」とこのシートの全ての支出データが完全に削除されます。共有している場合は参加者からも見えなくなります。この操作は取り消せません。")
+            Text("「\(record.displayName)」とこのシートのすべてのデータが完全に削除されます。共有している場合は参加者のデバイスからも削除されます。この操作は取り消すことはできません。")
         }
-        .alert("このシートから離脱しますか?", isPresented: $showingLeaveConfirm) {
-            Button("離脱", role: .destructive) {
+        .alert("このシートから退出しますか?", isPresented: $showingLeaveConfirm) {
+            Button("退出", role: .destructive) {
                 Task { @MainActor in
                     try? await ShareCoordinator.shared.leaveSharedSheet(record)
                     Haptics.warning()
@@ -598,7 +608,7 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
+            Text("「\(record.displayName)」から退出します。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
             // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
@@ -721,7 +731,7 @@ struct SheetDetailView: View {
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
         if splitFilter != .all { parts.append("割り勘") }
-        return parts.joined(separator: "・") + "で絞り込まれています。"
+        return parts.joined(separator: "・") + "でフィルタされています。"
     }
 
     @ViewBuilder
@@ -732,7 +742,7 @@ struct SheetDetailView: View {
             let q = searchText.trimmingCharacters(in: .whitespaces)
             ContentUnavailableView {
                 Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
-                      systemImage: "line.3.horizontal.decrease.circle")
+                      systemImage: "line.3.horizontal.decrease")
             } description: {
                 Text(filterDescription)
             } actions: {
