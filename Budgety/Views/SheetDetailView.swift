@@ -2141,13 +2141,15 @@ struct ExpenseFilterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("キャンセル", role: .cancel) {
+                    Button(role: .cancel) {
                         // キャンセル: シートを開いた時点のフィルタに戻して閉じる。
                         selectedCategory = origCategory
                         filterUncategorized = origUncategorized
                         selectedPayerID = origPayerID
                         splitFilter = origSplit
                         dismiss()
+                    } label: {
+                        Label("キャンセル", systemImage: "xmark")
                     }
                 }
                 ToolbarItem(placement: .bottomBar) {
