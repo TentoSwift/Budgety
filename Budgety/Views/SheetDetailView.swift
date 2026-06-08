@@ -368,6 +368,18 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
+            // 検索バーの左にフィルタボタン。絞り込み中はアイコンを塗り。
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    showingFilters = true
+                } label: {
+                    Image(systemName: isFilterActive
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
+                }
+                .tint(record.tint)
+                .accessibilityLabel("フィルタ")
+            }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
             // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
@@ -384,18 +396,6 @@ struct SheetDetailView: View {
                     Label("追加", systemImage: "plus")
                 }
                 .tint(record.tint)
-            }
-            // フィルタ (カテゴリ / 割り勘 / 人) はシートで選ぶ。絞り込み中はアイコンを塗り。
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingFilters = true
-                } label: {
-                    Image(systemName: isFilterActive
-                          ? "line.3.horizontal.decrease.circle.fill"
-                          : "line.3.horizontal.decrease.circle")
-                }
-                .tint(record.tint)
-                .accessibilityLabel("フィルタ")
             }
             // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
             if lockManager.hasPassword(for: record) {
