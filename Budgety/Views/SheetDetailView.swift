@@ -2121,6 +2121,13 @@ struct ExpenseFilterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("閉じる", systemImage: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
                     Button("リセット") {
                         selectedCategory = nil
                         filterUncategorized = false
@@ -2130,7 +2137,11 @@ struct ExpenseFilterSheet: View {
                     .disabled(!isAnyActive)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完了") { dismiss() }
+                    Button(role: .confirm) {
+                        dismiss()
+                    } label: {
+                        Label("完了", systemImage: "checkmark")
+                    }
                 }
             }
         }
