@@ -2117,15 +2117,15 @@ struct ExpenseFilterSheet: View {
     @Binding var selectedPayerID: String?
     @Binding var splitFilter: ExpenseSplitFilter
     @Environment(\.dismiss) private var dismiss
-    // シートを開いた時点のフィルタ。キャンセル時にここへ戻す (フィルタは live 反映のため)。
-    @State private var origCategory: ExpenseCategory?
-    @State private var origUncategorized = false
-    @State private var origPayerID: String?
-    @State private var origSplit: ExpenseSplitFilter = .all
-    @State private var didSnapshot = false
+    // シート内はドラフト (ローカル) で編集し、「完了」で親フィルタに反映する。キャンセルは破棄。
+    @State private var draftCategory: ExpenseCategory?
+    @State private var draftUncategorized = false
+    @State private var draftPayerID: String?
+    @State private var draftSplit: ExpenseSplitFilter = .all
+    @State private var didInit = false
 
     private var isAnyActive: Bool {
-        selectedCategory != nil || filterUncategorized || selectedPayerID != nil || splitFilter != .all
+        draftCategory != nil || draftUncategorized || draftPayerID != nil || draftSplit != .all
     }
 
     var body: some View {
@@ -2142,27 +2142,27 @@ struct ExpenseFilterSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(role: .cancel) {
-                        // キャンセル: シートを開いた時点のフィルタに戻して閉じる。
-                        selectedCategory = origCategory
-                        filterUncategorized = origUncategorized
-                        selectedPayerID = origPayerID
-                        splitFilter = origSplit
-                        dismiss()
+                        dismiss()   // キャンセル: ドラフトを破棄 (親フィルタは変更しない)。
                     } label: {
                         Label("キャンセル", systemImage: "xmark")
                     }
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Button("リセット") {
-                        selectedCategory = nil
-                        filterUncategorized = false
-                        selectedPayerID = nil
-                        splitFilter = .all
+                        draftCategory = nil
+                        draftUncategorized = false
+                        draftPayerID = nil
+                        draftSplit = .all
                     }
                     .disabled(!isAnyActive)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .confirm) {
+                        // 完了: ドラフトを親フィルタへ反映して閉じる。
+                        selectedCategory = draftCategory
+                        filterUncategorized = draftUncategorized
+                        selectedPayerID = draftPayerID
+                        splitFilter = draftSplit
                         dismiss()
                     } label: {
                         Label("完了", systemImage: "checkmark")
@@ -2170,12 +2170,12 @@ struct ExpenseFilterSheet: View {
                 }
             }
             .onAppear {
-                guard !didSnapshot else { return }
-                origCategory = selectedCategory
-                origUncategorized = filterUncategorized
-                origPayerID = selectedPayerID
-                origSplit = splitFilter
-                didSnapshot = true
+                guard !didInit else { return }
+                draftCategory = selectedCategory
+                draftUncategorized = filterUncategorized
+                draftPayerID = selectedPayerID
+                draftSplit = splitFilter
+                didInit = true
             }
         }
     }
@@ -2184,22 +2184,22 @@ struct ExpenseFilterSheet: View {
     private var categorySection: some View {
         Section("カテゴリ") {
             optionRow(label: "すべて", systemImage: "square.grid.2x2.fill",
-                      tint: record.tint, selected: selectedCategory == nil && !filterUncategorized) {
-                selectedCategory = nil
-                filterUncategorized = false
+                      tint: record.tint, selected: draftCategory == nil && !draftUncategorized) {
+                draftCategory = nil
+                draftUncategorized = false
             }
             ForEach(categories, id: \.objectID) { cat in
                 optionRow(label: cat.displayName, systemImage: cat.displaySymbol,
-                          tint: cat.tint, selected: selectedCategory?.objectID == cat.objectID) {
-                    selectedCategory = cat
-                    filterUncategorized = false
+                          tint: cat.tint, selected: draftCategory?.objectID == cat.objectID) {
+                    draftCategory = cat
+                    draftUncategorized = false
                 }
             }
             if hasUncategorized {
                 optionRow(label: "カテゴリなし", systemImage: "tag.slash",
-                          tint: .gray, selected: filterUncategorized) {
-                    filterUncategorized = true
-                    selectedCategory = nil
+                          tint: .gray, selected: draftUncategorized) {
+                    draftUncategorized = true
+                    draftCategory = nil
                 }
             }
         }
@@ -2208,7 +2208,7 @@ struct ExpenseFilterSheet: View {
     @ViewBuilder
     private var splitSection: some View {
         Section("割り勘") {
-            Picker("割り勘", selection: $splitFilter) {
+            Picker("割り勘", selection: $draftSplit) {
                 ForEach(ExpenseSplitFilter.allCases) { f in
                     Text(f.label).tag(f)
                 }
@@ -2221,7 +2221,7 @@ struct ExpenseFilterSheet: View {
     private var memberSection: some View {
         Section("人") {
             Button {
-                selectedPayerID = nil
+                draftPayerID = nil
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "person.2.fill")
@@ -2229,7 +2229,7 @@ struct ExpenseFilterSheet: View {
                         .foregroundStyle(record.tint)
                     Text("すべて").foregroundStyle(.primary)
                     Spacer()
-                    if selectedPayerID == nil {
+                    if draftPayerID == nil {
                         Image(systemName: "checkmark").foregroundStyle(record.tint)
                     }
                 }
@@ -2238,14 +2238,14 @@ struct ExpenseFilterSheet: View {
             ForEach(memberIDs, id: \.self) { id in
                 let info = record.memberDisplayInfo(for: id)
                 Button {
-                    selectedPayerID = (selectedPayerID == id) ? nil : id
+                    draftPayerID = (draftPayerID == id) ? nil : id
                 } label: {
                     HStack(spacing: 12) {
                         AvatarView(photoData: info.photoData, displayName: info.name,
                                    colorHex: info.colorHex, size: 28)
                         Text(info.name).foregroundStyle(.primary)
                         Spacer()
-                        if selectedPayerID == id {
+                        if draftPayerID == id {
                             Image(systemName: "checkmark").foregroundStyle(record.tint)
                         }
                     }
