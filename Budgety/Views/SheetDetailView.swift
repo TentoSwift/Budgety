@@ -608,7 +608,7 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」から退出します。オーナーや他の参加者のデータは残ります。")
+            Text("“\(record.displayName)”から退出します。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
             // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
@@ -2117,6 +2117,12 @@ struct ExpenseFilterSheet: View {
     @Binding var selectedPayerID: String?
     @Binding var splitFilter: ExpenseSplitFilter
     @Environment(\.dismiss) private var dismiss
+    // シートを開いた時点のフィルタ。キャンセル時にここへ戻す (フィルタは live 反映のため)。
+    @State private var origCategory: ExpenseCategory?
+    @State private var origUncategorized = false
+    @State private var origPayerID: String?
+    @State private var origSplit: ExpenseSplitFilter = .all
+    @State private var didSnapshot = false
 
     private var isAnyActive: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil || splitFilter != .all
@@ -2135,10 +2141,13 @@ struct ExpenseFilterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
+                    Button("キャンセル", role: .cancel) {
+                        // キャンセル: シートを開いた時点のフィルタに戻して閉じる。
+                        selectedCategory = origCategory
+                        filterUncategorized = origUncategorized
+                        selectedPayerID = origPayerID
+                        splitFilter = origSplit
                         dismiss()
-                    } label: {
-                        Label("閉じる", systemImage: "xmark")
                     }
                 }
                 ToolbarItem(placement: .bottomBar) {
@@ -2157,6 +2166,14 @@ struct ExpenseFilterSheet: View {
                         Label("完了", systemImage: "checkmark")
                     }
                 }
+            }
+            .onAppear {
+                guard !didSnapshot else { return }
+                origCategory = selectedCategory
+                origUncategorized = filterUncategorized
+                origPayerID = selectedPayerID
+                origSplit = splitFilter
+                didSnapshot = true
             }
         }
     }
