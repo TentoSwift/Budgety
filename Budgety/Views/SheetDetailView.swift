@@ -910,8 +910,8 @@ struct SheetDetailView: View {
                 Capsule()
                     .fill(selected ? color : Color.platformSecondarySystemFill)
             )
-            // 選択中は塗り (color) の上に背景色のテキスト/アイコンを抜き文字で乗せる。
-            .foregroundStyle(selected ? Color.platformSystemBackground : .primary)
+            // 選択中は塗り (color) の上に白文字を乗せる。
+            .foregroundStyle(selected ? Color.white : .primary)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
