@@ -536,7 +536,7 @@ struct SheetDetailView: View {
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(record: record)
         }
-        .sheet(isPresented: $showingFilters) {
+        .fullScreenCover(isPresented: $showingFilters) {
             ExpenseFilterSheet(
                 record: record,
                 categories: usedCategories,
@@ -2134,7 +2134,6 @@ struct ExpenseFilterSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
     }
 
     @ViewBuilder
