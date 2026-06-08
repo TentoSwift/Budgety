@@ -311,6 +311,7 @@ struct SheetDetailView: View {
                 if hasAcceptedOtherMembers {
                     Section {
                         membersStrip
+                            .ignoresSafeArea(.container, edges: .horizontal)
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -320,6 +321,7 @@ struct SheetDetailView: View {
                 // あれば表示する (usedCategories/hasUncategorizedExpenses は仮想も含む)。
                 if !usedCategories.isEmpty || hasUncategorizedExpenses {
                     categoryPills
+                        .ignoresSafeArea(.container, edges: .horizontal)
                         .listSectionSeparator(.hidden)
                 }
 
