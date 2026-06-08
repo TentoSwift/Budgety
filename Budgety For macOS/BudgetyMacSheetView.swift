@@ -73,6 +73,8 @@ struct BudgetyMacSheetView: View {
     @State private var selectedPayerID: String?
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
+    /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 28
     /// 検索中だけ使う期間。永続化せず、検索のたびに全期間から始める (iOS と同じ)。
     @State private var searchPeriod: Period = .all
 
@@ -811,8 +813,8 @@ struct BudgetyMacSheetView: View {
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, selected ? 12 : 9)
-            .padding(.vertical, 6)
-            .frame(minHeight: 28)
+            // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
+            .frame(height: filterPillHeight)
             .background(Capsule().fill(selected ? color : Color.gray.opacity(0.2)))
             .foregroundStyle(selected ? .white : .primary)
             .contentShape(Capsule())
