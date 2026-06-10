@@ -183,6 +183,13 @@ final class PurchaseManager: ObservableObject {
         // 重要: 前回 revoke が transient failure (ネットワーク等) で失敗した場合に
         // 必ず再試行されるよう、`!nowPremium` の間は毎回 hasActiveOwnedShares を
         // チェックする (= ローカルの fast-path skip だけに頼らない)。
+        #if DEBUG
+        // Debug ビルドでは期限切れの自動解除フローを走らせない。
+        // Debug は .dev バンドル ID のため本番 (com.tento.budgety) の購入情報を
+        // 参照できず常に「非 Premium」に見えるが、CloudKit コンテナは本番と共有
+        // しているので、ここで解除を許すと本番の CKShare を誤って解除してしまう。
+        // 解除フローの手動テストは Settings の runExpiryRevokeForDebug() で行う。
+        #else
         if !nowPremium {
             let isTransition = wasPremium
             Task { @MainActor in
@@ -208,6 +215,7 @@ final class PurchaseManager: ObservableObject {
                 }
             }
         }
+        #endif
     }
 
     /// 期限切れ確定時の共有解除処理。テスト用に Settings から
