@@ -2167,6 +2167,7 @@ struct ExpenseFilterSheet: View {
                     } label: {
                         Label("完了", systemImage: "checkmark")
                     }
+                    .tint(record.tint)
                 }
             }
             .onAppear {
@@ -2260,9 +2261,8 @@ struct ExpenseFilterSheet: View {
                            selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .frame(width: 28)
-                    .foregroundStyle(tint)
+                // 支出一覧 (SheetDetailView) の行と同じ、色付き Circle 背景のアイコン。
+                CategoryIconView(symbol: systemImage, tint: tint, size: 28)
                 Text(label).foregroundStyle(.primary)
                 Spacer()
                 if selected {
