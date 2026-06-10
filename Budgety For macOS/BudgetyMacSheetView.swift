@@ -809,6 +809,7 @@ struct BudgetyMacSheetView: View {
                 Image(systemName: icon)
                 if selected {
                     Text(label).lineLimit(1).fixedSize()
+                        .transition(.opacity)
                 }
             }
             .font(.caption.weight(.semibold))
@@ -817,6 +818,9 @@ struct BudgetyMacSheetView: View {
             .frame(height: filterPillHeight)
             .background(Capsule().fill(selected ? color : Color.gray.opacity(0.2)))
             .foregroundStyle(selected ? .white : .primary)
+            // 展開/折りたたみアニメーション中に、fixedSize のテキストがカプセルの
+            // 幅より先に描画されてピル外へはみ出すのを防ぐ (カプセルで切り取る)。
+            .clipShape(Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
