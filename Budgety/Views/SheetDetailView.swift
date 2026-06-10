@@ -900,6 +900,7 @@ struct SheetDetailView: View {
                 Image(systemName: icon)
                 if selected {
                     Text(label).lineLimit(1).fixedSize()
+                        .transition(.opacity)
                 }
             }
             .font(.caption.weight(.semibold))
@@ -912,6 +913,9 @@ struct SheetDetailView: View {
             )
             // 選択中は塗り (color) の上に白文字を乗せる。
             .foregroundStyle(selected ? Color.white : .primary)
+            // 展開/折りたたみアニメーション中に、fixedSize のテキストがカプセルの
+            // 幅より先に描画されてピル外へはみ出すのを防ぐ (カプセルで切り取る)。
+            .clipShape(Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
