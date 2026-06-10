@@ -147,8 +147,12 @@ struct SheetDetailView: View {
     /// 「カテゴリなし」(= category == nil の支出) でフィルタ中か。
     /// `selectedCategory` と相互排他。
     @State private var filterUncategorized: Bool = false
-    /// 支払い者で絞り込む時の profileID（membersStrip のタップで設定）。nil = 全員。
+    /// 支払い者で絞り込む時の profileID（フィルタシートで設定）。nil = 全員。
     @State private var selectedPayerID: String?
+    /// 割り勘フィルタ (受益者 2 人以上 = 割り勘あり)。フィルタシートで選ぶ。
+    @State private var splitFilter: ExpenseSplitFilter = .all
+    /// フィルタシートの表示。
+    @State private var showingFilters = false
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
@@ -241,6 +245,9 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
+        if splitFilter != .all {
+            list = list.filter { splitFilter.matches(beneficiaryCount: $0.beneficiaryIDList.count) }
+        }
         // 検索中は検索専用の期間で絞り込む。
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
@@ -278,6 +285,9 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { payerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
         }
+        if splitFilter != .all {
+            list = list.filter { splitFilter.matches(beneficiaryCount: $0.beneficiaryProfileIDs.split(separator: ",").count) }
+        }
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
         }
@@ -297,6 +307,7 @@ struct SheetDetailView: View {
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
                     selectedPayerID: selectedPayerID,
+                    splitFilter: splitFilter,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
                 #if os(iOS)
@@ -307,19 +318,10 @@ struct SheetDetailView: View {
             }
             .listSectionSeparator(.hidden)
 
-                // Mac と同じく、サマリ下にメンバーストリップを出す。
-                if hasAcceptedOtherMembers {
-                    Section {
-                        membersStrip
-                            // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
-                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                    }
-                    .listSectionSeparator(.hidden)
-                }
-
-                // 実支出ゼロでも仮想 occurrence だけのシート (定期ルールのみ) で
-                // カテゴリ strip を出す。絞り込める対象 (カテゴリ or カテゴリなし) が
-                // あれば表示する (usedCategories/hasUncategorizedExpenses は仮想も含む)。
+                // メンバー / 割り勘フィルタはツールバーのフィルタシートへ移動。
+                // サマリ下にはカテゴリフィルタ (ピル) のみ表示する。
+                // 絞り込める対象 (カテゴリ or カテゴリなし) があれば表示する
+                // (usedCategories/hasUncategorizedExpenses は仮想も含む)。
                 if !usedCategories.isEmpty || hasUncategorizedExpenses {
                     categoryPills
                         // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
@@ -366,6 +368,30 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
+            // 検索バーの左にフィルタボタン。絞り込み中は背景に塗りつぶし円 (写真アプリ風)。
+            if isFilterActive {
+                ToolbarItem(placement: .bottomBar) {
+                    Button(role: .confirm) {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                    .tint(isFilterActive ? record.tint : Color.clear)
+                }
+            } else {
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                }
+            }
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+            } else {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
+            }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
             // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
@@ -379,9 +405,11 @@ struct SheetDetailView: View {
                 Button(role: .confirm) {
                     showingAddExpense = true
                 } label: {
-                    Label("追加", systemImage: "plus")
+                    Label("項目を追加", systemImage: "plus")
                 }
                 .tint(record.tint)
+                .accessibilityLabel("項目を追加")
+                .accessibilityHint("支出や収入を記録する")
             }
             // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
             if lockManager.hasPassword(for: record) {
@@ -510,7 +538,7 @@ struct SheetDetailView: View {
                         Button(role: .destructive) {
                             showingLeaveConfirm = true
                         } label: {
-                            Label("このシートから離脱", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label("このシートから退出", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     }
                 } label: {
@@ -521,6 +549,19 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(record: record)
+        }
+        .fullScreenCover(isPresented: $showingFilters) {
+            ExpenseFilterSheet(
+                record: record,
+                categories: usedCategories,
+                hasUncategorized: hasUncategorizedExpenses,
+                memberIDs: record.acceptedMemberProfileIDs(),
+                showsMemberFilters: hasAcceptedOtherMembers,
+                selectedCategory: $selectedCategory,
+                filterUncategorized: $filterUncategorized,
+                selectedPayerID: $selectedPayerID,
+                splitFilter: $splitFilter
+            )
         }
         .sheet(isPresented: $showingCSVImport) {
             CSVImportView(sheet: record)
@@ -555,10 +596,10 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」とこのシートの全ての支出データが完全に削除されます。共有している場合は参加者からも見えなくなります。この操作は取り消せません。")
+            Text("「\(record.displayName)」とこのシートのすべてのデータが完全に削除されます。共有している場合は参加者のデバイスからも削除されます。この操作は取り消すことはできません。")
         }
-        .alert("このシートから離脱しますか?", isPresented: $showingLeaveConfirm) {
-            Button("離脱", role: .destructive) {
+        .alert("このシートから退出しますか?", isPresented: $showingLeaveConfirm) {
+            Button("退出", role: .destructive) {
                 Task { @MainActor in
                     try? await ShareCoordinator.shared.leaveSharedSheet(record)
                     Haptics.warning()
@@ -567,7 +608,7 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
+            Text("“\(record.displayName)”から退出します。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
             // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
@@ -678,6 +719,7 @@ struct SheetDetailView: View {
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+            || splitFilter != .all
             || (isSearchActive && searchPeriod.isFiltering)
     }
 
@@ -688,7 +730,8 @@ struct SheetDetailView: View {
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
-        return parts.joined(separator: "・") + "で絞り込まれています。"
+        if splitFilter != .all { parts.append("割り勘") }
+        return parts.joined(separator: "・") + "でフィルタされています。"
     }
 
     @ViewBuilder
@@ -699,7 +742,7 @@ struct SheetDetailView: View {
             let q = searchText.trimmingCharacters(in: .whitespaces)
             ContentUnavailableView {
                 Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
-                      systemImage: "line.3.horizontal.decrease.circle")
+                      systemImage: "line.3.horizontal.decrease")
             } description: {
                 Text(filterDescription)
             } actions: {
@@ -707,6 +750,7 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                     filterUncategorized = false
                     selectedPayerID = nil
+                    splitFilter = .all
                     searchPeriod = .all
                 }
                 .buttonStyle(.plain)
@@ -777,48 +821,6 @@ struct SheetDetailView: View {
                                    tint: record.tint)
                 }
             }
-    }
-
-    /// Mac の `membersStrip` と同じ、シートに参加しているメンバーのアバター + 名前一覧。
-    /// 現在のメンバー (= 自分 + CKShare 受諾済み参加者 + アーカイブされていない
-    /// バーチャル) のみ表示する。退室済み参加者やアーカイブ済みバーチャルは
-    /// 表示しない (過去の支出には残るが、フィルタには出さない)。
-    private var membersStrip: some View {
-        let ids = record.acceptedMemberProfileIDs()
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(ids, id: \.self) { id in
-                    let info = record.memberDisplayInfo(for: id)
-                    let isSelected = selectedPayerID == id
-                    Button {
-                        // タップで「その人が支払い者」の絞り込みをトグル。
-                        selectedPayerID = isSelected ? nil : id
-                    } label: {
-                        VStack(spacing: 4) {
-                            AvatarView(
-                                photoData: info.photoData,
-                                displayName: info.name,
-                                colorHex: info.colorHex,
-                                size: 36
-                            )
-                            // strokeBorder は枠内に描くので、枠が見切れない。
-                            .overlay(
-                                Circle().strokeBorder(record.tint, lineWidth: isSelected ? 2.5 : 0)
-                            )
-                            Text(info.name)
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(isSelected ? record.tint : .secondary)
-                        }
-                        .frame(maxWidth: 80)
-                        .padding(.vertical, 3)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 16)
-        }
     }
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
@@ -908,8 +910,8 @@ struct SheetDetailView: View {
                 Capsule()
                     .fill(selected ? color : Color.platformSecondarySystemFill)
             )
-            // 選択中は塗り (color) の上に背景色のテキスト/アイコンを抜き文字で乗せる。
-            .foregroundStyle(selected ? Color.platformSystemBackground : .primary)
+            // 選択中は塗り (color) の上に白文字を乗せる。
+            .foregroundStyle(selected ? Color.white : .primary)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -1170,6 +1172,7 @@ private struct SummaryCard: View {
     let searchActive: Bool
     let selectedCategory: ExpenseCategory?
     let selectedPayerID: String?
+    let splitFilter: ExpenseSplitFilter
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
     /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
     let searchQuery: String
@@ -1189,6 +1192,7 @@ private struct SummaryCard: View {
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
         selectedPayerID: String? = nil,
+        splitFilter: ExpenseSplitFilter = .all,
         searchQuery: String = ""
     ) {
         self.record = record
@@ -1196,6 +1200,7 @@ private struct SummaryCard: View {
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
         self.selectedPayerID = selectedPayerID
+        self.splitFilter = splitFilter
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
             sortDescriptors: [
@@ -1230,6 +1235,7 @@ private struct SummaryCard: View {
         for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
+            if !splitFilter.matches(beneficiaryCount: e.beneficiaryIDList.count) { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
                     || e.displayPaidBy.lowercased().contains(q)
@@ -1253,6 +1259,7 @@ private struct SummaryCard: View {
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
+            if !splitFilter.matches(beneficiaryCount: occ.beneficiaryProfileIDs.split(separator: ",").count) { continue }
             if !q.isEmpty, !occ.title.lowercased().contains(q) { continue }
             hitCount += 1
             guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
@@ -2072,5 +2079,197 @@ private extension View {
     @ViewBuilder
     func applyIf<V: View>(_ condition: Bool, _ transform: (Self) -> V) -> some View {
         if condition { transform(self) } else { self }
+    }
+}
+
+/// 割り勘フィルタ。受益者 2 人以上で割っている支出を「割り勘あり」とみなす。
+enum ExpenseSplitFilter: String, CaseIterable, Identifiable {
+    case all, split, solo
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:   "すべて"
+        case .split: "割り勘あり"
+        case .solo:  "割り勘なし"
+        }
+    }
+    /// 受益者数がこのフィルタにマッチするか (割り勘あり = 2 人以上)。
+    func matches(beneficiaryCount: Int) -> Bool {
+        switch self {
+        case .all:   return true
+        case .split: return beneficiaryCount >= 2
+        case .solo:  return beneficiaryCount < 2
+        }
+    }
+}
+
+/// カテゴリ / 割り勘 / 人 をまとめて選べるフィルタシート。
+/// カテゴリの簡易フィルタ (ピル) は SummaryCard 下に常設し、全フィルタはここに集約する。
+struct ExpenseFilterSheet: View {
+    @ObservedObject var record: ExpenseSheet
+    let categories: [ExpenseCategory]
+    let hasUncategorized: Bool
+    let memberIDs: [String]
+    /// メンバー / 割り勘セクションを出すか (共有 or バーチャルメンバーありのシートのみ)。
+    let showsMemberFilters: Bool
+    @Binding var selectedCategory: ExpenseCategory?
+    @Binding var filterUncategorized: Bool
+    @Binding var selectedPayerID: String?
+    @Binding var splitFilter: ExpenseSplitFilter
+    @Environment(\.dismiss) private var dismiss
+    // シート内はドラフト (ローカル) で編集し、「完了」で親フィルタに反映する。キャンセルは破棄。
+    @State private var draftCategory: ExpenseCategory?
+    @State private var draftUncategorized = false
+    @State private var draftPayerID: String?
+    @State private var draftSplit: ExpenseSplitFilter = .all
+    @State private var didInit = false
+
+    private var isAnyActive: Bool {
+        draftCategory != nil || draftUncategorized || draftPayerID != nil || draftSplit != .all
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                categorySection
+                if showsMemberFilters {
+                    splitSection
+                    memberSection
+                }
+            }
+            .navigationTitle("フィルタ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(role: .cancel) {
+                        dismiss()   // キャンセル: ドラフトを破棄 (親フィルタは変更しない)。
+                    } label: {
+                        Label("キャンセル", systemImage: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button("リセット") {
+                        draftCategory = nil
+                        draftUncategorized = false
+                        draftPayerID = nil
+                        draftSplit = .all
+                    }
+                    .disabled(!isAnyActive)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .confirm) {
+                        // 完了: ドラフトを親フィルタへ反映して閉じる。
+                        selectedCategory = draftCategory
+                        filterUncategorized = draftUncategorized
+                        selectedPayerID = draftPayerID
+                        splitFilter = draftSplit
+                        dismiss()
+                    } label: {
+                        Label("完了", systemImage: "checkmark")
+                    }
+                }
+            }
+            .onAppear {
+                guard !didInit else { return }
+                draftCategory = selectedCategory
+                draftUncategorized = filterUncategorized
+                draftPayerID = selectedPayerID
+                draftSplit = splitFilter
+                didInit = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var categorySection: some View {
+        Section("カテゴリ") {
+            optionRow(label: "すべて", systemImage: "square.grid.2x2.fill",
+                      tint: record.tint, selected: draftCategory == nil && !draftUncategorized) {
+                draftCategory = nil
+                draftUncategorized = false
+            }
+            ForEach(categories, id: \.objectID) { cat in
+                optionRow(label: cat.displayName, systemImage: cat.displaySymbol,
+                          tint: cat.tint, selected: draftCategory?.objectID == cat.objectID) {
+                    draftCategory = cat
+                    draftUncategorized = false
+                }
+            }
+            if hasUncategorized {
+                optionRow(label: "カテゴリなし", systemImage: "tag.slash",
+                          tint: .gray, selected: draftUncategorized) {
+                    draftUncategorized = true
+                    draftCategory = nil
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var splitSection: some View {
+        Section("割り勘") {
+            Picker("割り勘", selection: $draftSplit) {
+                ForEach(ExpenseSplitFilter.allCases) { f in
+                    Text(f.label).tag(f)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    @ViewBuilder
+    private var memberSection: some View {
+        Section("人") {
+            Button {
+                draftPayerID = nil
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.fill")
+                        .frame(width: 28)
+                        .foregroundStyle(record.tint)
+                    Text("すべて").foregroundStyle(.primary)
+                    Spacer()
+                    if draftPayerID == nil {
+                        Image(systemName: "checkmark").foregroundStyle(record.tint)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            ForEach(memberIDs, id: \.self) { id in
+                let info = record.memberDisplayInfo(for: id)
+                Button {
+                    draftPayerID = (draftPayerID == id) ? nil : id
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarView(photoData: info.photoData, displayName: info.name,
+                                   colorHex: info.colorHex, size: 28)
+                        Text(info.name).foregroundStyle(.primary)
+                        Spacer()
+                        if draftPayerID == id {
+                            Image(systemName: "checkmark").foregroundStyle(record.tint)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func optionRow(label: String, systemImage: String, tint: Color,
+                           selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .frame(width: 28)
+                    .foregroundStyle(tint)
+                Text(label).foregroundStyle(.primary)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark").foregroundStyle(record.tint)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
