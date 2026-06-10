@@ -808,8 +808,11 @@ struct BudgetyMacSheetView: View {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                 if selected {
+                    // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
+                    // 挿入し、カプセルの clipShape で「左から徐々に現れる」見せ方にする。
+                    // (折りたたみ時は即座に消え、アイコンだけがスライドする)
                     Text(label).lineLimit(1).fixedSize()
-                        .transition(.opacity)
+                        .transition(.identity)
                 }
             }
             .font(.caption.weight(.semibold))
