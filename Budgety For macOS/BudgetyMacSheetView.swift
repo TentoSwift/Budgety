@@ -381,6 +381,15 @@ struct BudgetyMacSheetView: View {
                 }
                 .help("支出を追加")
             }
+            // iOS と同じく、共有はメニューに入れず独立したツールバーボタンにする。
+            ToolbarItem {
+                Button { showingShare = true } label: {
+                    Image(systemName: hasAcceptedOtherParticipants
+                          ? "person.crop.circle.badge.checkmark"
+                          : "person.crop.circle.badge.plus")
+                }
+                .help(hasAcceptedOtherParticipants ? "共有メンバー" : "シートを共有")
+            }
             ToolbarItem {
                 Menu {
                     Button { showingSettlement = true } label: {
@@ -402,9 +411,6 @@ struct BudgetyMacSheetView: View {
                         }
                     }
                     Divider()
-                    Button { showingShare = true } label: {
-                        Label("シートを共有", systemImage: "person.crop.circle.badge.plus")
-                    }
                     Button { startExport(.csv) } label: {
                         Label("CSV にエクスポート", systemImage: "doc.text")
                     }
