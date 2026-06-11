@@ -2387,10 +2387,10 @@ struct ExpenseFilterSheet: View {
     private var memberSection: some View {
         Section {
             NavigationLink {
-                FilterOptionList(title: "人", options: memberOptions, selection: payerChoice)
+                FilterOptionList(title: "人", options: memberOptions(allLabel: "すべて"), selection: payerChoice)
             } label: {
                 LabeledContent("人") {
-                    Text(memberName(for: draftPayerID)).foregroundStyle(.secondary)
+                    Text(memberName(for: draftPayerID, allLabel: "すべて")).foregroundStyle(.secondary)
                 }
             }
         }
@@ -2400,10 +2400,10 @@ struct ExpenseFilterSheet: View {
     private var beneficiarySection: some View {
         Section {
             NavigationLink {
-                FilterOptionList(title: "受益者", options: memberOptions, selection: beneficiaryChoice)
+                FilterOptionList(title: "受益者", options: memberOptions(allLabel: "なし"), selection: beneficiaryChoice)
             } label: {
                 LabeledContent("受益者") {
-                    Text(memberName(for: draftBeneficiaryID)).foregroundStyle(.secondary)
+                    Text(memberName(for: draftBeneficiaryID, allLabel: "なし")).foregroundStyle(.secondary)
                 }
             }
         }
@@ -2417,8 +2417,8 @@ struct ExpenseFilterSheet: View {
         return "すべて"
     }
 
-    private func memberName(for id: String?) -> String {
-        guard let id, !id.isEmpty else { return "すべて" }
+    private func memberName(for id: String?, allLabel: String) -> String {
+        guard let id, !id.isEmpty else { return allLabel }
         return record.memberDisplayInfo(for: id).name
     }
 
@@ -2451,9 +2451,9 @@ struct ExpenseFilterSheet: View {
         return opts
     }
 
-    private var memberOptions: [FilterOptionList.Option] {
+    private func memberOptions(allLabel: String) -> [FilterOptionList.Option] {
         var opts: [FilterOptionList.Option] = [
-            .init(id: "", name: "すべて", icon: AnyView(allMembersAvatar))
+            .init(id: "", name: allLabel, icon: AnyView(allMembersAvatar))
         ]
         for id in memberIDs {
             let info = record.memberDisplayInfo(for: id)
