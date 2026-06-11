@@ -2231,11 +2231,11 @@ struct ExpenseFilterSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                categorySection
                 if showsMemberFilters {
                     splitSection
                     memberSection
                 }
+                categorySection
             }
             .navigationTitle("フィルタ")
             .navigationBarTitleDisplayMode(.inline)
@@ -2281,28 +2281,50 @@ struct ExpenseFilterSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var categorySection: some View {
-        Section("カテゴリ") {
-            optionRow(label: "すべて", systemImage: "square.grid.2x2.fill",
-                      tint: record.tint, selected: draftCategory == nil && !draftUncategorized) {
-                draftCategory = nil
-                draftUncategorized = false
-            }
-            ForEach(categories, id: \.objectID) { cat in
-                optionRow(label: cat.displayName, systemImage: cat.displaySymbol,
-                          tint: cat.tint, selected: draftCategory?.objectID == cat.objectID) {
-                    draftCategory = cat
+    /// カテゴリなしを表すタグ (カテゴリの objectID URI と衝突しない sentinel)。
+    private static let uncategorizedTag = "__uncategorized__"
+
+    /// draftCategory / draftUncategorized を 1 つの選択タグ文字列に橋渡しする。
+    /// "" = すべて / uncategorizedTag = カテゴリなし / それ以外 = カテゴリの objectID URI。
+    private var categoryChoice: Binding<String> {
+        Binding(
+            get: {
+                if draftUncategorized { return Self.uncategorizedTag }
+                return draftCategory?.objectID.uriRepresentation().absoluteString ?? ""
+            },
+            set: { newValue in
+                switch newValue {
+                case "":
+                    draftCategory = nil
+                    draftUncategorized = false
+                case Self.uncategorizedTag:
+                    draftCategory = nil
+                    draftUncategorized = true
+                default:
+                    draftCategory = categories.first {
+                        $0.objectID.uriRepresentation().absoluteString == newValue
+                    }
                     draftUncategorized = false
                 }
             }
-            if hasUncategorized {
-                optionRow(label: "カテゴリなし", systemImage: "tag.slash",
-                          tint: .gray, selected: draftUncategorized) {
-                    draftUncategorized = true
-                    draftCategory = nil
+        )
+    }
+
+    @ViewBuilder
+    private var categorySection: some View {
+        Section("カテゴリ") {
+            // 割り勘ピッカーと同じく、タップで別画面 (チェックリスト) を開いて選ぶ。
+            Picker("カテゴリ", selection: categoryChoice) {
+                Label("すべて", systemImage: "square.grid.2x2.fill").tag("")
+                ForEach(categories, id: \.objectID) { cat in
+                    Label(cat.displayName, systemImage: cat.displaySymbol)
+                        .tag(cat.objectID.uriRepresentation().absoluteString)
+                }
+                if hasUncategorized {
+                    Label("カテゴリなし", systemImage: "tag.slash").tag(Self.uncategorizedTag)
                 }
             }
+            .pickerStyle(.navigationLink)
         }
     }
 
@@ -2355,22 +2377,5 @@ struct ExpenseFilterSheet: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    @ViewBuilder
-    private func optionRow(label: String, systemImage: String, tint: Color,
-                           selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                // 支出一覧 (SheetDetailView) の行と同じ、色付き Circle 背景のアイコン。
-                CategoryIconView(symbol: systemImage, tint: tint, size: 28)
-                Text(label).foregroundStyle(.primary)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark").foregroundStyle(record.tint)
-                }
-            }
-        }
-        .buttonStyle(.plain)
     }
 }
