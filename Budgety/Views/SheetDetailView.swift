@@ -2354,21 +2354,19 @@ struct ExpenseFilterSheet: View {
         )
     }
 
+    // カテゴリ / 人 / 受益者 は自作の navigationLink 行 (タップで FilterOptionList を push)。
+    // SwiftUI の Picker(.navigationLink) では色付き円アイコン/アバターを行に出せないため自作する。
+
     @ViewBuilder
     private var categorySection: some View {
-        Section("カテゴリ") {
-            // 割り勘ピッカーと同じく、タップで別画面 (チェックリスト) を開いて選ぶ。
-            Picker("カテゴリ", selection: categoryChoice) {
-                Label("すべて", systemImage: "square.grid.2x2.fill").tag("")
-                ForEach(categories, id: \.objectID) { cat in
-                    Label(cat.displayName, systemImage: cat.displaySymbol)
-                        .tag(cat.objectID.uriRepresentation().absoluteString)
-                }
-                if hasUncategorized {
-                    Label("カテゴリなし", systemImage: "tag.slash").tag(Self.uncategorizedTag)
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "カテゴリ", options: categoryOptions, selection: categoryChoice)
+            } label: {
+                LabeledContent("カテゴリ") {
+                    Text(currentCategoryName).foregroundStyle(.secondary)
                 }
             }
-            .pickerStyle(.navigationLink)
         }
     }
 
@@ -2387,40 +2385,41 @@ struct ExpenseFilterSheet: View {
 
     @ViewBuilder
     private var memberSection: some View {
-        Section("人") {
-            Button {
-                draftPayerID = nil
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "人", options: memberOptions, selection: payerChoice)
             } label: {
-                HStack(spacing: 12) {
-                    allMembersAvatar
-                    Text("すべて").foregroundStyle(.primary)
-                    Spacer()
-                    if draftPayerID == nil {
-                        Image(systemName: "checkmark").foregroundStyle(record.tint)
-                    }
+                LabeledContent("人") {
+                    Text(memberName(for: draftPayerID)).foregroundStyle(.secondary)
                 }
-                .contentShape(Rectangle())   // 行全体をタップ可能に (Spacer 部分も反応)
-            }
-            .buttonStyle(.plain)
-            ForEach(memberIDs, id: \.self) { id in
-                let info = record.memberDisplayInfo(for: id)
-                Button {
-                    draftPayerID = (draftPayerID == id) ? nil : id
-                } label: {
-                    HStack(spacing: 12) {
-                        AvatarView(photoData: info.photoData, displayName: info.name,
-                                   colorHex: info.colorHex, size: 28)
-                        Text(info.name).foregroundStyle(.primary)
-                        Spacer()
-                        if draftPayerID == id {
-                            Image(systemName: "checkmark").foregroundStyle(record.tint)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
             }
         }
+    }
+
+    @ViewBuilder
+    private var beneficiarySection: some View {
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "受益者", options: memberOptions, selection: beneficiaryChoice)
+            } label: {
+                LabeledContent("受益者") {
+                    Text(memberName(for: draftBeneficiaryID)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - 選択状態のラベル / 選択肢
+
+    private var currentCategoryName: String {
+        if draftUncategorized { return "カテゴリなし" }
+        if let c = draftCategory { return c.displayName }
+        return "すべて"
+    }
+
+    private func memberName(for id: String?) -> String {
+        guard let id, !id.isEmpty else { return "すべて" }
+        return record.memberDisplayInfo(for: id).name
     }
 
     /// 「すべて」用の円アバター (他参加者の AvatarView と同じ円スタイルに揃える)。
@@ -2434,6 +2433,46 @@ struct ExpenseFilterSheet: View {
         .frame(width: 28, height: 28)
     }
 
+    private var categoryOptions: [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: "すべて",
+                  icon: AnyView(CategoryIconView(symbol: "square.grid.2x2.fill", tint: record.tint, size: 28)))
+        ]
+        for cat in categories {
+            opts.append(.init(
+                id: cat.objectID.uriRepresentation().absoluteString,
+                name: cat.displayName,
+                icon: AnyView(CategoryIconView(category: cat, size: 28))))
+        }
+        if hasUncategorized {
+            opts.append(.init(id: Self.uncategorizedTag, name: "カテゴリなし",
+                              icon: AnyView(CategoryIconView(symbol: "tag.slash", tint: .gray, size: 28))))
+        }
+        return opts
+    }
+
+    private var memberOptions: [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: "すべて", icon: AnyView(allMembersAvatar))
+        ]
+        for id in memberIDs {
+            let info = record.memberDisplayInfo(for: id)
+            opts.append(.init(
+                id: id, name: info.name,
+                icon: AnyView(AvatarView(photoData: info.photoData, displayName: info.name,
+                                         colorHex: info.colorHex, size: 28))))
+        }
+        return opts
+    }
+
+    /// 支払い者 (人) の選択タグ。"" = すべて / それ以外 = メンバーの profileID。
+    private var payerChoice: Binding<String> {
+        Binding(
+            get: { draftPayerID ?? "" },
+            set: { draftPayerID = $0.isEmpty ? nil : $0 }
+        )
+    }
+
     /// 受益者の選択タグ。"" = すべて (指定なし) / それ以外 = メンバーの profileID。
     private var beneficiaryChoice: Binding<String> {
         Binding(
@@ -2441,24 +2480,42 @@ struct ExpenseFilterSheet: View {
             set: { draftBeneficiaryID = $0.isEmpty ? nil : $0 }
         )
     }
+}
 
-    @ViewBuilder
-    private var beneficiarySection: some View {
-        Section("受益者") {
-            // 割り勘・カテゴリと同じく navigationLink で別画面から選ぶ。
-            Picker("受益者", selection: beneficiaryChoice) {
-                Text("すべて").tag("")
-                ForEach(memberIDs, id: \.self) { id in
-                    let info = record.memberDisplayInfo(for: id)
+/// フィルタ用の自作 navigationLink 先リスト。行をタップすると選択して自動で戻る。
+/// 行アイコンは任意 (カテゴリの色付き円 / メンバーのアバター) を AnyView で受け取る。
+private struct FilterOptionList: View {
+    struct Option: Identifiable {
+        let id: String          // "" = すべて
+        let name: String
+        let icon: AnyView
+    }
+    let title: String
+    let options: [Option]
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            ForEach(options) { opt in
+                Button {
+                    selection = opt.id
+                    dismiss()
+                } label: {
                     HStack(spacing: 12) {
-                        AvatarView(photoData: info.photoData, displayName: info.name,
-                                   colorHex: info.colorHex, size: 24)
-                        Text(info.name)
+                        opt.icon
+                        Text(opt.name).foregroundStyle(.primary)
+                        Spacer()
+                        if selection == opt.id {
+                            Image(systemName: "checkmark").foregroundStyle(.tint)
+                        }
                     }
-                    .tag(id)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
-            .pickerStyle(.navigationLink)
         }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
