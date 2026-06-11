@@ -323,8 +323,18 @@ struct SheetDetailView: View {
             }
             .listSectionSeparator(.hidden)
 
-                // メンバー / 割り勘フィルタはツールバーのフィルタシートへ移動。
-                // サマリ下にはカテゴリフィルタ (ピル) のみ表示する。
+                // Mac と同じく、サマリ下にメンバーストリップを出す
+                // (フィルタシートの「人」と同じ selectedPayerID を操作するので同期する)。
+                if hasAcceptedOtherMembers {
+                    Section {
+                        membersStrip
+                            // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                    }
+                    .listSectionSeparator(.hidden)
+                }
+
+                // カテゴリフィルタ (ピル)。割り勘フィルタはフィルタシート側のみ。
                 // 絞り込める対象 (カテゴリ or カテゴリなし) があれば表示する
                 // (usedCategories/hasUncategorizedExpenses は仮想も含む)。
                 if !usedCategories.isEmpty || hasUncategorizedExpenses {
@@ -826,6 +836,48 @@ struct SheetDetailView: View {
                                    tint: record.tint)
                 }
             }
+    }
+
+    /// Mac の `membersStrip` と同じ、シートに参加しているメンバーのアバター + 名前一覧。
+    /// 現在のメンバー (= 自分 + CKShare 受諾済み参加者 + アーカイブされていない
+    /// バーチャル) のみ表示する。退室済み参加者やアーカイブ済みバーチャルは
+    /// 表示しない (過去の支出には残るが、フィルタには出さない)。
+    private var membersStrip: some View {
+        let ids = record.acceptedMemberProfileIDs()
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(ids, id: \.self) { id in
+                    let info = record.memberDisplayInfo(for: id)
+                    let isSelected = selectedPayerID == id
+                    Button {
+                        // タップで「その人が支払い者」の絞り込みをトグル。
+                        selectedPayerID = isSelected ? nil : id
+                    } label: {
+                        VStack(spacing: 4) {
+                            AvatarView(
+                                photoData: info.photoData,
+                                displayName: info.name,
+                                colorHex: info.colorHex,
+                                size: 36
+                            )
+                            // strokeBorder は枠内に描くので、枠が見切れない。
+                            .overlay(
+                                Circle().strokeBorder(record.tint, lineWidth: isSelected ? 2.5 : 0)
+                            )
+                            Text(info.name)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .foregroundStyle(isSelected ? record.tint : .secondary)
+                        }
+                        .frame(maxWidth: 80)
+                        .padding(.vertical, 3)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
     }
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
