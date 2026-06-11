@@ -385,7 +385,7 @@ struct EditRecurringRuleView: View {
                     } header: {
                         if splitEnabled {
                             HStack {
-                                Text("割る相手")
+                                Text("受益者")
                                 Spacer()
                                 Button("全員") { selectAllBeneficiaries(sheet: sheet) }
                                     .font(.caption)
@@ -399,7 +399,7 @@ struct EditRecurringRuleView: View {
                     } footer: {
                         if splitEnabled {
                             Text(selectedBeneficiaries.isEmpty
-                                 ? "割る相手を 1 人以上選んでください。"
+                                 ? "受益者を 1 人以上選んでください。"
                                  : "チェックした人で均等割りします。")
                                 .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                         }
