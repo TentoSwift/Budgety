@@ -373,7 +373,7 @@ enum SettlementCalculator {
             // 5) カテゴリ別集計 (期間フィルタ適用後の支出のみ加算)
             let catName = e.resolvedCategory?.displayName
                 ?? (e.categoryRaw?.isEmpty == false ? e.categoryRaw! : "カテゴリなし")
-            let catSymbol = e.resolvedCategory?.displaySymbol ?? "list.bullet"
+            let catSymbol = e.resolvedCategory?.displaySymbol ?? "tag.slash"
             let catColor = e.resolvedCategory?.colorHex
             if var agg = categoryAgg[catName] {
                 agg.total += converted
@@ -450,7 +450,7 @@ enum SettlementCalculator {
                 categoryAgg[catName] = agg
             } else {
                 categoryAgg[catName] = CategoryAggregator(
-                    symbol: cat?.displaySymbol ?? "list.bullet",
+                    symbol: cat?.displaySymbol ?? "tag.slash",
                     colorHex: cat?.colorHex,
                     total: converted,
                     count: 1

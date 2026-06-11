@@ -341,6 +341,6 @@ extension Expense {
     }
 
     var categorySymbol: String {
-        resolvedCategory?.displaySymbol ?? "list.bullet"
+        resolvedCategory?.displaySymbol ?? "tag.slash"
     }
 }
