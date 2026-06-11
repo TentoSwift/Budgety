@@ -118,7 +118,7 @@ struct SheetDetailView: View {
     // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
-    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 32
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 30
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
