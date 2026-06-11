@@ -136,9 +136,9 @@ extension ExpenseCategoryEntity {
             name: "カテゴリなし",
             sheetName: "カテゴリなしで保存",
             kindRaw: "",
-            symbol: "list.bullet",
+            symbol: "tag.slash",
             colorHex: gray,
-            iconData: renderColoredSymbol("list.bullet", colorHex: gray)
+            iconData: renderColoredSymbol("tag.slash", colorHex: gray)
         )
     }
 

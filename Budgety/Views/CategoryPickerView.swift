@@ -67,7 +67,7 @@ struct CategoryPickerView: View {
                 showingNew = true
             } label: {
                 HStack(spacing: 12) {
-                    CategoryIconView(symbol: "plus", tint: .gray, size: 36)
+                    CategoryIconView(symbol: "plus", tint: record.tint, size: 36)
                     Text("新しいカテゴリを追加")
                         .foregroundStyle(.primary)
                     Spacer()

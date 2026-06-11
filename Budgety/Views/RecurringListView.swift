@@ -131,7 +131,7 @@ private struct RecurringRow: View {
             if let cat = resolvedCategory {
                 CategoryIconView(category: cat, size: 36)
             } else {
-                CategoryIconView(symbol: "list.bullet", tint: .gray, size: 36)
+                CategoryIconView(symbol: "tag.slash", tint: .gray, size: 36)
             }
         }
     }
