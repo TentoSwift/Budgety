@@ -2301,7 +2301,8 @@ struct ExpenseFilterSheet: View {
                     Text(f.label).tag(f)
                 }
             }
-            .pickerStyle(.segmented)
+            // タップで別画面 (チェックリスト) を開いて選ぶ。通貨ピッカーと同じスタイル。
+            .pickerStyle(.navigationLink)
         }
     }
 
