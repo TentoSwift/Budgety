@@ -119,6 +119,11 @@ struct SheetDetailView: View {
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 28
+    /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 20
+    /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
+    @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
@@ -871,7 +876,7 @@ struct SheetDetailView: View {
                                 .foregroundStyle(isSelected ? record.tint : .secondary)
                         }
                         // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
-                        .frame(width: 72)
+                        .frame(width: memberCellWidth)
                         .padding(.vertical, 3)
                     }
                     .buttonStyle(.plain)
@@ -958,7 +963,7 @@ struct SheetDetailView: View {
                 // アイコンは固定幅スロットに置き、シンボルごとの幅差で
                 // 非選択ピルの横幅がバラつかないようにする。
                 Image(systemName: icon)
-                    .frame(width: 20)
+                    .frame(width: filterPillIconWidth)
                 if selected {
                     // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
                     // 挿入し、カプセルの clipShape で「左から徐々に現れる」見せ方にする。
@@ -968,7 +973,7 @@ struct SheetDetailView: View {
                 }
             }
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 14)
+            .padding(.horizontal, filterPillHPadding)
             // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
             .frame(height: filterPillHeight)
             .background(
