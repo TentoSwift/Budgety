@@ -74,7 +74,12 @@ struct BudgetyMacSheetView: View {
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
-    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 28
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 30
+    /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
+    /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
+    @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     /// 検索中だけ使う期間。永続化せず、検索のたびに全期間から始める (iOS と同じ)。
     @State private var searchPeriod: Period = .all
 
@@ -751,7 +756,7 @@ struct BudgetyMacSheetView: View {
                             .foregroundStyle(isSelected ? sheet.tint : .secondary)
                     }
                     // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
-                    .frame(width: 72)
+                    .frame(width: memberCellWidth)
                 }
                 .buttonStyle(.plain)
                 .help(isSelected ? "フィルタを解除" : "\(info.name) の支出で絞り込む")
@@ -810,7 +815,8 @@ struct BudgetyMacSheetView: View {
                 // アイコンは固定幅スロットに置き、シンボルごとの幅差で
                 // 非選択ピルの横幅がバラつかないようにする。
                 Image(systemName: icon)
-                    .frame(width: 20)
+                    .imageScale(.large)
+                    .frame(width: filterPillIconWidth)
                 if selected {
                     // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
                     // 挿入し、カプセルの clipShape で「左から徐々に現れる」見せ方にする。
@@ -820,7 +826,7 @@ struct BudgetyMacSheetView: View {
                 }
             }
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, selected ? 12 : 9)
+            .padding(.horizontal, filterPillHPadding)
             // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
             .frame(height: filterPillHeight)
             .background(Capsule().fill(selected ? color : Color.gray.opacity(0.2)))
