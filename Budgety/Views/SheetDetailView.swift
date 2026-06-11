@@ -118,10 +118,10 @@ struct SheetDetailView: View {
     // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
-    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 28
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 32
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
-    @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
     /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
     @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     @State private var showingAddExpense = false
@@ -963,6 +963,7 @@ struct SheetDetailView: View {
                 // アイコンは固定幅スロットに置き、シンボルごとの幅差で
                 // 非選択ピルの横幅がバラつかないようにする。
                 Image(systemName: icon)
+                    .imageScale(.large)
                     .frame(width: filterPillIconWidth)
                 if selected {
                     // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
