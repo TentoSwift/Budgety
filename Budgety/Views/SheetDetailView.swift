@@ -26,6 +26,15 @@ fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: S
     payerMatches(exp.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs)
 }
 
+/// 受益者一致: beneficiaryIDs のいずれかが beneficiaryID と一致するか。
+/// 「自分」(selfIDs) を選んだ場合は、受益者に self ID が含まれれば一致とみなす。
+fileprivate func beneficiaryMatches(_ beneficiaryIDs: [String], beneficiaryID: String, selfIDs: Set<String>) -> Bool {
+    if selfIDs.contains(beneficiaryID) {
+        return beneficiaryIDs.contains { selfIDs.contains($0) }
+    }
+    return beneficiaryIDs.contains(beneficiaryID)
+}
+
 struct SheetDetailView: View {
     @ObservedObject var record: ExpenseSheet
     /// プレビュー表示用。true なら検索バー・ツールバーを描画しない。
@@ -154,6 +163,8 @@ struct SheetDetailView: View {
     @State private var filterUncategorized: Bool = false
     /// 支払い者で絞り込む時の profileID（フィルタシートで設定）。nil = 全員。
     @State private var selectedPayerID: String?
+    /// 受益者で絞り込む時の profileID（フィルタシートで設定）。nil = 指定なし。
+    @State private var selectedBeneficiaryID: String?
     /// 割り勘フィルタ (受益者 2 人以上 = 割り勘あり)。フィルタシートで選ぶ。
     @State private var splitFilter: ExpenseSplitFilter = .all
     /// フィルタシートの表示。
@@ -250,6 +261,11 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
+        if let benID = selectedBeneficiaryID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter { beneficiaryMatches($0.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) }
+        }
         if splitFilter != .all {
             list = list.filter { splitFilter.matches(beneficiaryIDs: $0.beneficiaryIDList, payerID: $0.payerProfileID) }
         }
@@ -290,6 +306,15 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { payerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
         }
+        if let benID = selectedBeneficiaryID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter {
+                beneficiaryMatches(
+                    $0.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                    beneficiaryID: benID, selfIDs: selfIDs)
+            }
+        }
         if splitFilter != .all {
             list = list.filter {
                 splitFilter.matches(
@@ -317,6 +342,7 @@ struct SheetDetailView: View {
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
                     selectedPayerID: selectedPayerID,
+                    selectedBeneficiaryID: selectedBeneficiaryID,
                     splitFilter: splitFilter,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
@@ -583,6 +609,7 @@ struct SheetDetailView: View {
                 selectedCategory: $selectedCategory,
                 filterUncategorized: $filterUncategorized,
                 selectedPayerID: $selectedPayerID,
+                selectedBeneficiaryID: $selectedBeneficiaryID,
                 splitFilter: $splitFilter
             )
         }
@@ -742,6 +769,7 @@ struct SheetDetailView: View {
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+            || selectedBeneficiaryID != nil
             || splitFilter != .all
             || (isSearchActive && searchPeriod.isFiltering)
     }
@@ -753,6 +781,7 @@ struct SheetDetailView: View {
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
+        if selectedBeneficiaryID != nil { parts.append("受益者") }
         if splitFilter != .all { parts.append("割り勘") }
         return parts.joined(separator: "・") + "でフィルタされています。"
     }
@@ -773,6 +802,7 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                     filterUncategorized = false
                     selectedPayerID = nil
+                    selectedBeneficiaryID = nil
                     splitFilter = .all
                     searchPeriod = .all
                 }
@@ -1249,6 +1279,7 @@ private struct SummaryCard: View {
     let searchActive: Bool
     let selectedCategory: ExpenseCategory?
     let selectedPayerID: String?
+    let selectedBeneficiaryID: String?
     let splitFilter: ExpenseSplitFilter
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
     /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
@@ -1269,6 +1300,7 @@ private struct SummaryCard: View {
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
         selectedPayerID: String? = nil,
+        selectedBeneficiaryID: String? = nil,
         splitFilter: ExpenseSplitFilter = .all,
         searchQuery: String = ""
     ) {
@@ -1277,6 +1309,7 @@ private struct SummaryCard: View {
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
         self.selectedPayerID = selectedPayerID
+        self.selectedBeneficiaryID = selectedBeneficiaryID
         self.splitFilter = splitFilter
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
@@ -1301,7 +1334,7 @@ private struct SummaryCard: View {
     /// 不変) ではロールが残る。
     private var filterSig: String {
         let cat = selectedCategory?.objectID.uriRepresentation().absoluteString ?? "-"
-        return "\(cat)|\(selectedPayerID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(searchQuery)"
+        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(searchQuery)"
     }
 
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
@@ -1313,7 +1346,7 @@ private struct SummaryCard: View {
         let categoryID = selectedCategory?.objectID
         let target = code
         let q = searchQuery.lowercased()
-        let selfIDs: Set<String> = selectedPayerID == nil ? [] :
+        let selfIDs: Set<String> = (selectedPayerID == nil && selectedBeneficiaryID == nil) ? [] :
             UserProfileStore.shared.canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: record))
         var expenseSum: Decimal = 0
         var incomeSum: Decimal = 0
@@ -1322,6 +1355,7 @@ private struct SummaryCard: View {
         for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
+            if let benID = selectedBeneficiaryID, !beneficiaryMatches(e.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) { continue }
             if !splitFilter.matches(beneficiaryIDs: e.beneficiaryIDList, payerID: e.payerProfileID) { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
@@ -1346,6 +1380,9 @@ private struct SummaryCard: View {
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
+            if let benID = selectedBeneficiaryID,
+               !beneficiaryMatches(occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                                   beneficiaryID: benID, selfIDs: selfIDs) { continue }
             if !splitFilter.matches(
                 beneficiaryIDs: occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
                 payerID: occ.payerProfileID
@@ -2215,17 +2252,20 @@ struct ExpenseFilterSheet: View {
     @Binding var selectedCategory: ExpenseCategory?
     @Binding var filterUncategorized: Bool
     @Binding var selectedPayerID: String?
+    @Binding var selectedBeneficiaryID: String?
     @Binding var splitFilter: ExpenseSplitFilter
     @Environment(\.dismiss) private var dismiss
     // シート内はドラフト (ローカル) で編集し、「完了」で親フィルタに反映する。キャンセルは破棄。
     @State private var draftCategory: ExpenseCategory?
     @State private var draftUncategorized = false
     @State private var draftPayerID: String?
+    @State private var draftBeneficiaryID: String?
     @State private var draftSplit: ExpenseSplitFilter = .all
     @State private var didInit = false
 
     private var isAnyActive: Bool {
-        draftCategory != nil || draftUncategorized || draftPayerID != nil || draftSplit != .all
+        draftCategory != nil || draftUncategorized || draftPayerID != nil
+            || draftBeneficiaryID != nil || draftSplit != .all
     }
 
     var body: some View {
@@ -2234,6 +2274,7 @@ struct ExpenseFilterSheet: View {
                 if showsMemberFilters {
                     splitSection
                     memberSection
+                    beneficiarySection
                 }
                 categorySection
             }
@@ -2252,6 +2293,7 @@ struct ExpenseFilterSheet: View {
                         draftCategory = nil
                         draftUncategorized = false
                         draftPayerID = nil
+                        draftBeneficiaryID = nil
                         draftSplit = .all
                     }
                     .disabled(!isAnyActive)
@@ -2262,6 +2304,7 @@ struct ExpenseFilterSheet: View {
                         selectedCategory = draftCategory
                         filterUncategorized = draftUncategorized
                         selectedPayerID = draftPayerID
+                        selectedBeneficiaryID = draftBeneficiaryID
                         splitFilter = draftSplit
                         dismiss()
                     } label: {
@@ -2275,6 +2318,7 @@ struct ExpenseFilterSheet: View {
                 draftCategory = selectedCategory
                 draftUncategorized = filterUncategorized
                 draftPayerID = selectedPayerID
+                draftBeneficiaryID = selectedBeneficiaryID
                 draftSplit = splitFilter
                 didInit = true
             }
@@ -2310,21 +2354,19 @@ struct ExpenseFilterSheet: View {
         )
     }
 
+    // カテゴリ / 人 / 受益者 は自作の navigationLink 行 (タップで FilterOptionList を push)。
+    // SwiftUI の Picker(.navigationLink) では色付き円アイコン/アバターを行に出せないため自作する。
+
     @ViewBuilder
     private var categorySection: some View {
-        Section("カテゴリ") {
-            // 割り勘ピッカーと同じく、タップで別画面 (チェックリスト) を開いて選ぶ。
-            Picker("カテゴリ", selection: categoryChoice) {
-                Label("すべて", systemImage: "square.grid.2x2.fill").tag("")
-                ForEach(categories, id: \.objectID) { cat in
-                    Label(cat.displayName, systemImage: cat.displaySymbol)
-                        .tag(cat.objectID.uriRepresentation().absoluteString)
-                }
-                if hasUncategorized {
-                    Label("カテゴリなし", systemImage: "tag.slash").tag(Self.uncategorizedTag)
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "カテゴリ", options: categoryOptions, selection: categoryChoice)
+            } label: {
+                LabeledContent("カテゴリ") {
+                    Text(currentCategoryName).foregroundStyle(.secondary)
                 }
             }
-            .pickerStyle(.navigationLink)
         }
     }
 
@@ -2343,39 +2385,137 @@ struct ExpenseFilterSheet: View {
 
     @ViewBuilder
     private var memberSection: some View {
-        Section("人") {
-            Button {
-                draftPayerID = nil
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "人", options: memberOptions, selection: payerChoice)
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "person.2.fill")
-                        .frame(width: 28)
-                        .foregroundStyle(record.tint)
-                    Text("すべて").foregroundStyle(.primary)
-                    Spacer()
-                    if draftPayerID == nil {
-                        Image(systemName: "checkmark").foregroundStyle(record.tint)
-                    }
+                LabeledContent("人") {
+                    Text(memberName(for: draftPayerID)).foregroundStyle(.secondary)
                 }
             }
-            .buttonStyle(.plain)
-            ForEach(memberIDs, id: \.self) { id in
-                let info = record.memberDisplayInfo(for: id)
+        }
+    }
+
+    @ViewBuilder
+    private var beneficiarySection: some View {
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "受益者", options: memberOptions, selection: beneficiaryChoice)
+            } label: {
+                LabeledContent("受益者") {
+                    Text(memberName(for: draftBeneficiaryID)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - 選択状態のラベル / 選択肢
+
+    private var currentCategoryName: String {
+        if draftUncategorized { return "カテゴリなし" }
+        if let c = draftCategory { return c.displayName }
+        return "すべて"
+    }
+
+    private func memberName(for id: String?) -> String {
+        guard let id, !id.isEmpty else { return "すべて" }
+        return record.memberDisplayInfo(for: id).name
+    }
+
+    /// 「すべて」用の円アバター (他参加者の AvatarView と同じ円スタイルに揃える)。
+    private var allMembersAvatar: some View {
+        ZStack {
+            Circle().fill(record.tint.gradient)
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 28, height: 28)
+    }
+
+    private var categoryOptions: [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: "すべて",
+                  icon: AnyView(CategoryIconView(symbol: "square.grid.2x2.fill", tint: record.tint, size: 28)))
+        ]
+        for cat in categories {
+            opts.append(.init(
+                id: cat.objectID.uriRepresentation().absoluteString,
+                name: cat.displayName,
+                icon: AnyView(CategoryIconView(category: cat, size: 28))))
+        }
+        if hasUncategorized {
+            opts.append(.init(id: Self.uncategorizedTag, name: "カテゴリなし",
+                              icon: AnyView(CategoryIconView(symbol: "tag.slash", tint: .gray, size: 28))))
+        }
+        return opts
+    }
+
+    private var memberOptions: [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: "すべて", icon: AnyView(allMembersAvatar))
+        ]
+        for id in memberIDs {
+            let info = record.memberDisplayInfo(for: id)
+            opts.append(.init(
+                id: id, name: info.name,
+                icon: AnyView(AvatarView(photoData: info.photoData, displayName: info.name,
+                                         colorHex: info.colorHex, size: 28))))
+        }
+        return opts
+    }
+
+    /// 支払い者 (人) の選択タグ。"" = すべて / それ以外 = メンバーの profileID。
+    private var payerChoice: Binding<String> {
+        Binding(
+            get: { draftPayerID ?? "" },
+            set: { draftPayerID = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    /// 受益者の選択タグ。"" = すべて (指定なし) / それ以外 = メンバーの profileID。
+    private var beneficiaryChoice: Binding<String> {
+        Binding(
+            get: { draftBeneficiaryID ?? "" },
+            set: { draftBeneficiaryID = $0.isEmpty ? nil : $0 }
+        )
+    }
+}
+
+/// フィルタ用の自作 navigationLink 先リスト。行をタップすると選択して自動で戻る。
+/// 行アイコンは任意 (カテゴリの色付き円 / メンバーのアバター) を AnyView で受け取る。
+private struct FilterOptionList: View {
+    struct Option: Identifiable {
+        let id: String          // "" = すべて
+        let name: String
+        let icon: AnyView
+    }
+    let title: String
+    let options: [Option]
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            ForEach(options) { opt in
                 Button {
-                    draftPayerID = (draftPayerID == id) ? nil : id
+                    selection = opt.id
+                    dismiss()
                 } label: {
                     HStack(spacing: 12) {
-                        AvatarView(photoData: info.photoData, displayName: info.name,
-                                   colorHex: info.colorHex, size: 28)
-                        Text(info.name).foregroundStyle(.primary)
+                        opt.icon
+                        Text(opt.name).foregroundStyle(.primary)
                         Spacer()
-                        if draftPayerID == id {
-                            Image(systemName: "checkmark").foregroundStyle(record.tint)
+                        if selection == opt.id {
+                            Image(systemName: "checkmark").foregroundStyle(.tint)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
