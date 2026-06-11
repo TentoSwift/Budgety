@@ -246,7 +246,7 @@ struct SheetDetailView: View {
             list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
         if splitFilter != .all {
-            list = list.filter { splitFilter.matches(beneficiaryCount: $0.beneficiaryIDList.count) }
+            list = list.filter { splitFilter.matches(beneficiaryIDs: $0.beneficiaryIDList, payerID: $0.payerProfileID) }
         }
         // 検索中は検索専用の期間で絞り込む。
         if isSearchActive {
@@ -286,7 +286,12 @@ struct SheetDetailView: View {
             list = list.filter { payerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
         }
         if splitFilter != .all {
-            list = list.filter { splitFilter.matches(beneficiaryCount: $0.beneficiaryProfileIDs.split(separator: ",").count) }
+            list = list.filter {
+                splitFilter.matches(
+                    beneficiaryIDs: $0.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                    payerID: $0.payerProfileID
+                )
+            }
         }
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
@@ -1242,7 +1247,7 @@ private struct SummaryCard: View {
         for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
-            if !splitFilter.matches(beneficiaryCount: e.beneficiaryIDList.count) { continue }
+            if !splitFilter.matches(beneficiaryIDs: e.beneficiaryIDList, payerID: e.payerProfileID) { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
                     || e.displayPaidBy.lowercased().contains(q)
@@ -1266,7 +1271,10 @@ private struct SummaryCard: View {
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
-            if !splitFilter.matches(beneficiaryCount: occ.beneficiaryProfileIDs.split(separator: ",").count) { continue }
+            if !splitFilter.matches(
+                beneficiaryIDs: occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                payerID: occ.payerProfileID
+            ) { continue }
             if !q.isEmpty, !occ.title.lowercased().contains(q) { continue }
             hitCount += 1
             guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
@@ -2100,12 +2108,22 @@ enum ExpenseSplitFilter: String, CaseIterable, Identifiable {
         case .solo:  "割り勘なし"
         }
     }
-    /// 受益者数がこのフィルタにマッチするか (割り勘あり = 2 人以上)。
-    func matches(beneficiaryCount: Int) -> Bool {
+    /// アプリ本体 (AddExpenseView のロード判定) と同じ割り勘判定:
+    /// 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ、それ以外はオン。
+    /// (受益者 1 人でも支払者以外なら「その人の分を立て替えた」= 割り勘あり)
+    static func isSplit(beneficiaryIDs: [String], payerID: String?) -> Bool {
+        guard !beneficiaryIDs.isEmpty else { return false }
+        if beneficiaryIDs.count == 1, let p = payerID, !p.isEmpty, beneficiaryIDs[0] == p {
+            return false
+        }
+        return true
+    }
+
+    func matches(beneficiaryIDs: [String], payerID: String?) -> Bool {
         switch self {
         case .all:   return true
-        case .split: return beneficiaryCount >= 2
-        case .solo:  return beneficiaryCount < 2
+        case .split: return Self.isSplit(beneficiaryIDs: beneficiaryIDs, payerID: payerID)
+        case .solo:  return !Self.isSplit(beneficiaryIDs: beneficiaryIDs, payerID: payerID)
         }
     }
 }
