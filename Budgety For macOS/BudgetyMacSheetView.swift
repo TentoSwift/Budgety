@@ -820,7 +820,7 @@ struct BudgetyMacSheetView: View {
                 }
             }
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, selected ? 12 : 9)
+            .padding(.horizontal, 14)
             // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
             .frame(height: filterPillHeight)
             .background(Capsule().fill(selected ? color : Color.gray.opacity(0.2)))
