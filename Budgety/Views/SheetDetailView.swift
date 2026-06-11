@@ -1411,11 +1411,8 @@ private struct SummaryCard: View {
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
-            // メトリクス (残予算)。収支はヘッドライン (大きい金額) で表示
-            metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
-                       showRemaining: showBudgetMetrics)
-
-            // 月予算プログレスバー
+            // 月予算プログレスバー (予算 ¥… / % / 進捗)。残予算の金額はバーが
+            // 同じ情報を持つため、別途の「残予算」メトリクス列は表示しない。
             if showBudgetMetrics, let budget {
                 cleanBudgetBar(spent: t.expense, budget: budget)
             }
