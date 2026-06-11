@@ -750,7 +750,8 @@ struct BudgetyMacSheetView: View {
                             .truncationMode(.tail)
                             .foregroundStyle(isSelected ? sheet.tint : .secondary)
                     }
-                    .frame(maxWidth: 80)
+                    // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
+                    .frame(width: 72)
                 }
                 .buttonStyle(.plain)
                 .help(isSelected ? "フィルタを解除" : "\(info.name) の支出で絞り込む")
@@ -806,7 +807,10 @@ struct BudgetyMacSheetView: View {
                             selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
+                // アイコンは固定幅スロットに置き、シンボルごとの幅差で
+                // 非選択ピルの横幅がバラつかないようにする。
                 Image(systemName: icon)
+                    .frame(width: 20)
                 if selected {
                     // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
                     // 挿入し、カプセルの clipShape で「左から徐々に現れる」見せ方にする。
