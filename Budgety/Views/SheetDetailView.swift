@@ -448,9 +448,12 @@ struct SheetDetailView: View {
                 Button {
                     showingShare = true
                 } label: {
-                    Image(systemName: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
+                    // メンバーが居れば「参加済み」を表すチェック付き、居なければ招待を促す + 付き。
+                    Image(systemName: hasAcceptedOtherMembers
+                          ? "person.crop.circle.badge.checkmark"
+                          : "person.crop.circle.badge.plus")
                 }
-                .accessibilityLabel(record.isOwnedByCurrentUser ? "シートを共有" : "共有メンバー")
+                .accessibilityLabel(hasAcceptedOtherMembers ? "共有メンバー" : "シートを共有")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
