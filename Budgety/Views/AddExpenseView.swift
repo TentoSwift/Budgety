@@ -159,7 +159,7 @@ struct AddExpenseView: View {
     /// 収入では使わない (精算対象外)。
     @State private var selectedBeneficiaries: Set<String> = []
     /// 割り勘トグル。オフ = この支出は支払者のみの負担 (受益者 = 支払者)。
-    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    /// オン = `selectedBeneficiaries` で受益者を選ぶ (空 = 全員均等)。
     @State private var splitEnabled: Bool = false
     /// バーチャルメンバー追加 (Premium 機能)。
     @State private var showAddMemberPrompt = false
@@ -1070,7 +1070,7 @@ struct AddExpenseView: View {
                     } header: {
                         if splitEnabled {
                             HStack {
-                                Text("割る相手")
+                                Text("受益者")
                                 Spacer()
                                 Button("全員") { selectAllBeneficiaries(sheet: sheet) }
                                     .font(.caption)
@@ -1084,7 +1084,7 @@ struct AddExpenseView: View {
                     } footer: {
                         if splitEnabled {
                             Text(selectedBeneficiaries.isEmpty
-                                 ? "割る相手を 1 人以上選んでください。"
+                                 ? "受益者を 1 人以上選んでください。"
                                  : "チェックした人で均等割りします。")
                                 .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                         }
