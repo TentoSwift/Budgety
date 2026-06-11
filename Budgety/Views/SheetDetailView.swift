@@ -1291,6 +1291,16 @@ private struct SummaryCard: View {
 
     private var code: String { record.resolvedDefaultCurrencyCode }
 
+    /// フィルタの署名。これが変わる更新 (カテゴリ/支払者/割り勘/期間/検索の変更) では
+    /// カード内アニメーションを無効化してスナップさせる。フィルタは合計が大きく
+    /// ジャンプするため numericText のロールがスロットマシン状になり、さらに残予算列・
+    /// 予算バーの出入りと重なって不自然に見えるのを防ぐ。通常の追記・編集 (フィルタ
+    /// 不変) ではロールが残る。
+    private var filterSig: String {
+        let cat = selectedCategory?.objectID.uriRepresentation().absoluteString ?? "-"
+        return "\(cat)|\(selectedPayerID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(searchQuery)"
+    }
+
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
         // 検索フォーカス中でクエリ未入力なら、行リストの「0 件」と合わせて合計も 0。
         if searchActive && searchQuery.isEmpty {
@@ -1433,6 +1443,9 @@ private struct SummaryCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(record.tint.opacity(0.12))
         )
+        // フィルタが変わった更新ではアニメーションを無効化 (数値ロール・残予算/バーの
+        // 出入りが大ジャンプで不自然になるのを防ぐ)。通常の追記・編集ではロール継続。
+        .transaction(value: filterSig) { $0.animation = nil }
     }
 
     // MARK: - New clean UI components
