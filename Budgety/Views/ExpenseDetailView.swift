@@ -13,6 +13,9 @@ import UIKit
 
 struct ExpenseDetailView: View {
     @ObservedObject var expense: Expense
+    /// 仮想 occurrence を materialize して詳細表示している場合に、編集が実際に保存(commit)
+    /// されたことを親へ伝えるコールバック。未 commit で戻ったら親が未保存行を破棄する。
+    var onCommit: (() -> Void)? = nil
     /// 支払者名 (Public DB カスタム名) / 自分の名前変更で再描画させる。
     @ObservedObject private var pub = PublicProfileSync.shared
     @ObservedObject private var profileStore = UserProfileStore.shared
@@ -49,15 +52,19 @@ struct ExpenseDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("編集") { showingEdit = true }
+                    #if os(macOS)
+                    // macOS の編集ボタンをシートの色で塗る (iOS は従来の nav tint のまま)。
+                    .tint(expense.sheet?.tint)
+                    #endif
             }
         }
         .sheet(isPresented: $showingEdit) {
             #if os(macOS)
             if let sheet = expense.sheet {
-                MacAddExpenseView(sheet: sheet, expense: expense)
+                MacAddExpenseView(sheet: sheet, expense: expense, onCommit: onCommit)
             }
             #else
-            AddExpenseView(expense: expense)
+            AddExpenseView(expense: expense, onCommit: onCommit)
             #endif
         }
         #if os(iOS)
@@ -88,6 +95,10 @@ struct ExpenseDetailView: View {
             .padding(.vertical, 8)
         }
         .listRowBackground(Color.clear)
+        #if os(macOS)
+        // ヘッダー (金額・タイトル) 下の区切り線を消す。
+        .listRowSeparator(.hidden)
+        #endif
     }
 
     // MARK: - Details

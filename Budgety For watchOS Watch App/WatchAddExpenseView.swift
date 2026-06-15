@@ -331,7 +331,9 @@ struct WatchCategoryPicker: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: cat.symbol ?? "tag.fill")
-                                .font(.body.weight(.semibold))
+                                // Dynamic Type で巨大化して円からはみ出さないよう固定サイズに
+                                // (ホーム行のカテゴリアイコンと同じ方式)。
+                                .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .frame(width: 28, height: 28)
                                 .background(

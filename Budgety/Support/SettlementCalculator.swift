@@ -6,7 +6,9 @@
 //  - 支出のみ対象 (収入はスキップ)
 //  - 各 Expense は payer から beneficiaries に均等割りで負担を発生させる
 //  - 通貨はシートの既定通貨に FX 換算して合算
-//  - 出力: 各メンバーの net 残高 + greedy minimum cash flow に基づく送金提案
+//  - 出力: 各メンバーの net 残高 + 実際の貸し借り (ペアごとのネット) に沿った送金提案。
+//    相互の貸し借りと循環 (A→B→C→A) は相殺し、残った実債務をそのまま提案する。
+//    送金回数の最小化より「借りた相手に返す」直感を優先する。
 //
 
 import Foundation
@@ -238,6 +240,9 @@ enum SettlementCalculator {
 
         var balances: [String: Decimal] = [:]
         for m in memberOrder { balances[m] = 0 }
+        // ペアごとの貸し借りネット。送金プランを「実際に誰が誰に借りたか」に
+        // 沿って出すために、net 残高とは別にペア単位でも集計する。
+        var pairDebts: [PairKey: Decimal] = [:]
 
         var missing: Set<String> = []
         var includedCount = 0
@@ -354,6 +359,10 @@ enum SettlementCalculator {
                 for b in normalizedBeneficiaries {
                     balances[b, default: 0] -= perShare
                 }
+                // ペア集計: 受益者 (payer 自身を除く) は payer に perShare を借りる
+                for b in normalizedBeneficiaries where b != payer {
+                    addPairDebt(&pairDebts, from: b, to: payer, amount: perShare)
+                }
                 // 精算対象としてカウントするのは「割り勘設定された (= 受益者がいる)」
                 // 支出のみ。割り勘オフ (= 支払者単独負担) は残高に影響しないので
                 // 「対象支出」の件数には数えない。
@@ -364,7 +373,7 @@ enum SettlementCalculator {
             // 5) カテゴリ別集計 (期間フィルタ適用後の支出のみ加算)
             let catName = e.resolvedCategory?.displayName
                 ?? (e.categoryRaw?.isEmpty == false ? e.categoryRaw! : "カテゴリなし")
-            let catSymbol = e.resolvedCategory?.displaySymbol ?? "list.bullet"
+            let catSymbol = e.resolvedCategory?.displaySymbol ?? "tag.slash"
             let catColor = e.resolvedCategory?.colorHex
             if var agg = categoryAgg[catName] {
                 agg.total += converted
@@ -386,6 +395,67 @@ enum SettlementCalculator {
                 convertedAmount: converted,
                 rawBeneficiaries: rawBeneficiaries, normalizedBeneficiaries: normalizedBeneficiaries,
                 perShare: perShareOpt, included: included, skipReason: nil))
+        }
+
+        // 4.5) 未実体化の定期 occurrence (仮想) も同じロジックで集計する (完全仮想化)。
+        //   - includeFuture:false → 今日まで。未来分は債務に含めない。
+        //   - 実在行がある日付は virtualOccurrences 側で除外済み (= 二重計上しない)。
+        //   - FX スナップショットは無いので現行レートで換算 (定期は凍結しない方針)。
+        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
+        let resolvePayerID: (String?) -> String? = { pid in
+            guard let pid, !pid.isEmpty else { return nil }
+            if !selfCanonical.isEmpty {
+                if selfIDs.contains(pid) { return selfCanonical }
+                if let selfEmailID, pid == selfEmailID { return selfCanonical }
+            }
+            if let urn = emailToURN[pid] { return urn }
+            return pid
+        }
+        let virtualOccurrences = RecurringOccurrenceService.virtualOccurrences(
+            for: sheet, in: dateRange, includeFuture: false
+        )
+        for occ in virtualOccurrences where occ.kind == .expense {
+            guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
+                missing.insert(occ.currencyCode)
+                continue
+            }
+            // 受益者: CSV → 正規化 + 現参加者フィルタ + dedup (Expense ループと同じ扱い)
+            var seen = Set<String>()
+            let normalizedBeneficiaries = occ.beneficiaryProfileIDs
+                .split(separator: ",")
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map(normalize)
+                .filter { memberSet.contains($0) && seen.insert($0).inserted }
+            // payer 解決 (現参加者でなければスキップ)
+            guard let payer = resolvePayerID(occ.payerProfileID), memberSet.contains(payer) else {
+                continue
+            }
+            // 残高: 受益者がいる時のみ (割り勘オフは残高変動なし、カテゴリ集計のみ)
+            if !normalizedBeneficiaries.isEmpty {
+                let perShare = roundToCurrency(converted / Decimal(normalizedBeneficiaries.count), code: target)
+                balances[payer, default: 0] += perShare * Decimal(normalizedBeneficiaries.count)
+                for b in normalizedBeneficiaries { balances[b, default: 0] -= perShare }
+                for b in normalizedBeneficiaries where b != payer {
+                    addPairDebt(&pairDebts, from: b, to: payer, amount: perShare)
+                }
+                includedCount += 1
+            }
+            // カテゴリ集計 (Expense ループと同じく displayName をキーに)
+            let cat = cats.first(where: { $0.name == occ.categoryRaw })
+            let catName = cat?.displayName ?? (occ.categoryRaw.isEmpty ? "カテゴリなし" : occ.categoryRaw)
+            if var agg = categoryAgg[catName] {
+                agg.total += converted
+                agg.count += 1
+                categoryAgg[catName] = agg
+            } else {
+                categoryAgg[catName] = CategoryAggregator(
+                    symbol: cat?.displaySymbol ?? "tag.slash",
+                    colorHex: cat?.colorHex,
+                    total: converted,
+                    count: 1
+                )
+            }
         }
 
         // 5) ユーザーが記録した実送金 (SettlementRecord) を反映。
@@ -426,6 +496,8 @@ enum SettlementCalculator {
             let rounded = roundToCurrency(converted, code: target)
             balances[from, default: 0] += rounded
             balances[to,   default: 0] -= rounded
+            // ペア集計: 「from が to に払った」= from の to への債務が減る
+            addPairDebt(&pairDebts, from: from, to: to, amount: -rounded)
         }
 
         let memberBalances: [MemberBalance] = memberOrder.compactMap { id in
@@ -436,8 +508,8 @@ enum SettlementCalculator {
             return MemberBalance(profileID: id, amount: amount)
         }
 
-        let nonZero = memberBalances.filter { !$0.isSettled }
-        let transfers = computeMinimumTransfers(balances: nonZero, currencyCode: target)
+        let transfers = computeDebtFollowingTransfers(
+            pairDebts: pairDebts, memberOrder: memberOrder, currencyCode: target)
 
         let debug: SettlementDebugInfo?
         #if DEBUG
@@ -488,36 +560,122 @@ enum SettlementCalculator {
         return output
     }
 
-    /// Greedy 最小回数送金: 大きな debtor と大きな creditor をマッチさせて少送金で精算する。
-    /// (理論上の最小回数より多くなる場合があるが、O(N^2 log N) で十分実用的)
-    private static func computeMinimumTransfers(balances: [MemberBalance], currencyCode: String) -> [SettlementTransfer] {
-        var creditors = balances.filter { $0.isCreditor }
-            .map { (id: $0.profileID, amount: $0.amount) }
-        var debtors = balances.filter { $0.isDebtor }
-            .map { (id: $0.profileID, amount: -$0.amount) }  // 正の数として扱う
+    /// ペア (順序なし) の貸し借りネットのキー。`a < b` (辞書順) に正規化して保持し、
+    /// 値が正なら「a が b に借りている」、負なら「b が a に借りている」。
+    private struct PairKey: Hashable {
+        let a: String
+        let b: String
+    }
 
-        var transfers: [SettlementTransfer] = []
+    /// 「debtor が creditor に amount 借りた」をペアネットへ加算する。
+    /// 相互の貸し借りは同じキーで符号が打ち消し合い、自動的に相殺される。
+    private static func addPairDebt(
+        _ debts: inout [PairKey: Decimal],
+        from debtor: String, to creditor: String, amount: Decimal
+    ) {
+        guard debtor != creditor else { return }
+        if debtor < creditor {
+            debts[PairKey(a: debtor, b: creditor), default: 0] += amount
+        } else {
+            debts[PairKey(a: creditor, b: debtor), default: 0] -= amount
+        }
+    }
+
+    /// 実際の貸し借り (ペアごとのネット) に沿った送金プランを作る。
+    /// 1. 相互の貸し借りはペアネットの時点で相殺済み。
+    /// 2. 循環 (A→B→C→A のように一周するお金) は動かす意味が無いので相殺する。
+    ///    全員精算済み (全 net 残高 0) なら必ず空プランに収束する。
+    /// 3. 残った債務エッジをそのまま「borrower → lender」の送金として提案する。
+    ///    送金回数の最小化より「借りた相手に返す」直感を優先する (= greedy の
+    ///    「借りていない相手へ送金」が出ない)。途中に立つメンバー (借りて貸した人) は
+    ///    受け取りと支払いの両方が提案される。
+    private static func computeDebtFollowingTransfers(
+        pairDebts: [PairKey: Decimal],
+        memberOrder: [String],
+        currencyCode: String
+    ) -> [SettlementTransfer] {
         // 1 通貨単位 (= 丸め誤差) 以下は 0 とみなす
         let epsilon = roundToCurrency(Decimal(1) / Decimal(100), code: currencyCode)
+        var orderIndex: [String: Int] = [:]
+        for (i, id) in memberOrder.enumerated() where orderIndex[id] == nil { orderIndex[id] = i }
+        func rank(_ id: String) -> (Int, String) { (orderIndex[id] ?? Int.max, id) }
 
-        while !creditors.isEmpty, !debtors.isEmpty {
-            creditors.sort { $0.amount > $1.amount }
-            debtors.sort { $0.amount > $1.amount }
-            var c = creditors[0]
-            var d = debtors[0]
-            let pay = min(c.amount, d.amount)
-            let rounded = roundToCurrency(pay, code: currencyCode)
-            if rounded > 0 {
-                transfers.append(SettlementTransfer(
-                    fromProfileID: d.id,
-                    toProfileID: c.id,
-                    amount: rounded
-                ))
+        // 有向グラフ: debtor → creditor (正の金額のみ)
+        var edges: [String: [String: Decimal]] = [:]
+        for (key, value) in pairDebts {
+            if value > epsilon {
+                edges[key.a, default: [:]][key.b, default: 0] += value
+            } else if -value > epsilon {
+                edges[key.b, default: [:]][key.a, default: 0] += -value
             }
-            c.amount -= pay
-            d.amount -= pay
-            if c.amount <= epsilon { creditors.removeFirst() } else { creditors[0] = c }
-            if d.amount <= epsilon { debtors.removeFirst() } else { debtors[0] = d }
+        }
+
+        // 循環の検出 (色付き DFS、近傍は memberOrder 順で決定的に辿る)。
+        // 返り値は [n0, n1, ..., n0] のような閉路ノード列。
+        func detectCycle() -> [String]? {
+            var color: [String: Int] = [:]   // 0=未訪問, 1=訪問中, 2=完了
+            var path: [String] = []
+            var found: [String]?
+            func dfs(_ u: String) {
+                guard found == nil else { return }
+                color[u] = 1
+                path.append(u)
+                let neighbors = (edges[u] ?? [:]).keys.sorted { rank($0) < rank($1) }
+                for v in neighbors {
+                    guard found == nil else { return }
+                    switch color[v] ?? 0 {
+                    case 1:
+                        if let i = path.firstIndex(of: v) {
+                            found = Array(path[i...]) + [v]
+                        }
+                        return
+                    case 0:
+                        dfs(v)
+                    default:
+                        break
+                    }
+                }
+                path.removeLast()
+                color[u] = 2
+            }
+            for n in edges.keys.sorted(by: { rank($0) < rank($1) }) where (color[n] ?? 0) == 0 {
+                dfs(n)
+                if let found { return found }
+            }
+            return nil
+        }
+
+        // 閉路上の最小額を全エッジから差し引く。1 回ごとに最低 1 本エッジが消えるので必ず停止する。
+        while let cycle = detectCycle() {
+            var minAmount = Decimal.greatestFiniteMagnitude
+            for i in 0..<(cycle.count - 1) {
+                minAmount = min(minAmount, edges[cycle[i]]?[cycle[i + 1]] ?? 0)
+            }
+            for i in 0..<(cycle.count - 1) {
+                let f = cycle[i], t = cycle[i + 1]
+                let remaining = (edges[f]?[t] ?? 0) - minAmount
+                if remaining > epsilon {
+                    edges[f]?[t] = remaining
+                } else {
+                    edges[f]?[t] = nil
+                    if edges[f]?.isEmpty == true { edges[f] = nil }
+                }
+            }
+        }
+
+        // 残った債務エッジ = 送金プラン。金額降順 (同額は memberOrder 順) で安定に並べる。
+        var transfers: [SettlementTransfer] = []
+        for (from, tos) in edges {
+            for (to, amount) in tos {
+                let rounded = roundToCurrency(amount, code: currencyCode)
+                guard rounded > 0 else { continue }
+                transfers.append(SettlementTransfer(fromProfileID: from, toProfileID: to, amount: rounded))
+            }
+        }
+        transfers.sort { lhs, rhs in
+            if lhs.amount != rhs.amount { return lhs.amount > rhs.amount }
+            if lhs.fromProfileID != rhs.fromProfileID { return rank(lhs.fromProfileID) < rank(rhs.fromProfileID) }
+            return rank(lhs.toProfileID) < rank(rhs.toProfileID)
         }
         return transfers
     }

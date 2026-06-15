@@ -10,6 +10,9 @@
 		2D18B4CC2FB31606006F2C29 /* Budgety For watchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2D31C36A2FC452E10011566C /* LicenseList in Frameworks */ = {isa = PBXBuildFile; productRef = 2D31C3692FC452E10011566C /* LicenseList */; };
 		2D8484602FADB766001AB1B6 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
+		2D95E7092FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
+		2D95E70A2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
+		2D95E70B2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
 		2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
@@ -44,10 +47,11 @@
 
 /* Begin PBXFileReference section */
 		2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For watchOS Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Budgety StoreKit.storekit"; sourceTree = "<group>"; };
 		2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = BudgetyIcon.icon; sourceTree = "<group>"; };
 		2DDCE11E2FA8974700A42F60 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For visionOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D18B4C22FB31605006F2C2A /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D18B4C22FB31605006F2C30 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -71,6 +75,7 @@
 				Support/Currency.swift,
 				Support/Notifications.swift,
 				Support/PublicProfileSync.swift,
+				Support/RecurringOccurrenceService.swift,
 				Support/ShareParticipantCanonical.swift,
 				Support/ShareParticipantDiagnostics.swift,
 				Support/SheetLockManager.swift,
@@ -106,6 +111,7 @@
 				Support/Currency.swift,
 				Support/Notifications.swift,
 				Support/PublicProfileSync.swift,
+				Support/RecurringOccurrenceService.swift,
 				Support/SettlementCalculator.swift,
 				Support/ShareParticipantCanonical.swift,
 				Support/ShareParticipantDiagnostics.swift,
@@ -150,6 +156,7 @@
 				Support/BuildInfo.swift,
 				"Support/Calendar+Month.swift",
 				Support/CategoryAISuggestor.swift,
+				Support/CategoryHistorySuggestor.swift,
 				"Support/Color+Hex.swift",
 				Support/CSVImporter.swift,
 				Support/Currency.swift,
@@ -160,6 +167,7 @@
 				Support/PDFReportView.swift,
 				Support/PublicProfileSync.swift,
 				Support/RecurringExpenseGenerator.swift,
+				Support/RecurringOccurrenceService.swift,
 				Support/SampleDataGenerator.swift,
 				Support/SettlementCalculator.swift,
 				Support/ShareParticipantCanonical.swift,
@@ -177,7 +185,6 @@
 				Views/CategoryIconView.swift,
 				Views/CategoryListView.swift,
 				Views/CategoryPickerView.swift,
-				Views/ClaudeIntegrationView.swift,
 				Views/CSVImportView.swift,
 				Views/EditCategoryView.swift,
 				Views/EditRecurringRuleView.swift,
@@ -287,6 +294,7 @@
 		2DDCE1152FA8974700A42F60 = {
 			isa = PBXGroup;
 			children = (
+				2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */,
 				2DDCE1202FA8974700A42F60 /* Budgety */,
 				2D18B4C32FB31605006F2C29 /* Budgety For watchOS Watch App */,
 				3D18B4C32FB31605006F2C2A /* Budgety For visionOS */,
@@ -301,8 +309,8 @@
 			children = (
 				2DDCE11E2FA8974700A42F60 /* Budgety.app */,
 				2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */,
-				3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */,
-				4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */,
+				3D18B4C22FB31605006F2C2A /* Budgety.app */,
+				4D18B4C22FB31605006F2C30 /* Budgety.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -379,7 +387,7 @@
 			packageProductDependencies = (
 			);
 			productName = "Budgety For visionOS";
-			productReference = 3D18B4C22FB31605006F2C2A /* Budgety For visionOS.app */;
+			productReference = 3D18B4C22FB31605006F2C2A /* Budgety.app */;
 			productType = "com.apple.product-type.application";
 		};
 		4D18B4C12FB31605006F2C30 /* Budgety For macOS */ = {
@@ -402,7 +410,7 @@
 				4D8484602FADB766001AB1B7 /* CustomPicker */,
 			);
 			productName = "Budgety For macOS";
-			productReference = 4D18B4C22FB31605006F2C30 /* Budgety For macOS.app */;
+			productReference = 4D18B4C22FB31605006F2C30 /* Budgety.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -463,6 +471,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
+				2D95E7092FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,6 +480,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
+				2D95E70A2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,6 +495,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D95E70B2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
 				2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -538,7 +549,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -546,13 +557,13 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety.watchkitapp;
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX).watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -574,7 +585,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For watchOS Watch App/Budgety For watchOS Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -582,13 +593,13 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.tento.budgety;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety.watchkitapp;
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX).watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -608,6 +619,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				BUNDLE_ID_SUFFIX = .dev;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -672,6 +684,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				BUNDLE_ID_SUFFIX = "";
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -733,7 +746,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -755,8 +768,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -782,7 +795,7 @@
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -804,8 +817,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -830,7 +843,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -850,7 +863,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Budgety;
 				SDKROOT = xros;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
@@ -872,7 +885,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "Budgety For visionOS/Budgety For visionOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026060301;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For visionOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_PREVIEWS = YES;
@@ -892,7 +905,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Budgety;
 				SDKROOT = xros;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
@@ -915,7 +928,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -931,9 +944,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
+				PRODUCT_NAME = Budgety;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = macosx;
@@ -954,7 +967,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Budgety For macOS/Budgety For macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026052816;
+				CURRENT_PROJECT_VERSION = 2026061001;
 				DEVELOPMENT_ASSET_PATHS = "\"Budgety For macOS/Preview Content\"";
 				DEVELOPMENT_TEAM = LV3H7Q68W6;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -970,9 +983,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tento.budgety;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX)";
+				PRODUCT_NAME = Budgety;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = macosx;

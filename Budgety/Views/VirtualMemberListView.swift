@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import CoreData
 
 struct VirtualMemberListView: View {
     @ObservedObject var record: ExpenseSheet

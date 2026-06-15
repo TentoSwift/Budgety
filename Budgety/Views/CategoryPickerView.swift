@@ -62,13 +62,18 @@ struct CategoryPickerView: View {
                 .buttonStyle(.plain)
             }
 
-            Section {
-                Button {
-                    showingNew = true
-                } label: {
-                    Label("新しいカテゴリを追加", systemImage: "plus.circle.fill")
+            // 追加ボタンも各カテゴリ行と同じ UI (色付き円アイコン + テキスト) に揃える。
+            Button {
+                showingNew = true
+            } label: {
+                HStack(spacing: 12) {
+                    CategoryIconView(symbol: "plus", tint: record.tint, size: 36)
+                    Text("新しいカテゴリを追加")
+                        .foregroundStyle(.primary)
+                    Spacer()
                 }
             }
+            .buttonStyle(.plain)
         }
         .listStyle(.plain)
         .navigationTitle("カテゴリを選択")

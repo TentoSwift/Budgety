@@ -133,23 +133,23 @@ enum QuickIntentLogic {
             }
         }
 
-        // カテゴリ決定 (= kind に応じて AI 提案 / 最初の同 kind カテゴリ)
+        // カテゴリ決定: ①Claude が指定した category → ②過去の自分の分類履歴 → ③未分類。
+        //  MCP では FoundationModel による自動分類は行わない (Claude に list_categories で
+        //  候補を見せ、category 引数で明示指定させる方針)。指定も履歴も無ければ未分類のまま。
         let allKindCats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
             .filter { $0.kind == kind }
             .sorted { $0.sortOrder < $1.sortOrder }
-        var aiSuggested: ExpenseCategory? = nil
-        if CategoryAISuggestor.isAvailable {
-            let names = allKindCats.map { $0.displayName }
-            if !names.isEmpty,
-               let suggestedName = await CategoryAISuggestor.suggest(
-                title: title,
-                kind: kind,
-                categories: names
-               ) {
-                aiSuggested = allKindCats.first(where: { $0.displayName == suggestedName })
-            }
+        var picked: ExpenseCategory? = nil
+        if let catName = (parsed["category"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !catName.isEmpty {
+            let target = catName.lowercased()
+            picked = allKindCats.first(where: { $0.displayName.lowercased() == target })
+                ?? allKindCats.first(where: { ($0.name ?? "").lowercased() == target })
         }
-        let firstCategory = aiSuggested ?? allKindCats.first
+        if picked == nil {
+            picked = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet)
+        }
+        let firstCategory = picked
 
         // 永続化
         let expense = Expense(context: ctx)
@@ -395,6 +395,57 @@ enum QuickIntentLogic {
             ]
         }
 
+        // 完全仮想化 ON 時: 未実体化の定期 occurrence も期間内で返す (フラグ OFF なら空)。
+        var virtualPayload: [[String: Any]] = []
+        if RecurringOccurrenceService.virtualizationEnabled {
+            let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+            if let sheetName = (parsed["sheet"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !sheetName.isEmpty {
+                sheetReq.predicate = NSPredicate(format: "name == %@", sheetName)
+            }
+            let kindFilter: TransactionKind? = {
+                guard let k = (parsed["kind"] as? String)?.lowercased() else { return nil }
+                if k == "income" { return .income }
+                if k == "expense" { return .expense }
+                return nil
+            }()
+            let range = dateRange.start...dateRange.end
+            for sheet in (try? ctx.fetch(sheetReq)) ?? [] {
+                // Premium / ロックは Expense と同じ基準で gate する。
+                if !isPremium && sheet.isOwnedByCurrentUser { continue }
+                if lock.hasPassword(for: sheet) {
+                    if providedPassword.isEmpty || !lock.unlock(sheet, withPassword: providedPassword) { continue }
+                }
+                for occ in RecurringOccurrenceService.virtualOccurrences(for: sheet, in: range, includeFuture: false) {
+                    if let kindFilter, occ.kind != kindFilter { continue }
+                    let payerName: String = (occ.payerProfileID?.isEmpty == false)
+                        ? sheet.memberDisplayInfo(for: occ.payerProfileID!).name : ""
+                    let beneficiaryNames = occ.beneficiaryProfileIDs
+                        .split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                        .map { sheet.memberDisplayInfo(for: $0).name }
+                    virtualPayload.append([
+                        "date": ISO8601DateFormatter().string(from: occ.date),
+                        "title": occ.title.isEmpty ? (occ.categoryRaw.isEmpty ? "定期" : occ.categoryRaw) : occ.title,
+                        "amount": NSDecimalNumber(decimal: occ.amount).doubleValue,
+                        "currency": occ.currencyCode,
+                        "kind": occ.kind == .income ? "income" : "expense",
+                        "category": occ.categoryRaw,
+                        "categoryColor": "",
+                        "sheet": sheet.name ?? "",
+                        "paidBy": payerName,
+                        "payer": payerName,
+                        "beneficiaries": beneficiaryNames,
+                        "note": "",
+                        "recurringVirtual": true
+                    ])
+                }
+            }
+        }
+        let combinedPayload = (payloadOut + virtualPayload).sorted {
+            (($0["date"] as? String) ?? "") < (($1["date"] as? String) ?? "")
+        }
+
         let periodLabel: String = {
             if parsed["from"] != nil && parsed["to"] != nil { return "カスタム期間" }
             let periodStr = (parsed["period"] as? String) ?? "thisMonth"
@@ -405,8 +456,8 @@ enum QuickIntentLogic {
             "period": periodLabel,
             "from": ISO8601DateFormatter().string(from: dateRange.start),
             "to":   ISO8601DateFormatter().string(from: dateRange.end),
-            "count": payloadOut.count,
-            "expenses": payloadOut
+            "count": combinedPayload.count,
+            "expenses": combinedPayload
         ]
         var warnings: [String] = []
         if omittedPremiumCount > 0 {
@@ -484,6 +535,65 @@ enum QuickIntentLogic {
             "sheet": sheet.displayName,
             "count": members.count,
             "members": members
+        ]
+    }
+
+    /// シート内のカテゴリ一覧を返す (MCP の add_expense で `category` に渡す候補)。
+    /// 出力: { ok, sheet, count, categories: [{ name, kind, color }] }
+    @MainActor
+    static func categories(parsed: [String: Any]) -> [String: Any] {
+        let pc = PersistenceController.shared
+        let ctx = pc.container.viewContext
+        let sheetName = (parsed["sheet"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // シート決定 (add/get/members と同じく最古シートフォールバック)
+        let sheetReq = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
+        sheetReq.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: true)]
+        let sheet: ExpenseSheet
+        if !sheetName.isEmpty {
+            sheetReq.predicate = NSPredicate(format: "name == %@", sheetName)
+            if let s = (try? ctx.fetch(sheetReq))?.first {
+                sheet = s
+            } else {
+                sheetReq.predicate = nil
+                sheetReq.fetchLimit = 1
+                guard let fallback = (try? ctx.fetch(sheetReq))?.first else {
+                    return ["ok": false, "error": "no sheet found"]
+                }
+                sheet = fallback
+            }
+        } else {
+            sheetReq.fetchLimit = 1
+            guard let s = (try? ctx.fetch(sheetReq))?.first else {
+                return ["ok": false, "error": "no sheet found"]
+            }
+            sheet = s
+        }
+
+        // kind フィルタ (任意): expense / income
+        let kindFilter: TransactionKind? = {
+            guard let k = (parsed["kind"] as? String)?.lowercased() else { return nil }
+            if k == "income" { return .income }
+            if k == "expense" { return .expense }
+            return nil
+        }()
+
+        let cats = ((sheet.categories as? Set<ExpenseCategory>) ?? [])
+            .filter { kindFilter == nil || $0.kind == kindFilter }
+            .sorted { ($0.kindRaw ?? "", $0.sortOrder, $0.displayName) < ($1.kindRaw ?? "", $1.sortOrder, $1.displayName) }
+        let list: [[String: Any]] = cats.map { c in
+            [
+                "name": c.displayName,
+                "kind": c.kind == .income ? "income" : "expense",
+                "color": c.colorHex ?? ""
+            ]
+        }
+        return [
+            "ok": true,
+            "sheet": sheet.displayName,
+            "count": list.count,
+            "categories": list
         ]
     }
 

@@ -156,7 +156,15 @@ struct WatchHomeView: View {
                 return c.year == comps.year && c.month == comps.month
             }
             .reduce(Decimal(0)) { $0 + $1.amountDecimal }
-        return "今月 " + CurrencyCatalog.format(total, code: sheet.resolvedDefaultCurrencyCode)
+        // 完全仮想化 ON 時は今月の仮想 occurrence も合算 (OFF なら空)。
+        let virtualTotal = RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
+            .filter { occ in
+                guard occ.kind == .expense else { return false }
+                let c = cal.dateComponents([.year, .month], from: occ.date)
+                return c.year == comps.year && c.month == comps.month
+            }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return "今月 " + CurrencyCatalog.format(total + virtualTotal, code: sheet.resolvedDefaultCurrencyCode)
     }
 
 }
@@ -180,15 +188,23 @@ private struct WatchSheetPage: View {
         )
     }
 
+    /// ルールから算出した仮想 occurrence (完全仮想化フラグ OFF なら空)。
+    private var virtualOccurrences: [RecurringOccurrence] {
+        RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
+    }
+
     private var todayExpenses: [Expense] {
         let dayStart = Calendar.current.startOfDay(for: Date())
         return expenses.filter { ($0.date ?? .distantPast) >= dayStart }
     }
 
     private var todayTotal: Decimal {
-        todayExpenses
-            .filter { $0.kind == .expense }
-            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let dayStart = Calendar.current.startOfDay(for: Date())
+        let e = todayExpenses.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let v = virtualOccurrences
+            .filter { $0.kind == .expense && $0.date >= dayStart }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return e + v
     }
 
     private var monthExpenses: [Expense] {
@@ -198,9 +214,13 @@ private struct WatchSheetPage: View {
     }
 
     private var monthTotal: Decimal {
-        monthExpenses
-            .filter { $0.kind == .expense }
-            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let cal = Calendar.current
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: Date())) ?? Date()
+        let e = monthExpenses.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let v = virtualOccurrences
+            .filter { $0.kind == .expense && $0.date >= monthStart }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return e + v
     }
 
     private var budgetProgress: Double? {
@@ -278,36 +298,52 @@ private struct WatchSheetPage: View {
     /// 2 ページ目: 全取引 (支出 + 収入)。セクションヘッダーは無し。
     @ViewBuilder
     private var transactionsTab: some View {
-        if expenses.isEmpty {
-            ContentUnavailableView(
-                "まだ記録がありません",
-                systemImage: "tray",
-                description: Text("サマリー画面の「追加」から記録できます。")
-            )
-        } else {
-            List {
-                ForEach(Array(expenses), id: \.objectID) { expense in
-                    NavigationLink {
-                        WatchExpenseDetailView(expense: expense, sheet: sheet)
-                    } label: {
-                        recentRow(expense)
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(.white.opacity(0.12))
-                    )
-                    .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            pendingDeleteExpense = expense
-                        } label: {
-                            Label("削除", systemImage: "trash")
+        let items: [LedgerItem] = Array(expenses).map { LedgerItem.expense($0) }
+            + virtualOccurrences.map { LedgerItem.occurrence($0) }
+        let sorted = items.sorted { $0.date > $1.date }
+        return Group {
+            if sorted.isEmpty {
+                ContentUnavailableView(
+                    "まだ記録がありません",
+                    systemImage: "tray",
+                    description: Text("サマリー画面の「追加」から記録できます。")
+                )
+            } else {
+                List {
+                    ForEach(sorted) { item in
+                        switch item {
+                        case .expense(let expense):
+                            NavigationLink {
+                                WatchExpenseDetailView(expense: expense, sheet: sheet)
+                            } label: {
+                                recentRow(expense)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(.white.opacity(0.12))
+                            )
+                            .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    pendingDeleteExpense = expense
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
+                            }
+                        case .occurrence(let occ):
+                            // 仮想 occurrence (未実体化の定期分)。watch は表示のみ。
+                            virtualRow(occ)
+                                .listRowBackground(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(.white.opacity(0.08))
+                                )
+                                .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
                         }
                     }
                 }
+                .listStyle(.plain)
             }
-            .listStyle(.plain)
         }
     }
 
@@ -414,6 +450,30 @@ private struct WatchSheetPage: View {
             Spacer()
         }
         .padding(.horizontal, 8)
+    }
+
+    /// 仮想 occurrence の行 (watch, 表示のみ・控えめ)。
+    private func virtualRow(_ occ: RecurringOccurrence) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "repeat")
+                .foregroundStyle(.white)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Color.gray.gradient))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(occ.title.isEmpty ? "定期" : occ.title)
+                    .font(.caption2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .opacity(0.85)
     }
 
     /// 表示用タイトル。title が空ならカテゴリ名 (= iOS と同じ `categoryDisplayName`

@@ -34,6 +34,8 @@ struct BudgetyMacContentView: View {
     @State private var unlockingSheet: ExpenseSheet?
     /// 検索結果の合計を表示する通貨 (既定はアプリ既定通貨、カードのメニューで変更可)。
     @State private var searchTotalCurrency: String = CurrencyCatalog.defaultCode
+    /// アーカイブ済みセクションの開閉状態。折りたたみ可能・端末に永続化。
+    @AppStorage("macArchivedSectionExpanded") private var archivedExpanded = true
     @StateObject private var lockManager = SheetLockManager.shared
     @ObservedObject private var fx = FXRatesService.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -141,7 +143,8 @@ struct BudgetyMacContentView: View {
                     .tag(sheet)
                 }
                 if !archivedSheets.isEmpty {
-                    Section("アーカイブ済み") {
+                    // 折りたたみ可能なセクション (一覧を閉じられる)。開閉状態は永続化。
+                    Section("アーカイブ済み", isExpanded: $archivedExpanded) {
                         ForEach(archivedSheets) { sheet in
                             NavigationLink(value: sheet) {
                                 sheetRow(sheet)
@@ -232,8 +235,12 @@ struct BudgetyMacContentView: View {
                     .foregroundStyle(.white)
                     .font(.callout.weight(.semibold))
             }
+            // アーカイブ済みは一覧で控えめに見せる (アイコンを減光・名前を secondary)。
+            .opacity(sheet.archived ? 0.5 : 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(sheet.displayName).font(.body.weight(.medium))
+                Text(sheet.displayName)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(sheet.archived ? .secondary : .primary)
                 Text(monthlyLabel(for: sheet))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -257,6 +264,10 @@ struct BudgetyMacContentView: View {
     }
 
     private func monthlyLabel(for sheet: ExpenseSheet) -> String {
+        // ロック中のシートは合計金額を一覧に出さない (解錠するまで隠す)。
+        if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
+            return "ロック中"
+        }
         let cal = Calendar.current
         let now = Date()
         let comps = cal.dateComponents([.year, .month], from: now)
@@ -571,6 +582,7 @@ struct MacAddSheetView: View {
     @State private var colorHex: String = "#5B8DEF"
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    @State private var budgetText: String = ""
 
     var body: some View {
         MacSheetFormDialog(
@@ -579,6 +591,7 @@ struct MacAddSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
+            budgetText: $budgetText,
             primaryActionLabel: "OK",
             onCancel: { dismiss() },
             onSave: { save() }
@@ -591,6 +604,7 @@ struct MacAddSheetView: View {
         sheet.colorHex = colorHex
         sheet.symbol = symbol
         sheet.defaultCurrencyCode = currencyCode
+        sheet.monthlyBudgetDecimal = Decimal(string: budgetText)
         sheet.createdAt = .now
         PersistenceController.seedDefaultCategories(for: sheet, in: viewContext)
         PersistenceController.shared.save()
@@ -615,6 +629,7 @@ struct MacEditSheetView: View {
     @State private var colorHex: String = "#5B8DEF"
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
+    @State private var budgetText: String = ""
     /// 編集ドラフト。「保存」を押すまで record には書かない。
     @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
@@ -634,6 +649,7 @@ struct MacEditSheetView: View {
             colorHex: $colorHex,
             symbol: $symbol,
             currencyCode: $currencyCode,
+            budgetText: $budgetText,
             archiveBinding: $archivedDraft,
             manageMembersAction: { showingMembers = true },
             primaryActionLabel: "保存",
@@ -685,6 +701,9 @@ struct MacEditSheetView: View {
         colorHex = record.colorHex ?? "#5B8DEF"
         symbol = record.symbol ?? "person.2.fill"
         currencyCode = record.resolvedDefaultCurrencyCode
+        if let budget = record.monthlyBudgetDecimal, budget > 0 {
+            budgetText = NSDecimalNumber(decimal: budget).stringValue
+        }
         archivedDraft = record.archived
     }
 
@@ -695,6 +714,7 @@ struct MacEditSheetView: View {
         record.colorHex = colorHex
         record.symbol = symbol
         record.defaultCurrencyCode = currencyCode
+        record.monthlyBudgetDecimal = Decimal(string: budgetText)
         if record.archived != archivedDraft { record.archived = archivedDraft }
         PersistenceController.shared.save()
         dismiss()
@@ -710,6 +730,8 @@ private struct MacSheetFormDialog: View {
     @Binding var colorHex: String
     @Binding var symbol: String
     @Binding var currencyCode: String
+    /// 月予算 (任意・空 or 0 で予算なし)。「今月」表示時に進捗バーで残額を可視化。
+    @Binding var budgetText: String
     /// nil でない時のみアーカイブ Toggle 行を出す (= Edit のみ)。
     /// Add 時はシートがまだ存在しないので非表示。
     var archiveBinding: Binding<Bool>? = nil
@@ -796,6 +818,16 @@ private struct MacSheetFormDialog: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(maxWidth: 320, alignment: .leading)
+                        Spacer(minLength: 0)
+                    }
+
+                    Divider().padding(.top, 4)
+
+                    // 月予算 (任意・「今月」表示時に進捗バーで残額を可視化)
+                    formRow(label: "月予算:") {
+                        TextField("", text: $budgetText, prompt: Text("0 (なし)"))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 160)
                         Spacer(minLength: 0)
                     }
 
@@ -1022,7 +1054,7 @@ struct BudgetyMacSettingsView: View {
     @State private var acceptMessage: String?
     @State private var showingPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
-    @State private var showingClaudeIntegration: Bool = false
+    @State private var showingClaudeSetup: Bool = false
 
     var body: some View {
         Form {
@@ -1094,37 +1126,11 @@ struct BudgetyMacSettingsView: View {
                 }
             }
 
-            Section {
-                TextField("https://www.icloud.com/share/...", text: $shareURLText)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Button {
-                        Task { await acceptURL() }
-                    } label: {
-                        if acceptInProgress {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("URL を貼り付けて参加")
-                        }
-                    }
-                    .disabled(shareURLText.isEmpty || acceptInProgress)
-                    Spacer()
-                }
-                if let acceptMessage {
-                    Text(acceptMessage)
-                        .font(.caption)
-                        .foregroundStyle(acceptMessage.contains("失敗") ? .red : .secondary)
-                }
-            } header: {
-                Text("共有シートに参加")
-            } footer: {
-                Text("メールで届いた共有リンク (https://www.icloud.com/share/... または cloudkit-... など) を貼り付けて参加できます。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            // Claude / MCP 連携。macOS は外部 npm ではなく「アプリ本体を MCP サーバーとして登録」
+            // する方式 (App Store 2.4.5(ii) 準拠: 追加コードを共有場所にインストールしない)。
             Section {
                 Button {
-                    showingClaudeIntegration = true
+                    showingClaudeSetup = true
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "sparkles")
@@ -1147,6 +1153,9 @@ struct BudgetyMacSettingsView: View {
             }
             Section("バージョン") {
                 LabeledContent("Budgety", value: "1.0")
+                Link(destination: URL(string: "https://apps.apple.com/app/id6768543053?action=write-review")!) {
+                    Label("App Store でレビュー", systemImage: "star.fill")
+                }
             }
         }
         .formStyle(.grouped)
@@ -1156,11 +1165,8 @@ struct BudgetyMacSettingsView: View {
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
         }
-        .sheet(isPresented: $showingClaudeIntegration) {
-            MacModalSheet {
-                ClaudeIntegrationView()
-                    .padding()
-            }
+        .sheet(isPresented: $showingClaudeSetup) {
+            MacModalSheet { MacClaudeSetupView() }
         }
     }
 

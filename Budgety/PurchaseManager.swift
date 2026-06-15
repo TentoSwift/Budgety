@@ -101,6 +101,10 @@ final class PurchaseManager: ObservableObject {
 
     @discardableResult
     func purchase(_ product: Product) async -> Bool {
+        // 防御的ガード: 既に Premium を所有しているなら二重購入させない。
+        // 通常は PaywallView 側で購入 UI を隠しているが、別経路から呼ばれても
+        // 重複購入が通らないよう、モデル層でも弾く (買い切り×サブスク併売対策)。
+        guard !isPremium else { return false }
         isProcessing = true
         defer { isProcessing = false }
         do {
@@ -179,6 +183,13 @@ final class PurchaseManager: ObservableObject {
         // 重要: 前回 revoke が transient failure (ネットワーク等) で失敗した場合に
         // 必ず再試行されるよう、`!nowPremium` の間は毎回 hasActiveOwnedShares を
         // チェックする (= ローカルの fast-path skip だけに頼らない)。
+        #if DEBUG
+        // Debug ビルドでは期限切れの自動解除フローを走らせない。
+        // Debug は .dev バンドル ID のため本番 (com.tento.budgety) の購入情報を
+        // 参照できず常に「非 Premium」に見えるが、CloudKit コンテナは本番と共有
+        // しているので、ここで解除を許すと本番の CKShare を誤って解除してしまう。
+        // 解除フローの手動テストは Settings の runExpiryRevokeForDebug() で行う。
+        #else
         if !nowPremium {
             let isTransition = wasPremium
             Task { @MainActor in
@@ -204,6 +215,7 @@ final class PurchaseManager: ObservableObject {
                 }
             }
         }
+        #endif
     }
 
     /// 期限切れ確定時の共有解除処理。テスト用に Settings から

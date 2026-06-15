@@ -15,12 +15,24 @@ import CustomNavigationTitle
 /// 支出の支払い者が指定 profileID と一致するか。
 /// 「自分」(selfIDs のいずれか) を選んだ場合は、payerProfileID が selfIDs に
 /// 含まれれば一致とみなす（旧 ID でも自分として拾えるように）。
-fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
-    let pid = exp.payerProfileID ?? ""
+fileprivate func payerMatches(_ pid: String, payerID: String, selfIDs: Set<String>) -> Bool {
     if selfIDs.contains(payerID) {
         return selfIDs.contains(pid)
     }
     return pid == payerID
+}
+
+fileprivate func expensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
+    payerMatches(exp.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs)
+}
+
+/// 受益者一致: beneficiaryIDs のいずれかが beneficiaryID と一致するか。
+/// 「自分」(selfIDs) を選んだ場合は、受益者に self ID が含まれれば一致とみなす。
+fileprivate func beneficiaryMatches(_ beneficiaryIDs: [String], beneficiaryID: String, selfIDs: Set<String>) -> Bool {
+    if selfIDs.contains(beneficiaryID) {
+        return beneficiaryIDs.contains { selfIDs.contains($0) }
+    }
+    return beneficiaryIDs.contains(beneficiaryID)
 }
 
 struct SheetDetailView: View {
@@ -111,12 +123,31 @@ struct SheetDetailView: View {
         }
     }
 
-    @State private var period: Period = .thisMonth
+    // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
+    // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
+    @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
+    /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 30
+    /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
+    @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
+    /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
+    @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
     @State private var editingExpense: Expense?
     @State private var editingRule: RecurringRule?
+    /// 仮想 occurrence をタップした時に詳細へ push する Expense (materialize した未保存行)。
+    @State private var detailExpense: Expense?
+    /// 仮想 occurrence をタップして materialize した Expense。
+    /// 詳細から実際に保存 (commit) されなければ、詳細を閉じた時に破棄する。
+    @State private var materializedPending: Expense?
+    /// 直近のエディタで実際に保存 (commit) されたか。materializedPending の破棄判定に使う。
+    @State private var pendingDidCommit = false
+    /// 仮想 occurrence を実支出と同じ ExpenseRowContainer で描くための表示専用 Expense 供給器
+    /// (子コンテキスト、never save)。参照型を @State で保持し view identity 間で安定させる。
+    @State private var virtualBacking = VirtualRowBacking()
     @State private var showingEditGroup = false
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
@@ -130,8 +161,14 @@ struct SheetDetailView: View {
     /// 「カテゴリなし」(= category == nil の支出) でフィルタ中か。
     /// `selectedCategory` と相互排他。
     @State private var filterUncategorized: Bool = false
-    /// 支払い者で絞り込む時の profileID（membersStrip のタップで設定）。nil = 全員。
+    /// 支払い者で絞り込む時の profileID（フィルタシートで設定）。nil = 全員。
     @State private var selectedPayerID: String?
+    /// 受益者で絞り込む時の profileID（フィルタシートで設定）。nil = 指定なし。
+    @State private var selectedBeneficiaryID: String?
+    /// 割り勘フィルタ (受益者 2 人以上 = 割り勘あり)。フィルタシートで選ぶ。
+    @State private var splitFilter: ExpenseSplitFilter = .all
+    /// フィルタシートの表示。
+    @State private var showingFilters = false
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
@@ -224,6 +261,14 @@ struct SheetDetailView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: record))
             list = list.filter { expensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
+        if let benID = selectedBeneficiaryID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter { beneficiaryMatches($0.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) }
+        }
+        if splitFilter != .all {
+            list = list.filter { splitFilter.matches(beneficiaryIDs: $0.beneficiaryIDList, payerID: $0.payerProfileID) }
+        }
         // 検索中は検索専用の期間で絞り込む。
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
@@ -245,6 +290,49 @@ struct SheetDetailView: View {
         return list
     }
 
+    /// 一覧に混ぜる仮想 occurrence (完全仮想化フラグ OFF なら空)。
+    /// `filteredExpenses` と同じ条件 (カテゴリ/支払者/検索/検索期間) で絞り込む。
+    private var filteredVirtuals: [RecurringOccurrence] {
+        var list = RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+        guard !list.isEmpty else { return [] }
+        if let cat = selectedCategory {
+            let name = cat.name ?? ""
+            list = list.filter { $0.categoryRaw == name }
+        } else if filterUncategorized {
+            list = list.filter { $0.categoryRaw.isEmpty }
+        }
+        if let payerID = selectedPayerID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter { payerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
+        }
+        if let benID = selectedBeneficiaryID {
+            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
+                forShare: ShareCoordinator.shared.existingShare(for: record))
+            list = list.filter {
+                beneficiaryMatches(
+                    $0.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                    beneficiaryID: benID, selfIDs: selfIDs)
+            }
+        }
+        if splitFilter != .all {
+            list = list.filter {
+                splitFilter.matches(
+                    beneficiaryIDs: $0.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                    payerID: $0.payerProfileID
+                )
+            }
+        }
+        if isSearchActive {
+            list = list.filter { searchPeriod.contains($0.date) }
+        }
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty {
+            list = list.filter { $0.title.lowercased().contains(q) }
+        }
+        return list
+    }
+
     var body: some View {
         List {
             Section {
@@ -254,6 +342,8 @@ struct SheetDetailView: View {
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
                     selectedPayerID: selectedPayerID,
+                    selectedBeneficiaryID: selectedBeneficiaryID,
+                    splitFilter: splitFilter,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
                 #if os(iOS)
@@ -264,25 +354,33 @@ struct SheetDetailView: View {
             }
             .listSectionSeparator(.hidden)
 
-                // Mac と同じく、サマリ下にメンバーストリップを出す。
+                // Mac と同じく、サマリ下にメンバーストリップを出す
+                // (フィルタシートの「人」と同じ selectedPayerID を操作するので同期する)。
                 if hasAcceptedOtherMembers {
                     Section {
                         membersStrip
+                            // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                     }
                     .listSectionSeparator(.hidden)
                 }
 
-                if !allExpenses.isEmpty {
+                // カテゴリフィルタ (ピル)。割り勘フィルタはフィルタシート側のみ。
+                // 絞り込める対象 (カテゴリ or カテゴリなし) があれば表示する
+                // (usedCategories/hasUncategorizedExpenses は仮想も含む)。
+                if !usedCategories.isEmpty || hasUncategorizedExpenses {
                     categoryPills
+                        // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                         .listSectionSeparator(.hidden)
                 }
 
-                if allExpenses.isEmpty {
+                if allExpenses.isEmpty && filteredVirtuals.isEmpty {
                     emptyStateInitial
                 } else if searchFocused && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     // 検索フォーカス直後 (未入力) は全件ではなく 0 件 (入力待ち) を表示。
                     emptyStateSearchPrompt
-                } else if filteredExpenses.isEmpty {
+                } else if filteredExpenses.isEmpty && filteredVirtuals.isEmpty {
                     emptyStateFiltered
                 } else {
                     sectionedList
@@ -291,7 +389,8 @@ struct SheetDetailView: View {
         .listStyle(.plain)
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
         // Reduce Motion 時はアニメーションしない。
-        .animation(reduceMotion ? nil : .default, value: filteredExpenses.map(\.objectID))
+        .animation(reduceMotion ? nil : .default,
+                   value: filteredExpenses.map { $0.objectID.uriRepresentation().absoluteString } + filteredVirtuals.map(\.id))
         #if os(iOS)
         // SummaryCard が画面外に出たらナビバーにシート名がフェードイン。
         .scrollAwareTitle(record.displayName)
@@ -315,6 +414,30 @@ struct SheetDetailView: View {
             }
         }
         .toolbar {
+            // 検索バーの左にフィルタボタン。絞り込み中は背景に塗りつぶし円 (写真アプリ風)。
+            if isFilterActive {
+                ToolbarItem(placement: .bottomBar) {
+                    Button(role: .confirm) {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                    .tint(isFilterActive ? record.tint : Color.clear)
+                }
+            } else {
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        showingFilters.toggle()
+                    } label: {
+                        Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
+                    }
+                }
+            }
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+            } else {
+                ToolbarSpacer(.fixed, placement: .bottomBar)
+            }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
             // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
@@ -328,9 +451,11 @@ struct SheetDetailView: View {
                 Button(role: .confirm) {
                     showingAddExpense = true
                 } label: {
-                    Label("追加", systemImage: "plus")
+                    Label("項目を追加", systemImage: "plus")
                 }
                 .tint(record.tint)
+                .accessibilityLabel("項目を追加")
+                .accessibilityHint("支出や収入を記録する")
             }
             // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
             if lockManager.hasPassword(for: record) {
@@ -349,9 +474,12 @@ struct SheetDetailView: View {
                 Button {
                     showingShare = true
                 } label: {
-                    Image(systemName: record.isOwnedByCurrentUser ? "person.crop.circle.badge.plus" : "person.2.fill")
+                    // メンバーが居れば「参加済み」を表すチェック付き、居なければ招待を促す + 付き。
+                    Image(systemName: hasAcceptedOtherMembers
+                          ? "person.crop.circle.badge.checkmark"
+                          : "person.crop.circle.badge.plus")
                 }
-                .accessibilityLabel(record.isOwnedByCurrentUser ? "シートを共有" : "共有メンバー")
+                .accessibilityLabel(hasAcceptedOtherMembers ? "共有メンバー" : "シートを共有")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -423,11 +551,13 @@ struct SheetDetailView: View {
                             }
                         }
                     }
-                    NavigationLink {
-                        RecurringListView(record: record)
-                            .sheetLockCover(record)
-                    } label: {
-                        Label("定期項目", systemImage: "repeat")
+                    if RecurringOccurrenceService.featureEnabled {
+                        NavigationLink {
+                            RecurringListView(record: record)
+                                .sheetLockCover(record)
+                        } label: {
+                            Label("定期項目", systemImage: "repeat")
+                        }
                     }
                     Divider()
                     Button {
@@ -457,7 +587,7 @@ struct SheetDetailView: View {
                         Button(role: .destructive) {
                             showingLeaveConfirm = true
                         } label: {
-                            Label("このシートから離脱", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label("このシートから退出", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     }
                 } label: {
@@ -468,6 +598,20 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(record: record)
+        }
+        .fullScreenCover(isPresented: $showingFilters) {
+            ExpenseFilterSheet(
+                record: record,
+                categories: usedCategories,
+                hasUncategorized: hasUncategorizedExpenses,
+                memberIDs: record.acceptedMemberProfileIDs(),
+                showsMemberFilters: hasAcceptedOtherMembers,
+                selectedCategory: $selectedCategory,
+                filterUncategorized: $filterUncategorized,
+                selectedPayerID: $selectedPayerID,
+                selectedBeneficiaryID: $selectedBeneficiaryID,
+                splitFilter: $splitFilter
+            )
         }
         .sheet(isPresented: $showingCSVImport) {
             CSVImportView(sheet: record)
@@ -502,10 +646,10 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」とこのシートの全ての支出データが完全に削除されます。共有している場合は参加者からも見えなくなります。この操作は取り消せません。")
+            Text("「\(record.displayName)」とこのシートのすべてのデータが完全に削除されます。共有している場合は参加者のデバイスからも削除されます。この操作は取り消すことはできません。")
         }
-        .alert("このシートから離脱しますか?", isPresented: $showingLeaveConfirm) {
-            Button("離脱", role: .destructive) {
+        .alert("このシートから退出しますか?", isPresented: $showingLeaveConfirm) {
+            Button("退出", role: .destructive) {
                 Task { @MainActor in
                     try? await ShareCoordinator.shared.leaveSharedSheet(record)
                     Haptics.warning()
@@ -514,9 +658,22 @@ struct SheetDetailView: View {
             }
             Button("キャンセル", role: .cancel) { }
         } message: {
-            Text("「\(record.displayName)」がこの端末から消えます。オーナーや他の参加者のデータは残ります。")
+            Text("“\(record.displayName)”から退出します。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
+            // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
+            // 保存 (commit) された時だけ残す。キャンセル時は破棄する。
+            // → 「編集画面を開いただけで expenses に保存される」のを防ぐ。
+            // ※ onAppear の ensureSelfMemberExists 等が viewContext を save して保留中の
+            //   insert が永続化されることがあるため、temporary-ID ではなく commit 有無で判定する。
+            if let m = materializedPending {
+                materializedPending = nil
+                if !pendingDidCommit {
+                    viewContext.delete(m)
+                    PersistenceController.shared.save()
+                }
+            }
+            pendingDidCommit = false
             // 「定期項目を編集」経由で閉じた時だけ、RecurringListView に
             // 遷移して該当 Rule の編集シートを自動で開く。
             if let rule = pendingEditRule {
@@ -527,10 +684,33 @@ struct SheetDetailView: View {
         }) { expense in
             AddExpenseView(expense: expense, onEditRule: { rule in
                 pendingEditRule = rule
+            }, onCommit: {
+                pendingDidCommit = true
             })
         }
         .sheet(item: $editingRule) { rule in
             EditRecurringRuleView(mode: .edit(rule: rule))
+        }
+        // 仮想 occurrence をタップ → materialize した Expense の詳細へ push (実支出と同じ画面)。
+        .navigationDestination(item: $detailExpense) { exp in
+            // commit 時は詳細を閉じて一覧へ戻す。これにより「この項目のみ=切り離し」「今後/全て=
+            // edit-point 削除」のどちらでも、編集後に解放済み/変化したオブジェクトを描画しない。
+            ExpenseDetailView(expense: exp, onCommit: {
+                pendingDidCommit = true
+                detailExpense = nil
+            })
+        }
+        // 詳細を閉じた時、編集が commit されていなければ materialize した未保存行を破棄する
+        // (= 仮想を見ただけ/編集せず戻った場合は expenses に保存しない)。
+        .onChange(of: detailExpense) { _, newValue in
+            if newValue == nil, let m = materializedPending {
+                materializedPending = nil
+                if !pendingDidCommit {
+                    viewContext.delete(m)
+                    PersistenceController.shared.save()
+                }
+                pendingDidCommit = false
+            }
         }
         .sheet(isPresented: $showingEditGroup) {
             EditSheetView(record: record)
@@ -589,6 +769,8 @@ struct SheetDetailView: View {
     /// 期間 (検索中) またはカテゴリで絞り込み中か。
     private var isFilterActive: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+            || selectedBeneficiaryID != nil
+            || splitFilter != .all
             || (isSearchActive && searchPeriod.isFiltering)
     }
 
@@ -599,7 +781,9 @@ struct SheetDetailView: View {
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
         if selectedPayerID != nil { parts.append("メンバー") }
-        return parts.joined(separator: "・") + "で絞り込まれています。"
+        if selectedBeneficiaryID != nil { parts.append("受益者") }
+        if splitFilter != .all { parts.append("割り勘") }
+        return parts.joined(separator: "・") + "でフィルタされています。"
     }
 
     @ViewBuilder
@@ -610,7 +794,7 @@ struct SheetDetailView: View {
             let q = searchText.trimmingCharacters(in: .whitespaces)
             ContentUnavailableView {
                 Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
-                      systemImage: "line.3.horizontal.decrease.circle")
+                      systemImage: "line.3.horizontal.decrease")
             } description: {
                 Text(filterDescription)
             } actions: {
@@ -618,6 +802,8 @@ struct SheetDetailView: View {
                     selectedCategory = nil
                     filterUncategorized = false
                     selectedPayerID = nil
+                    selectedBeneficiaryID = nil
+                    splitFilter = .all
                     searchPeriod = .all
                 }
                 .buttonStyle(.plain)
@@ -634,22 +820,52 @@ struct SheetDetailView: View {
     private var sectionedList: some View {
             ForEach(groupedByDay(), id: \.key) { section in
                 Section {
-                        ForEach(Array(section.value.enumerated()), id: \.element.objectID) { idx, expense in
-                            // 削除確認は各支出行に .confirmationDialog を付ける。
-                            // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
-                            // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
-                            ExpenseRowContainer(
-                                expense: expense,
-                                pendingDelete: $pendingDeleteExpense,
-                                onEdit: { editingExpense = expense },
-                                onEditRule: expense.generatedFromRuleID != nil
-                                    ? { editingRule = expense.relatedRule }
-                                    : nil,
-                                onDuplicate: { duplicate(expense) },
-                                onDelete: { deleteExpense(expense) }
-                            )
-                            // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
-                            .transition(.identity)
+                        ForEach(section.value) { item in
+                            switch item {
+                            case .expense(let expense):
+                                // 削除確認は各支出行に .confirmationDialog を付ける。
+                                // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
+                                // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
+                                ExpenseRowContainer(
+                                    expense: expense,
+                                    pendingDelete: $pendingDeleteExpense,
+                                    onEdit: { editingExpense = expense },
+                                    onEditRule: expense.generatedFromRuleID != nil
+                                        ? { editingRule = expense.relatedRule }
+                                        : nil,
+                                    onDuplicate: { duplicate(expense) },
+                                    onDelete: { deleteExpense(expense) }
+                                )
+                                // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
+                                .transition(.identity)
+                            case .occurrence(let occ):
+                                // 仮想 occurrence (未実体化の定期分)。実支出と同じ ExpenseRowContainer で
+                                // 描画し、見た目 (シェブロン/レイアウト) もスワイプ/コンテキストメニューも統一する。
+                                // 表示は子コンテキストの transient Expense (never save)。操作は materialize
+                                // (commit-guard) や skip へ流す:
+                                //   タップ/編集 = materialize→詳細 or エディタ (commit しなければ破棄)
+                                //   削除 = この回だけ skip (ルールに記録)
+                                //   定期項目を編集 = 該当ルールの編集
+                                //   複製 = occurrence 値から独立した実支出コピーを作成
+                                ExpenseRowContainer(
+                                    expense: virtualBacking.displayExpense(for: occ, sheet: record),
+                                    pendingDelete: $pendingDeleteExpense,
+                                    onEdit: {
+                                        pendingDidCommit = false
+                                        editingExpense = materialize(occ)
+                                    },
+                                    onEditRule: { editingRule = ruleForOccurrence(occ) },
+                                    onDuplicate: { duplicateOccurrence(occ) },
+                                    onDelete: { skipOccurrence(occ) },
+                                    onTap: {
+                                        // タップで materialize (未保存) して詳細へ push。編集 commit
+                                        // しなければ詳細を閉じた時に破棄する (= 見ただけでは保存しない)。
+                                        pendingDidCommit = false
+                                        detailExpense = materialize(occ)
+                                    }
+                                )
+                                .transition(.identity)
+                            }
                         }
                 } header: {
                     DateHeaderView(label: section.dayLabel,
@@ -692,13 +908,14 @@ struct SheetDetailView: View {
                                 .truncationMode(.tail)
                                 .foregroundStyle(isSelected ? record.tint : .secondary)
                         }
-                        .frame(maxWidth: 80)
+                        // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
+                        .frame(width: memberCellWidth)
                         .padding(.vertical, 3)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 16)
         }
     }
 
@@ -729,82 +946,102 @@ struct SheetDetailView: View {
         }
     }
 
+    /// カテゴリ絞り込みのチップ列。macOS 26 のメール風に「非選択 = アイコンのみ /
+    /// 選択 = カテゴリ色の背景 + ラベルに展開」する (選択切替はアニメーション)。
     private var categoryPills: some View {
         let isAllSelected = selectedCategory == nil && !filterUncategorized
-        let uncategorizedTint = Color.gray
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button {
+                filterPill(icon: "square.grid.2x2.fill", label: "すべて",
+                           color: record.tint, selected: isAllSelected) {
                     selectedCategory = nil
                     filterUncategorized = false
-                } label: {
-                    Text("すべて")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(isAllSelected ? record.tint : Color.platformSecondarySystemFill)
-                        )
-                        // 選択中はシート色の塗りの上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(isAllSelected ? Color.platformSystemBackground : .primary)
                 }
-                .buttonStyle(.plain)
 
                 ForEach(usedCategories, id: \.objectID) { cat in
-                    Button {
-                        if selectedCategory?.objectID == cat.objectID {
+                    let isSelected = selectedCategory?.objectID == cat.objectID
+                    filterPill(icon: cat.displaySymbol, label: cat.displayName,
+                               color: cat.tint, selected: isSelected) {
+                        if isSelected {
                             selectedCategory = nil
                         } else {
                             selectedCategory = cat
                             filterUncategorized = false
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: cat.displaySymbol)
-                            Text(cat.displayName)
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(selectedCategory?.objectID == cat.objectID ? cat.tint : Color.platformSecondarySystemFill)
-                        )
-                        // 選択中は塗り (cat.tint) の上に背景色のテキストを抜き文字で乗せる。
-                        .foregroundStyle(selectedCategory?.objectID == cat.objectID ? Color.platformSystemBackground : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 // カテゴリなしの支出が 1 件でもあれば「カテゴリなし」ピルを出す。
                 if hasUncategorizedExpenses {
-                    Button {
+                    filterPill(icon: "tag.slash", label: "カテゴリなし",
+                               color: .gray, selected: filterUncategorized) {
                         filterUncategorized.toggle()
                         if filterUncategorized { selectedCategory = nil }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "list.bullet")
-                            Text("カテゴリなし")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(filterUncategorized ? uncategorizedTint : Color.platformSecondarySystemFill)
-                        )
-                        .foregroundStyle(filterUncategorized ? Color.platformSystemBackground : .primary)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 16)
+            .animation(.snappy, value: selectedCategory)
+            .animation(.snappy, value: filterUncategorized)
         }
     }
 
-    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。
+    /// メール風フィルタピル。非選択はアイコンのみ、選択時に color 背景 + ラベルへ展開する。
+    /// アイコンのみの時も VoiceOver でラベルを読み上げる。
+    @ViewBuilder
+    private func filterPill(icon: String, label: String, color: Color,
+                            selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                // アイコンは固定幅スロットに置き、シンボルごとの幅差で
+                // 非選択ピルの横幅がバラつかないようにする。
+                Image(systemName: icon)
+                    .imageScale(.large)
+                    .frame(width: filterPillIconWidth)
+                if selected {
+                    // メールのカテゴリバーと同じく、テキストはフェードさせず不透明のまま
+                    // 挿入し、カプセルの clipShape で「左から徐々に現れる」見せ方にする。
+                    // (折りたたみ時は即座に消え、アイコンだけがスライドする)
+                    Text(label).lineLimit(1).fixedSize()
+                        .transition(.identity)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, filterPillHPadding)
+            // 高さは Dynamic Type に追従させつつ、アイコン (SF Symbol) の高さに依らず揃える。
+            .frame(height: filterPillHeight)
+            .background(
+                Capsule()
+                    .fill(selected ? color : Color.platformSecondarySystemFill)
+            )
+            // 選択中は塗り (color) の上に白文字を乗せる。
+            .foregroundStyle(selected ? Color.white : .primary)
+            // 展開/折りたたみアニメーション中に、fixedSize のテキストがカプセルの
+            // 幅より先に描画されてピル外へはみ出すのを防ぐ (カプセルで切り取る)。
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    /// カテゴリ未設定 (= category == nil) の支出が含まれているか。仮想 occurrence も含める。
     private var hasUncategorizedExpenses: Bool {
-        allExpenses.contains { $0.category == nil }
+        if allExpenses.contains(where: { $0.category == nil && !isPendingMaterialized($0) }) {
+            return true
+        }
+        return RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+            .contains { $0.categoryRaw.isEmpty }
+    }
+
+    /// 仮想 occurrence をタップして materialize した「未 commit」の Expense か。
+    /// これは詳細を見ているだけの一時的な実体で、閉じれば破棄される。フィルタ
+    /// (カテゴリ chip / 未分類) の母集合から外し、「見ただけでその支出のカテゴリ
+    /// フィルタが一時的に出る」のを防ぐ。@FetchRequest は pending 挿入も拾うため必要。
+    private func isPendingMaterialized(_ exp: Expense) -> Bool {
+        if let m = materializedPending, m === exp { return true }
+        return false
     }
 
     // MARK: - Helpers
@@ -813,13 +1050,16 @@ struct SheetDetailView: View {
         let key: String
         let dayLabel: String
         let dayNet: Decimal
-        let value: [Expense]
+        let value: [LedgerItem]
     }
 
     private func groupedByDay() -> [DaySection] {
         let cal = Calendar.current
-        let dict = Dictionary(grouping: filteredExpenses) { exp -> Date in
-            cal.startOfDay(for: exp.date ?? .now)
+        // 実 Expense + 仮想 occurrence を union にまとめて日別グループ化する。
+        let items: [LedgerItem] = filteredExpenses.map { LedgerItem.expense($0) }
+            + filteredVirtuals.map { LedgerItem.occurrence($0) }
+        let dict = Dictionary(grouping: items) { item -> Date in
+            cal.startOfDay(for: item.date)
         }
         // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
         let currentYear = cal.component(.year, from: .now)
@@ -833,28 +1073,84 @@ struct SheetDetailView: View {
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
 
-        let sections = dict.map { (day, items) -> DaySection in
+        let sections = dict.map { (day, dayItems) -> DaySection in
             let year = cal.component(.year, from: day)
             let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
             var net: Decimal = 0
-            for e in items {
-                let amt = fx.convert(e.amountDecimal, from: e.resolvedCurrencyCode, to: target) ?? e.amountDecimal
-                net += (e.kind == .income) ? amt : -amt
+            for it in dayItems {
+                let amt = fx.convert(it.amountDecimal, from: it.currencyCode, to: target) ?? it.amountDecimal
+                net += (it.kind == .income) ? amt : -amt
+            }
+            // 日内の並び順は一覧の並びに合わせる (実支出は時刻あり、仮想は 0:00)。
+            let sorted = dayItems.sorted { a, b in
+                switch (sortField, sortAscending) {
+                case (.date, true):    return a.date < b.date
+                case (.date, false):   return a.date > b.date
+                case (.amount, true):  return a.amountDecimal < b.amountDecimal
+                case (.amount, false): return a.amountDecimal > b.amountDecimal
+                }
             }
             let key = ISO8601DateFormatter().string(from: day)
-            return DaySection(key: key, dayLabel: label, dayNet: net, value: items)
+            return DaySection(key: key, dayLabel: label, dayNet: net, value: sorted)
         }
         return sections.sorted { $0.key > $1.key }
+    }
+
+    /// 仮想 occurrence の元になった RecurringRule を引く。
+    private func ruleForOccurrence(_ occ: RecurringOccurrence) -> RecurringRule? {
+        (record.recurringRules as? Set<RecurringRule>)?.first { $0.id == occ.ruleID }
+    }
+
+    /// 仮想 occurrence を実 Expense として実体化する (override 化)。
+    /// `(generatedFromRuleID, scheduledDate)` を持つので virtualOccurrences 側で
+    /// 以後この日付の仮想は出さなくなる。編集はこの実 Expense に対して既存フローで行う。
+    /// 定期 occurrence なので FX スナップショットは取らない (現行レートで精算)。
+    @MainActor
+    private func materialize(_ occ: RecurringOccurrence) -> Expense {
+        let e = Expense(context: viewContext)
+        let store = record.objectID.persistentStore
+        if let store { viewContext.assign(e, to: store) }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.createdAt = .now
+        e.sheet = record
+        e.generatedFromRuleID = occ.ruleID
+        if !occ.categoryRaw.isEmpty,
+           let cats = record.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == store {
+            e.category = cat
+        }
+        // ここでは保存しない (= 編集画面を開いただけで expenses に保存されないように)。
+        // エディタで実際に保存された時のみ永続化される。キャンセル時は onDismiss で破棄。
+        materializedPending = e
+        return e
     }
 
     private var usedCategories: [ExpenseCategory] {
         var seen: Set<NSManagedObjectID> = []
         var result: [ExpenseCategory] = []
-        for exp in allExpenses {
-            if let cat = exp.category, !seen.contains(cat.objectID) {
-                seen.insert(cat.objectID)
-                result.append(cat)
-            }
+        func add(_ cat: ExpenseCategory?) {
+            guard let cat, !seen.contains(cat.objectID) else { return }
+            seen.insert(cat.objectID)
+            result.append(cat)
+        }
+        for exp in allExpenses where !isPendingMaterialized(exp) {
+            add(exp.category)
+        }
+        // 仮想 occurrence のカテゴリも含める (実支出に無く仮想にしか無いカテゴリも絞り込めるように)。
+        let cats = (record.categories as? Set<ExpenseCategory>) ?? []
+        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+        where !occ.categoryRaw.isEmpty {
+            add(cats.first { $0.name == occ.categoryRaw })
         }
         return result.sorted { $0.sortOrder < $1.sortOrder }
     }
@@ -881,7 +1177,23 @@ struct SheetDetailView: View {
     /// 指定 expense を削除する。確認ダイアログ経由でのみ呼ばれる。
     @MainActor
     private func deleteExpense(_ expense: Expense) {
+        // 定期由来の occurrence (生成/override/過去凍結) を削除する場合、完全仮想化では
+        // 行を消すだけだと仮想で復活してしまうので、ルール側に skip を記録してから削除する。
+        if RecurringOccurrenceService.virtualizationEnabled,
+           let ruleID = expense.generatedFromRuleID,
+           let rule = (record.recurringRules as? Set<RecurringRule>)?.first(where: { $0.id == ruleID }),
+           let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+        }
         viewContext.delete(expense)
+        PersistenceController.shared.save()
+        Haptics.warning()
+    }
+
+    /// 仮想 occurrence を「この回だけ削除 (skip)」する。ルールに記録し、以後仮想表示しない。
+    private func skipOccurrence(_ occ: RecurringOccurrence) {
+        guard let rule = ruleForOccurrence(occ) else { return }
+        rule.addSkippedDay(occ.date)
         PersistenceController.shared.save()
         Haptics.warning()
     }
@@ -922,6 +1234,39 @@ struct SheetDetailView: View {
         pc.save()
         Haptics.success()
     }
+
+    /// 仮想 occurrence を独立した実支出としてコピーする (複製)。occurrence の値から新規 Expense を
+    /// 作り、定期との紐付け (generatedFromRuleID) は持たせない。元の occurrence は仮想のまま残る。
+    @MainActor
+    private func duplicateOccurrence(_ occ: RecurringOccurrence) {
+        let pc = PersistenceController.shared
+        let copy = Expense(context: viewContext)
+        let parentStore = record.objectID.persistentStore
+        if let store = parentStore { viewContext.assign(copy, to: store) }
+        copy.title = occ.title.isEmpty ? nil : occ.title
+        copy.amount = NSDecimalNumber(decimal: occ.amount)
+        copy.kindRaw = occ.kind.rawValue
+        copy.currencyCode = occ.currencyCode
+        copy.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        copy.paidBy = nil
+        copy.payerProfileID = occ.payerProfileID
+        // 複製は割り勘を引き継がない (支払者のみの負担)。
+        copy.beneficiaryProfileIDs = occ.payerProfileID
+        copy.date = .now
+        copy.note = ""
+        copy.createdAt = .now
+        copy.sheet = record
+        if !occ.categoryRaw.isEmpty,
+           let cats = record.categories as? Set<ExpenseCategory>,
+           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
+           cat.objectID.persistentStore == parentStore {
+            copy.category = cat
+        }
+        // FX スナップショット (複製時の current FX を凍結)
+        copy.captureFXSnapshot()
+        pc.save()
+        Haptics.success()
+    }
 }
 
 // MARK: - Summary Card
@@ -934,6 +1279,8 @@ private struct SummaryCard: View {
     let searchActive: Bool
     let selectedCategory: ExpenseCategory?
     let selectedPayerID: String?
+    let selectedBeneficiaryID: String?
+    let splitFilter: ExpenseSplitFilter
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
     /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
     let searchQuery: String
@@ -953,6 +1300,8 @@ private struct SummaryCard: View {
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
         selectedPayerID: String? = nil,
+        selectedBeneficiaryID: String? = nil,
+        splitFilter: ExpenseSplitFilter = .all,
         searchQuery: String = ""
     ) {
         self.record = record
@@ -960,6 +1309,8 @@ private struct SummaryCard: View {
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
         self.selectedPayerID = selectedPayerID
+        self.selectedBeneficiaryID = selectedBeneficiaryID
+        self.splitFilter = splitFilter
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
             sortDescriptors: [
@@ -976,6 +1327,16 @@ private struct SummaryCard: View {
 
     private var code: String { record.resolvedDefaultCurrencyCode }
 
+    /// フィルタの署名。これが変わる更新 (カテゴリ/支払者/割り勘/期間/検索の変更) では
+    /// カード内アニメーションを無効化してスナップさせる。フィルタは合計が大きく
+    /// ジャンプするため numericText のロールがスロットマシン状になり、さらに残予算列・
+    /// 予算バーの出入りと重なって不自然に見えるのを防ぐ。通常の追記・編集 (フィルタ
+    /// 不変) ではロールが残る。
+    private var filterSig: String {
+        let cat = selectedCategory?.objectID.uriRepresentation().absoluteString ?? "-"
+        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(searchQuery)"
+    }
+
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
         // 検索フォーカス中でクエリ未入力なら、行リストの「0 件」と合わせて合計も 0。
         if searchActive && searchQuery.isEmpty {
@@ -985,7 +1346,7 @@ private struct SummaryCard: View {
         let categoryID = selectedCategory?.objectID
         let target = code
         let q = searchQuery.lowercased()
-        let selfIDs: Set<String> = selectedPayerID == nil ? [] :
+        let selfIDs: Set<String> = (selectedPayerID == nil && selectedBeneficiaryID == nil) ? [] :
             UserProfileStore.shared.canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: record))
         var expenseSum: Decimal = 0
         var incomeSum: Decimal = 0
@@ -994,6 +1355,8 @@ private struct SummaryCard: View {
         for e in expenses where period.contains(e.date) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
+            if let benID = selectedBeneficiaryID, !beneficiaryMatches(e.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) { continue }
+            if !splitFilter.matches(beneficiaryIDs: e.beneficiaryIDList, payerID: e.payerProfileID) { continue }
             if !q.isEmpty {
                 let matches = e.displayTitle.lowercased().contains(q)
                     || e.displayPaidBy.lowercased().contains(q)
@@ -1007,6 +1370,30 @@ private struct SummaryCard: View {
                 continue
             }
             switch e.kind {
+            case .expense: expenseSum += converted
+            case .income:  incomeSum += converted
+            }
+        }
+        // 仮想 occurrence (完全仮想化 ON 時のみ非空) も同条件で合計に反映する。
+        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+            where period.contains(occ.date) {
+            if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
+            if let payerID = selectedPayerID,
+               !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
+            if let benID = selectedBeneficiaryID,
+               !beneficiaryMatches(occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                                   beneficiaryID: benID, selfIDs: selfIDs) { continue }
+            if !splitFilter.matches(
+                beneficiaryIDs: occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
+                payerID: occ.payerProfileID
+            ) { continue }
+            if !q.isEmpty, !occ.title.lowercased().contains(q) { continue }
+            hitCount += 1
+            guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
+                missing.insert(occ.currencyCode)
+                continue
+            }
+            switch occ.kind {
             case .expense: expenseSum += converted
             case .income:  incomeSum += converted
             }
@@ -1062,23 +1449,20 @@ private struct SummaryCard: View {
                 }
             }
 
-            // 大型の支出合計 (Mac と同じ rounded font)
-            Text(CurrencyCatalog.format(t.expense, code: code))
+            // 大型の収支 (収入 − 支出)。色分けはしない (primary)。Mac と同じ rounded font
+            Text(signedAmount(net))
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(t.expense)))
-                .animation(reduceMotion ? nil : .snappy, value: t.expense)
+                .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(net)))
+                .animation(reduceMotion ? nil : .snappy, value: net)
 
             // 支出合計の直下に「+収入 | -支出」のサマリ行 (左寄せ)
             incomeExpenseSummaryRow(income: t.income, expense: t.expense)
 
-            // メトリクス列 (収入 / 残予算 / 収支)
-            metricsRow(income: t.income, expense: t.expense, net: net, budget: budget,
-                       showRemaining: showBudgetMetrics)
-
-            // 月予算プログレスバー
+            // 月予算プログレスバー (予算 ¥… / % / 進捗)。残予算の金額はバーが
+            // 同じ情報を持つため、別途の「残予算」メトリクス列は表示しない。
             if showBudgetMetrics, let budget {
                 cleanBudgetBar(spent: t.expense, budget: budget)
             }
@@ -1096,6 +1480,9 @@ private struct SummaryCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(record.tint.opacity(0.12))
         )
+        // フィルタが変わった更新ではアニメーションを無効化 (数値ロール・残予算/バーの
+        // 出入りが大ジャンプで不自然になるのを防ぐ)。通常の追記・編集ではロール継続。
+        .transaction(value: filterSig) { $0.animation = nil }
     }
 
     // MARK: - New clean UI components
@@ -1183,6 +1570,7 @@ private struct SummaryCard: View {
     }
 
     /// メトリクス。残予算のみ表示 (今月 + 予算設定時のみ)。
+    /// 収支はヘッドライン (大きい金額) 側で表示する。
     @ViewBuilder
     private func metricsRow(income: Decimal, expense: Decimal, net: Decimal, budget: Decimal?, showRemaining: Bool) -> some View {
         if showRemaining {
@@ -1194,6 +1582,12 @@ private struct SummaryCard: View {
                 valueColor: remaining < 0 ? .red : .primary
             )
         }
+    }
+
+    /// 収支の符号付き表記 ("+¥1,000" / "-¥500" / "¥0")。
+    private func signedAmount(_ v: Decimal) -> String {
+        let sign = v > 0 ? "+" : (v < 0 ? "-" : "")
+        return sign + CurrencyCatalog.format(v.magnitude, code: code)
     }
 
     private enum DotStyle {
@@ -1476,22 +1870,48 @@ private struct ExpenseRowContainer: View {
     let onEditRule: (() -> Void)?
     let onDuplicate: () -> Void
     let onDelete: () -> Void
+    /// 仮想 occurrence 行で使う。指定すると NavigationLink ではなく Button になり、
+    /// タップで materialize→詳細遷移 (commit-guard) のフローへ流す (PR #273)。見た目は
+    /// NavigationLink と同じになるよう開示シェブロンを手動付与する。nil なら従来どおり
+    /// NavigationLink で詳細へ push する (実支出行)。
+    var onTap: (() -> Void)? = nil
 
     /// この行が削除確認の対象か。
     private var isThisRowPending: Bool {
         pendingDelete?.objectID == expense.objectID
     }
 
-    var body: some View {
-        // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
-        NavigationLink {
-            // ロックは ExpenseDetailView 側で overlay 方式 (lockOverlay) で重ねる。
-            // ここで fullScreenCover 版 (sheetLockCover) を使うと、詳細から開く
-            // 編集シートと競合して編集画面が閉じてしまうため使わない。
-            ExpenseDetailView(expense: expense)
-        } label: {
-            ExpenseRowView(expense: expense)
+    /// タップ部分。実支出は NavigationLink、仮想は Button+シェブロン (見た目は同一)。
+    @ViewBuilder
+    private var tappableRow: some View {
+        if let onTap {
+            Button(action: onTap) {
+                HStack(spacing: 0) {
+                    ExpenseRowView(expense: expense)
+                    // 実支出行 (NavigationLink) と同じ開示シェブロンを手動付与する。
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 6)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            // タップで編集ではなく詳細画面へ push。編集は詳細画面のツールバーから。
+            NavigationLink {
+                // ロックは ExpenseDetailView 側で overlay 方式 (lockOverlay) で重ねる。
+                // ここで fullScreenCover 版 (sheetLockCover) を使うと、詳細から開く
+                // 編集シートと競合して編集画面が閉じてしまうため使わない。
+                ExpenseDetailView(expense: expense)
+            } label: {
+                ExpenseRowView(expense: expense)
+            }
         }
+    }
+
+    var body: some View {
+        tappableRow
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // role: .destructive にすると確認前に行削除アニメが走るので付けない。
             // 見た目の赤は .tint(.red) で維持。
@@ -1552,6 +1972,73 @@ private struct ExpenseRowContainer: View {
         } message: { exp in
             Text("「\(exp.displayTitle.isEmpty ? exp.categoryDisplayName : exp.displayTitle)」を削除します。元に戻せません。")
         }
+    }
+}
+
+// MARK: - Virtual Occurrence Display Backing (完全仮想化)
+
+/// 仮想 occurrence を**実支出と同じ `ExpenseRowContainer`/`ExpenseRowView` で描画する**ための
+/// 表示専用 Expense 供給器。occurrence は値型なので、行を描くには `Expense` インスタンスが要る。
+///
+/// ここでは viewContext の**子コンテキスト** (parent=viewContext) に Expense を作る。子は
+/// **絶対に save しない**ので永続化されず、`ensureSelfMemberExists` 等の副次 save にも巻き込まれない
+/// (= 仮想化の「occurrence を保存しない」前提を壊さない)。sheet/category は親 (record) と同じ
+/// objectID を子で参照するので、`ExpenseRowView` の共有判定・支払者アバター・通貨・repeat アイコンが
+/// そのまま正しく描ける。タップ/編集は実体化 (materialize, commit-guard) へ流すので、この表示用
+/// Expense 自体は編集されない。
+///
+/// occurrence の内容 (金額/カテゴリ/支払者/タイトル等) を署名キーにしてキャッシュするので、
+/// ルール変更で値が変われば新しい行に作り直され、stale を防ぐ。
+@MainActor
+final class VirtualRowBacking {
+    private var context: NSManagedObjectContext?
+    private var cache: [String: Expense] = [:]
+
+    func displayExpense(for occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
+        let ctx = ensureContext(parent: sheet.managedObjectContext)
+        let key = signature(occ)
+        if let cached = cache[key] { return cached }
+        // 暴走防止: 長期スクロール等でキャッシュが膨らんだら一旦クリアする。
+        if cache.count > 400 {
+            cache.values.forEach { ctx.delete($0) }
+            cache.removeAll()
+        }
+        let e = Expense(context: ctx)
+        if let childSheet = try? ctx.existingObject(with: sheet.objectID) as? ExpenseSheet {
+            e.sheet = childSheet
+            if !occ.categoryRaw.isEmpty,
+               let cats = childSheet.categories as? Set<ExpenseCategory>,
+               let cat = cats.first(where: { $0.name == occ.categoryRaw }) {
+                e.category = cat
+            }
+        }
+        e.title = occ.title.isEmpty ? nil : occ.title
+        e.amount = NSDecimalNumber(decimal: occ.amount)
+        e.kindRaw = occ.kind.rawValue
+        e.currencyCode = occ.currencyCode
+        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
+        e.payerProfileID = occ.payerProfileID
+        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
+        e.note = ""
+        e.date = occ.date
+        e.scheduledDate = occ.date
+        e.generatedFromRuleID = occ.ruleID   // → ExpenseRowView が repeat アイコンを出す
+        cache[key] = e
+        return e
+    }
+
+    private func ensureContext(parent: NSManagedObjectContext?) -> NSManagedObjectContext {
+        if let context { return context }
+        let ctx = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        ctx.parent = parent
+        // 親 (viewContext) の変更 (共有ロード・メンバー名変更等) を子の sheet に反映させる。
+        ctx.automaticallyMergesChangesFromParent = true
+        context = ctx
+        return ctx
+    }
+
+    private func signature(_ o: RecurringOccurrence) -> String {
+        "\(o.id)|\(o.amount)|\(o.categoryRaw)|\(o.payerProfileID ?? "")|\(o.beneficiaryProfileIDs)|\(o.title)|\(o.kind.rawValue)|\(o.currencyCode)"
     }
 }
 
@@ -1719,5 +2206,316 @@ private extension View {
     @ViewBuilder
     func applyIf<V: View>(_ condition: Bool, _ transform: (Self) -> V) -> some View {
         if condition { transform(self) } else { self }
+    }
+}
+
+/// 割り勘フィルタ。受益者 2 人以上で割っている支出を「割り勘あり」とみなす。
+enum ExpenseSplitFilter: String, CaseIterable, Identifiable {
+    case all, split, solo
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .all:   "すべて"
+        case .split: "割り勘あり"
+        case .solo:  "割り勘なし"
+        }
+    }
+    /// アプリ本体 (AddExpenseView のロード判定) と同じ割り勘判定:
+    /// 受益者が「空」または「支払者ただ 1 人」なら割り勘オフ、それ以外はオン。
+    /// (受益者 1 人でも支払者以外なら「その人の分を立て替えた」= 割り勘あり)
+    static func isSplit(beneficiaryIDs: [String], payerID: String?) -> Bool {
+        guard !beneficiaryIDs.isEmpty else { return false }
+        if beneficiaryIDs.count == 1, let p = payerID, !p.isEmpty, beneficiaryIDs[0] == p {
+            return false
+        }
+        return true
+    }
+
+    func matches(beneficiaryIDs: [String], payerID: String?) -> Bool {
+        switch self {
+        case .all:   return true
+        case .split: return Self.isSplit(beneficiaryIDs: beneficiaryIDs, payerID: payerID)
+        case .solo:  return !Self.isSplit(beneficiaryIDs: beneficiaryIDs, payerID: payerID)
+        }
+    }
+}
+
+/// カテゴリ / 割り勘 / 人 をまとめて選べるフィルタシート。
+/// カテゴリの簡易フィルタ (ピル) は SummaryCard 下に常設し、全フィルタはここに集約する。
+struct ExpenseFilterSheet: View {
+    @ObservedObject var record: ExpenseSheet
+    let categories: [ExpenseCategory]
+    let hasUncategorized: Bool
+    let memberIDs: [String]
+    /// メンバー / 割り勘セクションを出すか (共有 or バーチャルメンバーありのシートのみ)。
+    let showsMemberFilters: Bool
+    @Binding var selectedCategory: ExpenseCategory?
+    @Binding var filterUncategorized: Bool
+    @Binding var selectedPayerID: String?
+    @Binding var selectedBeneficiaryID: String?
+    @Binding var splitFilter: ExpenseSplitFilter
+    @Environment(\.dismiss) private var dismiss
+    // シート内はドラフト (ローカル) で編集し、「完了」で親フィルタに反映する。キャンセルは破棄。
+    @State private var draftCategory: ExpenseCategory?
+    @State private var draftUncategorized = false
+    @State private var draftPayerID: String?
+    @State private var draftBeneficiaryID: String?
+    @State private var draftSplit: ExpenseSplitFilter = .all
+    @State private var didInit = false
+
+    private var isAnyActive: Bool {
+        draftCategory != nil || draftUncategorized || draftPayerID != nil
+            || draftBeneficiaryID != nil || draftSplit != .all
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if showsMemberFilters {
+                    splitSection
+                    memberSection
+                    beneficiarySection
+                }
+                categorySection
+            }
+            .navigationTitle("フィルタ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(role: .cancel) {
+                        dismiss()   // キャンセル: ドラフトを破棄 (親フィルタは変更しない)。
+                    } label: {
+                        Label("キャンセル", systemImage: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button("リセット") {
+                        draftCategory = nil
+                        draftUncategorized = false
+                        draftPayerID = nil
+                        draftBeneficiaryID = nil
+                        draftSplit = .all
+                    }
+                    .disabled(!isAnyActive)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .confirm) {
+                        // 完了: ドラフトを親フィルタへ反映して閉じる。
+                        selectedCategory = draftCategory
+                        filterUncategorized = draftUncategorized
+                        selectedPayerID = draftPayerID
+                        selectedBeneficiaryID = draftBeneficiaryID
+                        splitFilter = draftSplit
+                        dismiss()
+                    } label: {
+                        Label("完了", systemImage: "checkmark")
+                    }
+                    .tint(record.tint)
+                }
+            }
+            .onAppear {
+                guard !didInit else { return }
+                draftCategory = selectedCategory
+                draftUncategorized = filterUncategorized
+                draftPayerID = selectedPayerID
+                draftBeneficiaryID = selectedBeneficiaryID
+                draftSplit = splitFilter
+                didInit = true
+            }
+        }
+    }
+
+    /// カテゴリなしを表すタグ (カテゴリの objectID URI と衝突しない sentinel)。
+    private static let uncategorizedTag = "__uncategorized__"
+
+    /// draftCategory / draftUncategorized を 1 つの選択タグ文字列に橋渡しする。
+    /// "" = すべて / uncategorizedTag = カテゴリなし / それ以外 = カテゴリの objectID URI。
+    private var categoryChoice: Binding<String> {
+        Binding(
+            get: {
+                if draftUncategorized { return Self.uncategorizedTag }
+                return draftCategory?.objectID.uriRepresentation().absoluteString ?? ""
+            },
+            set: { newValue in
+                switch newValue {
+                case "":
+                    draftCategory = nil
+                    draftUncategorized = false
+                case Self.uncategorizedTag:
+                    draftCategory = nil
+                    draftUncategorized = true
+                default:
+                    draftCategory = categories.first {
+                        $0.objectID.uriRepresentation().absoluteString == newValue
+                    }
+                    draftUncategorized = false
+                }
+            }
+        )
+    }
+
+    // カテゴリ / 人 / 受益者 は自作の navigationLink 行 (タップで FilterOptionList を push)。
+    // SwiftUI の Picker(.navigationLink) では色付き円アイコン/アバターを行に出せないため自作する。
+
+    @ViewBuilder
+    private var categorySection: some View {
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "カテゴリ", options: categoryOptions, selection: categoryChoice)
+            } label: {
+                LabeledContent("カテゴリ") {
+                    Text(currentCategoryName).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var splitSection: some View {
+        Section("割り勘") {
+            Picker("割り勘", selection: $draftSplit) {
+                ForEach(ExpenseSplitFilter.allCases) { f in
+                    Text(f.label).tag(f)
+                }
+            }
+            // タップで別画面 (チェックリスト) を開いて選ぶ。通貨ピッカーと同じスタイル。
+            .pickerStyle(.navigationLink)
+        }
+    }
+
+    @ViewBuilder
+    private var memberSection: some View {
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "人", options: memberOptions(allLabel: "すべて"), selection: payerChoice)
+            } label: {
+                LabeledContent("人") {
+                    Text(memberName(for: draftPayerID, allLabel: "すべて")).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var beneficiarySection: some View {
+        Section {
+            NavigationLink {
+                FilterOptionList(title: "受益者", options: memberOptions(allLabel: "なし"), selection: beneficiaryChoice)
+            } label: {
+                LabeledContent("受益者") {
+                    Text(memberName(for: draftBeneficiaryID, allLabel: "なし")).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - 選択状態のラベル / 選択肢
+
+    private var currentCategoryName: String {
+        if draftUncategorized { return "カテゴリなし" }
+        if let c = draftCategory { return c.displayName }
+        return "すべて"
+    }
+
+    private func memberName(for id: String?, allLabel: String) -> String {
+        guard let id, !id.isEmpty else { return allLabel }
+        return record.memberDisplayInfo(for: id).name
+    }
+
+    /// 「すべて」用の円アバター (他参加者の AvatarView と同じ円スタイルに揃える)。
+    private var allMembersAvatar: some View {
+        ZStack {
+            Circle().fill(record.tint.gradient)
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 28, height: 28)
+    }
+
+    private var categoryOptions: [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: "すべて",
+                  icon: AnyView(CategoryIconView(symbol: "square.grid.2x2.fill", tint: record.tint, size: 28)))
+        ]
+        for cat in categories {
+            opts.append(.init(
+                id: cat.objectID.uriRepresentation().absoluteString,
+                name: cat.displayName,
+                icon: AnyView(CategoryIconView(category: cat, size: 28))))
+        }
+        if hasUncategorized {
+            opts.append(.init(id: Self.uncategorizedTag, name: "カテゴリなし",
+                              icon: AnyView(CategoryIconView(symbol: "tag.slash", tint: .gray, size: 28))))
+        }
+        return opts
+    }
+
+    private func memberOptions(allLabel: String) -> [FilterOptionList.Option] {
+        var opts: [FilterOptionList.Option] = [
+            .init(id: "", name: allLabel, icon: AnyView(allMembersAvatar))
+        ]
+        for id in memberIDs {
+            let info = record.memberDisplayInfo(for: id)
+            opts.append(.init(
+                id: id, name: info.name,
+                icon: AnyView(AvatarView(photoData: info.photoData, displayName: info.name,
+                                         colorHex: info.colorHex, size: 28))))
+        }
+        return opts
+    }
+
+    /// 支払い者 (人) の選択タグ。"" = すべて / それ以外 = メンバーの profileID。
+    private var payerChoice: Binding<String> {
+        Binding(
+            get: { draftPayerID ?? "" },
+            set: { draftPayerID = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    /// 受益者の選択タグ。"" = すべて (指定なし) / それ以外 = メンバーの profileID。
+    private var beneficiaryChoice: Binding<String> {
+        Binding(
+            get: { draftBeneficiaryID ?? "" },
+            set: { draftBeneficiaryID = $0.isEmpty ? nil : $0 }
+        )
+    }
+}
+
+/// フィルタ用の自作 navigationLink 先リスト。行をタップすると選択して自動で戻る。
+/// 行アイコンは任意 (カテゴリの色付き円 / メンバーのアバター) を AnyView で受け取る。
+private struct FilterOptionList: View {
+    struct Option: Identifiable {
+        let id: String          // "" = すべて
+        let name: String
+        let icon: AnyView
+    }
+    let title: String
+    let options: [Option]
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            ForEach(options) { opt in
+                Button {
+                    selection = opt.id
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        opt.icon
+                        Text(opt.name).foregroundStyle(.primary)
+                        Spacer()
+                        if selection == opt.id {
+                            Image(systemName: "checkmark").foregroundStyle(.tint)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

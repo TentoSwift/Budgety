@@ -13,6 +13,11 @@ extension QuickIntentLogic {
 
     @MainActor
     static func addRecurring(parsed: [String: Any]) async -> [String: Any] {
+        // 定期項目機能は一旦オフ (RecurringOccurrenceService.featureEnabled == false)。MCP/ショートカット経由の
+        // 追加も受け付けない (休眠ルールを増やさないため)。
+        guard RecurringOccurrenceService.featureEnabled else {
+            return ["ok": false, "error": "定期項目機能は現在無効です (Recurring items are currently disabled)."]
+        }
         let amount: Double = {
             if let v = parsed["amount"] as? Double { return v }
             if let v = parsed["amount"] as? Int    { return Double(v) }

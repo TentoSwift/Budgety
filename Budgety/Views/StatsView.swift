@@ -116,7 +116,7 @@ struct StatsView: View {
             return CategorySummary(
                 name: key,
                 tint: value.first?.categoryTint ?? .gray,
-                symbol: value.first?.categorySymbol ?? "list.bullet",
+                symbol: value.first?.categorySymbol ?? "tag.slash",
                 total: total,
                 count: value.count
             )

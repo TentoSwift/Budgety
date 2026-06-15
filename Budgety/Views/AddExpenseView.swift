@@ -132,7 +132,7 @@ struct AddExpenseView: View {
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
 
-    /// FoundationModels が推測したカテゴリ。
+    /// 提案中のカテゴリ (出所は履歴学習 or FoundationModels だが、表示は「AI 提案」で統一する)。
     @State private var aiCategorySuggestion: ExpenseCategory?
     @State private var isComputingAICategory: Bool = false
     /// 現在進行中の AI 推測 Task。新しいキーストロークでキャンセルする。
@@ -159,7 +159,7 @@ struct AddExpenseView: View {
     /// 収入では使わない (精算対象外)。
     @State private var selectedBeneficiaries: Set<String> = []
     /// 割り勘トグル。オフ = この支出は支払者のみの負担 (受益者 = 支払者)。
-    /// オン = `selectedBeneficiaries` で割る相手を選ぶ (空 = 全員均等)。
+    /// オン = `selectedBeneficiaries` で受益者を選ぶ (空 = 全員均等)。
     @State private var splitEnabled: Bool = false
     /// バーチャルメンバー追加 (Premium 機能)。
     @State private var showAddMemberPrompt = false
@@ -224,6 +224,9 @@ struct AddExpenseView: View {
         // AX サイズだと SF Symbol + padding が巨大化して UI が崩れるので、
         // バー全体の Dynamic Type を .xxLarge までにキャップする。
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        // 演算子 / = ボタンをシートの色で塗る。safeAreaInset 内なので List 側の
+        // .tint(sheetTint) を継承せず既定色になるため、ここで明示的に適用する。
+        .tint(sheetTint)
     }
 
     /// バー上に出す計算式 ("1000 + 200" 等)。
@@ -347,25 +350,29 @@ struct AddExpenseView: View {
     /// 定期項目から生成された支出を編集中、保存ボタンを押した時に出る 3 択ダイアログ。
     @State private var showRecurringSaveChoice: Bool = false
 
-    /// 「定期項目に反映する」処理範囲
+    /// 「定期項目に反映する」処理範囲 (2 択: この項目のみ / 全て)
     private enum RecurringSaveScope {
-        case thisOnly   // この 1 件だけ
-        case future     // ルールも更新 (今後)
-        case all        // ルール + 過去に生成済みの全支出も更新
+        case thisOnly   // この 1 件だけ (定期から切り離して通常支出化)
+        case all        // ルールを変更して全 occurrence に反映
     }
 
     /// 「定期項目を編集」を押した時に呼ばれるコールバック。
     /// シートを閉じて、親 (= SheetDetailView) 側で定期項目 view へ遷移する経路を提供する。
     let onEditRule: ((RecurringRule) -> Void)?
+    /// ユーザーが実際に保存 (commit) した時に呼ばれる。仮想 occurrence を materialize して
+    /// 編集する経路で、キャンセル (未 commit) なら親側で未保存行を破棄するために使う。
+    let onCommit: (() -> Void)?
 
     init(record: ExpenseSheet) {
         self.mode = .create(record: record)
         self.onEditRule = nil
+        self.onCommit = nil
     }
 
-    init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil) {
+    init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil, onCommit: (() -> Void)? = nil) {
         self.mode = .edit(expense: expense)
         self.onEditRule = onEditRule
+        self.onCommit = onCommit
     }
 
     private var amountDecimal: Decimal? {
@@ -521,6 +528,14 @@ struct AddExpenseView: View {
         guard case .create(let sheet) = mode else { return }
         let trimmed = title.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 2 else { return }
+        // 1) 過去の自分の分類履歴を最優先で提案 (例: クスリのアオキ→食費)。即時・同期。
+        // (出所は履歴だが、表示は AI 提案として統一する。)
+        if let hist = CategoryHistorySuggestor.suggest(title: trimmed, kind: kind, in: sheet),
+           selectedCategory?.objectID != hist.objectID {
+            aiCategorySuggestion = hist
+            return
+        }
+        // 2) 履歴が無ければ AI (FoundationModels) で推測。
         kickAICategorySuggest(title: trimmed, in: sheet)
     }
 
@@ -637,6 +652,12 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var recurringSection: some View {
+        // 機能オフ時 (RecurringOccurrenceService.featureEnabled == false) は繰り返し UI を一切出さない (新規作成不可)。
+        if RecurringOccurrenceService.featureEnabled { recurringSectionContent }
+    }
+
+    @ViewBuilder
+    private var recurringSectionContent: some View {
         if case .edit(let expense) = mode, let rule = expense.relatedRule {
             // 既に Rule から生成された支出は、ここで Toggle / Stepper を編集させると
             // 「この項目だけ」と「Rule 全体」が混ざって混乱しやすい。
@@ -846,6 +867,10 @@ struct AddExpenseView: View {
                 ObservedMemberAvatar(member: m, size: 24)
                 Text(m.displayName).foregroundStyle(.secondary)
             }
+        } else if payerExplicitlyCleared {
+            // ユーザーが picker で明示的に「未選択」を選んだ場合は、create / edit を
+            // 問わず自分へフォールバックせず「未選択」を表示する。
+            unspecifiedPayerPreview
         } else if case .edit(let expense) = mode,
                   let pid = expense.payerProfileID, !pid.isEmpty {
             // selectedPayer が解決失敗。編集対象 Expense の payerProfileID を canonical として
@@ -896,14 +921,8 @@ struct AddExpenseView: View {
     /// 「？マーク dashed circle」+ 「未選択」テキストを薄色で出す。
     private var unspecifiedPayerPreview: some View {
         Group {
-            ZStack {
-                Circle()
-                    .stroke(.tertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(width: 24, height: 24)
-                Image(systemName: "person.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
+            // 他のアバターと同じ @ScaledMetric スケーリングにするため共通コンポーネントを使う。
+            UnspecifiedAvatarView(size: 24)
             Text("未選択").foregroundStyle(.secondary)
         }
     }
@@ -1051,7 +1070,7 @@ struct AddExpenseView: View {
                     } header: {
                         if splitEnabled {
                             HStack {
-                                Text("割る相手")
+                                Text("受益者")
                                 Spacer()
                                 Button("全員") { selectAllBeneficiaries(sheet: sheet) }
                                     .font(.caption)
@@ -1065,7 +1084,7 @@ struct AddExpenseView: View {
                     } footer: {
                         if splitEnabled {
                             Text(selectedBeneficiaries.isEmpty
-                                 ? "割る相手を 1 人以上選んでください。"
+                                 ? "受益者を 1 人以上選んでください。"
                                  : "チェックした人で均等割りします。")
                                 .foregroundStyle(selectedBeneficiaries.isEmpty ? Color.red : Color.secondary)
                         }
@@ -1175,11 +1194,10 @@ struct AddExpenseView: View {
                 titleVisibility: .visible
             ) {
                 Button("この項目のみ保存") { performRecurringSave(scope: .thisOnly) }
-                Button("今後の定期項目で保存") { performRecurringSave(scope: .future) }
                 Button("全ての定期項目で変更") { performRecurringSave(scope: .all) }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("この支出は定期項目から生成されています。変更をどこまで反映するか選んでください。")
+                Text("この支出は定期項目から生成されています。この項目だけ変更するか、定期項目全体を変更するか選んでください。")
             }
             .confirmationDialog(
                 "この支出を削除しますか？",
@@ -1412,7 +1430,9 @@ struct AddExpenseView: View {
     /// 保存ボタンタップ時のディスパッチ。定期由来の支出に変更があれば 3 択ダイアログ、
     /// それ以外は通常 save。
     private func trySave() {
-        if case .edit(let expense) = mode,
+        // 機能オフ時は既存の生成由来支出も通常編集として保存する (2 択ダイアログを出さない)。
+        if RecurringOccurrenceService.featureEnabled,
+           case .edit(let expense) = mode,
            expense.generatedFromRuleID != nil,
            expense.relatedRule != nil,
            hasAnyEditChanges {
@@ -1452,8 +1472,15 @@ struct AddExpenseView: View {
         if currencyChanged { expense.currencyCode = currencyCode }
         // amount または通貨が変わったら FX スナップショットを取り直す。
         // 何も変わっていなければ元の snapshot をそのまま使う (= 当時のレート維持)。
+        // ただし定期 occurrence (generatedFromRuleID != nil) は凍結しない方針なので、
+        // スナップショットを取らず現行レートで精算させる (既存があればクリア)。
         if amountChanged || currencyChanged {
-            expense.captureFXSnapshot()
+            if expense.generatedFromRuleID == nil {
+                expense.captureFXSnapshot()
+            } else {
+                expense.fxConvertedAmountDecimal = nil
+                expense.fxTargetCurrency = nil
+            }
         }
         if note != origNote { expense.note = note }
         if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
@@ -1512,12 +1539,22 @@ struct AddExpenseView: View {
         // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
         applyChanges(toExpense: expense, includeDate: true)
 
-        // 2) ルールへ反映 (今後 / 全て)
-        if scope != .thisOnly, let rule = expense.relatedRule {
-            applyChanges(toRule: rule)
+        // 「この項目のみ」変更 = この回を定期から切り離して通常の支出にする (もう定期項目ではない)。
+        // ルールにこの日付を skip 記録 (仮想の重複防止) し、Expense からは定期リンクを外す。
+        if scope == .thisOnly, RecurringOccurrenceService.virtualizationEnabled,
+           let rule = expense.relatedRule, let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+            expense.generatedFromRuleID = nil
+            expense.scheduledDate = nil
+            // 通常の支出になったので FX を凍結する (定期は非凍結だが、切り離したら通常扱い)。
+            expense.captureFXSnapshot()
+        }
 
-            // 3) 過去に生成された他の支出にも反映 (全て)
-            if scope == .all, let ruleID = rule.id {
+        // 2) 「全て」= ルールを変更して全 occurrence に反映する。
+        if scope == .all, let rule = expense.relatedRule {
+            applyChanges(toRule: rule)
+            // 過去に実体化済みの他の支出 (override 等) にも反映する。
+            if let ruleID = rule.id {
                 let req = NSFetchRequest<Expense>(entityName: "Expense")
                 req.predicate = NSPredicate(format: "generatedFromRuleID == %@", ruleID as CVarArg)
                 let others = (try? viewContext.fetch(req)) ?? []
@@ -1530,8 +1567,15 @@ struct AddExpenseView: View {
         // 繰り返しの頻度・間隔・終了日の変更は scope に関わらず常に Rule に反映
         applyRecurringChanges(for: expense)
 
+        // 全て: 編集内容はルールに反映済みなので、タップで materialize した実 Expense は
+        // 残さず削除し、その回も仮想 (= ルールから算出) のまま表示する。
+        if scope == .all, RecurringOccurrenceService.virtualizationEnabled {
+            viewContext.delete(expense)
+        }
+
         PersistenceController.shared.save()
         RecurringExpenseGenerator.generateAll(in: viewContext)
+        onCommit?()
         Haptics.success()
         dismiss()
     }
@@ -1695,8 +1739,19 @@ struct AddExpenseView: View {
             // 繰り返し ON: Rule を作成して、この Expense を「最初の occurrence」として連結する。
             if isRecurring {
                 let rule = makeRule(in: record, startDate: date, amount: amountDecimal)
-                rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
-                expense.generatedFromRuleID = rule.id
+                if RecurringOccurrenceService.virtualizationEnabled {
+                    // 完全仮想化: 入力分の実 Expense は作らず、ルールのみ作成する。
+                    // occurrence は n=0 (この日付) も含めてすべて仮想表示になる。
+                    viewContext.delete(expense)
+                } else {
+                    // ハイブリッド: 入力分を occurrence n=0 (seed) として実体化し連結する。
+                    rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
+                    expense.generatedFromRuleID = rule.id
+                    expense.scheduledDate = Calendar.current.startOfDay(for: date)
+                    // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
+                    expense.fxConvertedAmountDecimal = nil
+                    expense.fxTargetCurrency = nil
+                }
             }
         case .edit(let expense):
             // 通常編集 (定期項目以外、または「この項目のみ」)。差分のみ書き戻し。
@@ -1709,6 +1764,7 @@ struct AddExpenseView: View {
         pc.save()
         // 繰り返しが付いた可能性があるので generator を回して未生成分を作る
         RecurringExpenseGenerator.generateAll(in: viewContext)
+        onCommit?()
         Haptics.success()
         dismiss()
     }
@@ -1733,10 +1789,21 @@ struct AddExpenseView: View {
             }
         } else if isRecurring, !origIsRecurring,
                   let amount = amountDecimal {
-            // 単発 Expense を繰り返しに変換 (option 2-i)
+            // 単発 Expense を繰り返しに変換。
             let rule = makeRule(in: sheet, startDate: date, amount: amount)
-            rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
-            expense.generatedFromRuleID = rule.id
+            if RecurringOccurrenceService.virtualizationEnabled {
+                // 完全仮想化: 既存 Expense は破棄してルールのみに。occurrence は全て仮想表示。
+                // (編集後の値は makeRule がフォーム state から取り込んでいるのでルールに反映済み)
+                viewContext.delete(expense)
+            } else {
+                // ハイブリッド: 既存 Expense を occurrence n=0 (seed) として連結。
+                rule.lastGeneratedDate = Calendar.current.startOfDay(for: date)
+                expense.generatedFromRuleID = rule.id
+                expense.scheduledDate = Calendar.current.startOfDay(for: date)
+                // 定期 occurrence は FX 凍結しない (現行レートで精算する方針)。
+                expense.fxConvertedAmountDecimal = nil
+                expense.fxTargetCurrency = nil
+            }
         }
     }
 

@@ -51,6 +51,15 @@ enum CSVImporter {
         }
         let header = splitCSVRow(lines[0]).map { normalizeHeader($0) }
         let indices = ColumnIndices(header: header)
+        // 金額列が 1 つも見つからない場合、全行が「解析不能」になるだけだと原因が
+        // 分かりにくいので、ヘッダレベルの問題として明示的に 1 件だけ報告する。
+        guard indices.hasAmount else {
+            return PreviewResult(
+                rows: [],
+                skipped: [(1, "金額列が見つかりません。ヘッダに「amount / 金額 / 利用金額 / 出金額・入金額」などの列名が必要です")],
+                header: header
+            )
+        }
 
         var rows: [Row] = []
         var skipped: [(Int, String)] = []
@@ -212,19 +221,35 @@ enum CSVImporter {
         return fields.map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
+    /// ヘッダ名の正規化: 前後空白 (全角含む)・全角英数の半角化・小文字化・
+    /// 「(円)」等の単位サフィックス除去。銀行/カード明細の表記ゆれを吸収する。
     private static func normalizeHeader(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespaces).lowercased()
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.replacingOccurrences(of: "　", with: "")
+        t = t.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? t
+        t = t.lowercased()
+        for suffix in ["(円)", "(jpy)", "(税込)", "[円]"] where t.hasSuffix(suffix) {
+            t = String(t.dropLast(suffix.count))
+        }
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     private struct ColumnIndices {
         let date: Int?
         let title: Int?
         let amount: Int?
+        /// 「出金額」「お引出し」のような支出専用の金額列 (銀行明細の出金/入金 分離型)。
+        let expenseAmount: Int?
+        /// 「入金額」「お預入れ」のような収入専用の金額列。
+        let incomeAmount: Int?
         let kind: Int?
         let currency: Int?
         let category: Int?
         let payer: Int?
         let note: Int?
+
+        /// いずれかの金額列が見つかったか。無ければ全行解析不能なのでヘッダエラーにする。
+        var hasAmount: Bool { amount != nil || expenseAmount != nil || incomeAmount != nil }
 
         init(header: [String]) {
             func find(_ aliases: [String]) -> Int? {
@@ -233,13 +258,29 @@ enum CSVImporter {
                 }
                 return nil
             }
-            // 自エクスポート + マネーフォワード等のよくある表記をエイリアスとして受け入れる
-            self.date     = find(["date", "日付", "取引日"])
-            self.title    = find(["title", "内容", "品目", "memo", "description", "店名"])
-            self.amount   = find(["amount", "金額", "支出金額", "収入金額", "value"])
-            self.kind     = find(["kind", "区分", "type"])
+            // 自エクスポート + マネーフォワード / 銀行 / カード明細のよくある表記を受け入れる
+            self.date     = find(["date", "日付", "取引日", "利用日", "ご利用日", "お取引日", "年月日", "利用年月日", "日時", "取引日時"])
+            self.title    = find(["title", "内容", "品目", "memo", "description", "店名",
+                                  "名称", "摘要", "利用店名", "ご利用店名", "利用先", "取引内容", "お取引内容"])
+            let amountIdx  = find(["amount", "金額", "value", "利用金額", "ご利用金額",
+                                   "支払金額", "お支払い金額", "支払額", "利用額", "決済金額"])
+            let expenseIdx = find(["支出金額", "出金額", "出金金額", "出金", "お引出し", "お引き出し", "引出金額", "支払い金額"])
+            let incomeIdx  = find(["収入金額", "入金額", "入金金額", "入金", "お預入れ", "お預け入れ", "預入金額"])
+            if amountIdx == nil && expenseIdx == nil && incomeIdx == nil {
+                // どの金額エイリアスにも一致しない場合のフォールバック:
+                // 「〜金額」のような列名を金額列とみなす (残高/balance 列は除外)。
+                self.amount = header.firstIndex { col in
+                    (col.contains("金額") || col.contains("amount"))
+                        && !col.contains("残高") && !col.contains("balance")
+                }
+            } else {
+                self.amount = amountIdx
+            }
+            self.expenseAmount = expenseIdx
+            self.incomeAmount  = incomeIdx
+            self.kind     = find(["kind", "区分", "type", "種別", "収支区分"])
             self.currency = find(["currency", "通貨"])
-            self.category = find(["category", "カテゴリ", "大項目", "中項目"])
+            self.category = find(["category", "カテゴリ", "カテゴリー", "大項目", "中項目", "費目"])
             self.payer    = find(["payer", "支払者", "paidby", "payment_user"])
             self.note     = find(["note", "メモ", "備考"])
         }
@@ -261,16 +302,37 @@ enum CSVImporter {
             let s = cols[i].trimmingCharacters(in: .whitespaces)
             return s.isEmpty ? nil : s
         }
-        // amount 必須
-        guard let amountStr = col(indices.amount),
-              let amount = parseAmount(amountStr) else {
-            return .failure("amount 列が空または解析不能")
+        // 金額 (必須): 単一の金額列 → 出金列 → 入金列 の順で拾う。
+        // 出金/入金 分離型 (銀行明細) は埋まっている側から kind も確定する。
+        var parsedAmount: Decimal?
+        var splitKind: TransactionKind?
+        if let s = col(indices.amount), let a = parseAmount(s) {
+            parsedAmount = a
+        }
+        if parsedAmount == nil, let s = col(indices.expenseAmount), let a = parseAmount(s) {
+            parsedAmount = a
+            splitKind = .expense
+        }
+        if parsedAmount == nil, let s = col(indices.incomeAmount), let a = parseAmount(s) {
+            parsedAmount = a
+            splitKind = .income
+        }
+        guard var amount = parsedAmount else {
+            return .failure("金額列が空または解析不能")
         }
         let title = col(indices.title) ?? "(無題)"
         let date = col(indices.date).flatMap(parseDate(_:)) ?? defaultDate
-        let kindStr = col(indices.kind)?.lowercased() ?? "expense"
-        let kind: TransactionKind = (kindStr.contains("income") || kindStr.contains("収入") || kindStr.contains("inc"))
-            ? .income : .expense
+        // kind: 分離列で確定 > kind 列 > 既定は支出。
+        let kind: TransactionKind
+        if let splitKind {
+            kind = splitKind
+        } else {
+            let kindStr = col(indices.kind)?.lowercased() ?? "expense"
+            kind = (kindStr.contains("income") || kindStr.contains("収入") || kindStr.contains("inc"))
+                ? .income : .expense
+        }
+        // 負の金額 (例: 銀行明細の出金 = -450) は kind に意味を移して絶対値で保存する。
+        if amount < 0 { amount = -amount }
         let currency: String? = {
             if let c = col(indices.currency)?.uppercased(), !c.isEmpty { return c }
             return nil
@@ -287,17 +349,18 @@ enum CSVImporter {
         ))
     }
 
-    /// "¥1,234.50" / "$5.99" / "1500" など寛容にパース。負号は許容。
+    /// "¥1,234.50" / "$5.99" / "1500" / "１，２３４円" など寛容にパース。負号は許容。
     private static func parseAmount(_ s: String) -> Decimal? {
         let trimmed = s.trimmingCharacters(in: .whitespaces)
-        // 通貨記号 / 千区切りカンマを除去
+        // 全角数字・記号を半角化してから、通貨記号 / 千区切りカンマを除去
+        let half = trimmed.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? trimmed
         var cleaned = ""
-        for ch in trimmed {
+        for ch in half {
             if ch.isNumber || ch == "." || ch == "-" {
                 cleaned.append(ch)
             }
         }
-        guard !cleaned.isEmpty else { return nil }
+        guard cleaned.contains(where: \.isNumber) else { return nil }
         return Decimal(string: cleaned)
     }
 
@@ -312,7 +375,9 @@ enum CSVImporter {
             "yyyy/M/d",
             "MM/dd/yyyy",
             "M/d/yyyy",
-            "yyyy.MM.dd"
+            "yyyy.MM.dd",
+            "yyyy年M月d日",
+            "yyyyMMdd"
         ]
         return formats.map { fmt in
             let df = DateFormatter()

@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
+    /// デバッグ: 定期項目の完全仮想化フラグ (保存せず表示時に算出)。
+    @AppStorage(RecurringOccurrenceService.virtualizationKey) private var recurringVirtualization: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -132,23 +134,8 @@ struct SettingsView: View {
                     }
                 }
 
-                Section {
-                    NavigationLink {
-                        ClaudeIntegrationView()
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Claude と連携")
-                                Text("自然言語で支出を記録")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.purple.gradient)
-                        }
-                    }
-                }
+                // Claude / MCP 連携は macOS 専用 (アプリ本体を MCP サーバーとして登録する方式)。
+                // iOS はバイナリを CLI 起動できないため、この導線は macOS のみに置く。
 
                 Section("バージョン") {
                     infoRow("Budgety") {
@@ -158,6 +145,21 @@ struct SettingsView: View {
                         LicenseListScreen()
                     } label: {
                         Label("ライセンス", systemImage: "doc.text")
+                    }
+                    Link(destination: URL(string: "https://apps.apple.com/app/id6768543053?action=write-review")!) {
+                        Label {
+                            HStack {
+                                Text("App Store でレビュー")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(.yellow)
+                        }
                     }
                     Link(destination: URL(string: "https://tentoswift.github.io/budgety-privacy/support.html")!) {
                         Label {
@@ -188,6 +190,24 @@ struct SettingsView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundStyle(.blue)
                         }
+                    }
+                }
+
+                if BuildInfo.isInternalBuild, RecurringOccurrenceService.featureEnabled {
+                    Section {
+                        NavigationLink {
+                            RecurringDiagnosticsView()
+                        } label: {
+                            Label("定期項目の診断", systemImage: "repeat.circle")
+                        }
+                        Toggle(isOn: $recurringVirtualization) {
+                            Label("定期を仮想化 (保存しない)", systemImage: "wand.and.stars")
+                        }
+                    } header: {
+                        Text("デバッグ")
+                    } footer: {
+                        Text("ON で定期項目を保存せず、表示時にルールから算出します (実験的)。既存の生成済みデータはそのまま残ります。")
+                            .font(.caption)
                     }
                 }
 
