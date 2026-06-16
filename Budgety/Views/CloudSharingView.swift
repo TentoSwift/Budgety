@@ -341,7 +341,7 @@ struct CloudSharingView: View {
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
-            Text("メールで招待")
+            Text("Apple Account のメールアドレスで招待")
         } footer: {
             Text("相手の Apple Account のメールアドレスを入力して「招待メールを送る」を押すと、参加できる人として登録し、招待リンク入りのメール作成画面が開きます。送信すると相手はリンクから参加できます。")
         }
