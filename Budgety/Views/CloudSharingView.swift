@@ -367,7 +367,7 @@ struct CloudSharingView: View {
                         .navigationTitle("招待の手順")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
+                            ToolbarItem(placement: .topBarLeading) {
                                 Button {
                                     showInviteInfo = false
                                 } label: {
