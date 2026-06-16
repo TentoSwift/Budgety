@@ -30,6 +30,8 @@ struct CloudSharingView: View {
     @State private var pendingURL: URL?
     @State private var showPaywall: Bool = false
     @State private var isLoadingShare: Bool = false
+    /// 招待手順の説明を出す ⓘ ポップオーバーの表示状態。
+    @State private var showInviteInfo: Bool = false
 
     private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isValidEmail: Bool {
@@ -341,9 +343,25 @@ struct CloudSharingView: View {
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
-            Text("Apple Account のメールアドレスで招待")
-        } footer: {
-            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+            HStack {
+                Text("Apple Account のメールアドレスで招待")
+                Spacer()
+                Button {
+                    showInviteInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("招待の手順")
+                .popover(isPresented: $showInviteInfo) {
+                    Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .padding()
+                        .frame(maxWidth: 320, alignment: .leading)
+                        .presentationCompactAdaptation(.popover)
+                }
+            }
         }
     }
 
