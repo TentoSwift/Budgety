@@ -331,9 +331,9 @@ struct CloudSharingView: View {
                     if isProcessing {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(systemName: "paperplane.fill")
+                        Image(systemName: "plus")
                     }
-                    Text(isProcessing ? "招待を準備中..." : "招待メールを送る")
+                    Text(isProcessing ? "招待を準備中..." : "招待する")
                         .fontWeight(.semibold)
                     Spacer()
                 }
