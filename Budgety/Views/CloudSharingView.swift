@@ -333,7 +333,7 @@ struct CloudSharingView: View {
                     } else {
                         Image(systemName: "paperplane.fill")
                     }
-                    Text(isProcessing ? "招待を準備中..." : "招待を送る")
+                    Text(isProcessing ? "招待を準備中..." : "招待メールを送る")
                         .fontWeight(.semibold)
                     Spacer()
                 }
@@ -343,7 +343,7 @@ struct CloudSharingView: View {
         } header: {
             Text("メールで招待")
         } footer: {
-            Text("招待したい人の Apple Account のメールアドレスを入力して招待を送ります。")
+            Text("相手の Apple Account のメールアドレスを入力して「招待メールを送る」を押すと、参加できる人として登録し、招待リンク入りのメール作成画面が開きます。送信すると相手はリンクから参加できます。")
         }
     }
 
@@ -431,9 +431,11 @@ struct CloudSharingView: View {
     private func sendInvitation() async {
         isProcessing = true
         errorMessage = nil
+        // メールクリア前に宛先を退避 (メール作成画面の To に使う)。
+        let recipient = trimmedEmail
         do {
             let result = try await ShareCoordinator.shared.invite(
-                email: trimmedEmail,
+                email: recipient,
                 permission: .readWrite,
                 to: record
             )
@@ -442,6 +444,17 @@ struct CloudSharingView: View {
             email = ""
             participantsRefresh += 1
             Haptics.success()
+            // 参加可能リストへ登録できたので、招待リンク入りのメール作成画面を開く。
+            // メール未設定の端末では代替手段 (リンクをコピー) を案内する。
+            if MFMailComposeViewController.canSendMail() {
+                mailData = MailData(
+                    recipient: recipient,
+                    subject: "Budgety「\(record.displayName)」への招待",
+                    body: invitationMessage(url: result.url)
+                )
+            } else {
+                showMailUnavailable = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
