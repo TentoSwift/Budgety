@@ -30,6 +30,8 @@ struct CloudSharingView: View {
     @State private var pendingURL: URL?
     @State private var showPaywall: Bool = false
     @State private var isLoadingShare: Bool = false
+    /// 招待手順の説明を出す ⓘ ポップオーバーの表示状態。
+    @State private var showInviteInfo: Bool = false
 
     private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isValidEmail: Bool {
@@ -331,9 +333,9 @@ struct CloudSharingView: View {
                     if isProcessing {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(systemName: "paperplane.fill")
+                        Image(systemName: "plus")
                     }
-                    Text(isProcessing ? "招待を準備中..." : "招待メールを送る")
+                    Text(isProcessing ? "招待を準備中..." : "招待する")
                         .fontWeight(.semibold)
                     Spacer()
                 }
@@ -341,9 +343,41 @@ struct CloudSharingView: View {
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
-            Text("メールで招待")
-        } footer: {
-            Text("相手の Apple Account のメールアドレスを入力して「招待メールを送る」を押すと、参加できる人として登録し、招待リンク入りのメール作成画面が開きます。送信すると相手はリンクから参加できます。")
+            HStack {
+                Text("Apple Account のメールアドレスで招待")
+                Spacer()
+                Button {
+                    showInviteInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("招待の手順")
+                .sheet(isPresented: $showInviteInfo) {
+                    NavigationStack {
+                        ScrollView {
+                            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                        .scrollBounceBehavior(.basedOnSize)
+                        .navigationTitle("招待の手順")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    showInviteInfo = false
+                                } label: {
+                                    Label("閉じる", systemImage: "xmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -385,7 +419,7 @@ struct CloudSharingView: View {
         } header: {
             Text("リンクを送る")
         } footer: {
-            Text("招待済みの人にリンクを送ってください。受け取った相手はリンクをタップして参加できます。")
+            Text("「招待する」で登録した相手に、AirDrop やメッセージなどでこのリンクを送ることもできます。相手はリンクをタップして参加できます。")
         }
     }
 
