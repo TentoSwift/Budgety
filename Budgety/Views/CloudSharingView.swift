@@ -357,8 +357,10 @@ struct CloudSharingView: View {
                     Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
                         .font(.callout)
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding()
-                        .frame(maxWidth: 320, alignment: .leading)
+                        .frame(width: 300)
                         .presentationCompactAdaptation(.popover)
                 }
             }
