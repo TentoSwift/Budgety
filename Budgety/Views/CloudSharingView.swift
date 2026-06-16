@@ -354,16 +354,28 @@ struct CloudSharingView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("招待の手順")
                 .sheet(isPresented: $showInviteInfo) {
-                    ScrollView {
-                        Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
-                            .font(.callout)
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
+                    NavigationStack {
+                        ScrollView {
+                            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                        .scrollBounceBehavior(.basedOnSize)
+                        .navigationTitle("招待の手順")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button {
+                                    showInviteInfo = false
+                                } label: {
+                                    Label("閉じる", systemImage: "xmark")
+                                }
+                            }
+                        }
                     }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .presentationDragIndicator(.visible)
                 }
             }
         }
