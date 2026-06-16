@@ -642,16 +642,6 @@ private struct ParticipantRow: View {
         }
     }
 
-    private var roleText: String {
-        switch participant.role {
-        case .owner: "オーナー"
-        case .privateUser: "プライベート"
-        case .publicUser: "公開"
-        case .unknown: ""
-        @unknown default: ""
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
@@ -684,9 +674,12 @@ private struct ParticipantRow: View {
                             .lineLimit(1)
                     }
                     HStack(spacing: 6) {
-                        Text(roleText)
-                        if participant.role != .owner {
-                            Text("·")
+                        if participant.role == .owner {
+                            Text("オーナー")
+                        } else {
+                            // CloudKit のロール (privateUser/publicUser) は内部的な区分で
+                            // ユーザーには無意味かつ「非公開?」と誤解を招くため表示しない。
+                            // 意味のある参加状況 (招待中 / 参加済み) だけを出す。
                             Text(statusText)
                                 .foregroundStyle(participant.acceptanceStatus == .pending ? .orange : .secondary)
                         }
