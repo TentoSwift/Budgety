@@ -353,20 +353,8 @@ struct CloudSharingView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("招待の手順")
-                // AX サイズでは説明が縦に長くなり popover では見切れる (popover は
-                // 内容を縮めるだけでスクロール不可) ため、スクロール可能な sheet で表示する。
-                .sheet(isPresented: $showInviteInfo) {
-                    ScrollView {
-                        Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
-                            .font(.callout)
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
-                    }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                .popover(isPresented: $showInviteInfo) {
+                    InviteInfoPopover()
                 }
             }
         }
@@ -716,6 +704,42 @@ private struct ParticipantRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// 招待手順を説明する popover。
+/// popover は内容を縮めるだけでスクロールしないため、内容の高さを測り、
+/// 上限 (maxHeight) までは内容ぴったり、超える AX サイズではスクロールさせる。
+private struct InviteInfoPopover: View {
+    @State private var contentHeight: CGFloat = 180
+    private let width: CGFloat = 300
+    private let maxHeight: CGFloat = 360
+
+    var body: some View {
+        ScrollView {
+            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: InviteInfoHeightKey.self, value: geo.size.height)
+                    }
+                )
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .onPreferenceChange(InviteInfoHeightKey.self) { contentHeight = $0 }
+        .frame(width: width, height: min(contentHeight, maxHeight))
+        .presentationCompactAdaptation(.popover)
+    }
+}
+
+private struct InviteInfoHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
