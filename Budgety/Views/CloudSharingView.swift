@@ -363,7 +363,6 @@ struct CloudSharingView: View {
                             .padding()
                     }
                     .scrollBounceBehavior(.basedOnSize)
-                    .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                 }
             }
