@@ -2182,9 +2182,12 @@ private struct ExpenseRowView: View {
     @ViewBuilder
     private var accessibilitySubtitle: some View {
         VStack(alignment: .leading, spacing: 2) {
-            let displayName = expense.displayPaidBy
-            if !displayName.isEmpty {
-                Text(displayName)
+            // 通常レイアウト (titleAndSubtitle) と同じ抑制: 個人シートで自分払いの場合は
+            // 支払者名を出さない。これが無いと、メモ保存で showSubtitle が true になった
+            // とき AX サブタイトルに自分の名前が漏れて表示される。
+            let payerText = (isSoloSheet && payerIsSelf) ? "" : expense.displayPaidBy
+            if !payerText.isEmpty {
+                Text(payerText)
                     .foregroundStyle(expense.payerTint)
             }
             if let note = expense.note, !note.isEmpty {
