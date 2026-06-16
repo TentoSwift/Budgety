@@ -353,15 +353,20 @@ struct CloudSharingView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("招待の手順")
-                .popover(isPresented: $showInviteInfo) {
-                    Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
-                        .font(.callout)
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding()
-                        .frame(width: 300)
-                        .presentationCompactAdaptation(.popover)
+                // AX サイズでは説明が縦に長くなり popover では見切れる (popover は
+                // 内容を縮めるだけでスクロール不可) ため、スクロール可能な sheet で表示する。
+                .sheet(isPresented: $showInviteInfo) {
+                    ScrollView {
+                        Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
                 }
             }
         }
