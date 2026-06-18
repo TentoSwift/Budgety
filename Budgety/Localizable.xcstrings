@@ -330,16 +330,16 @@
     },
     "%@さんが「%@」であなたに %@ を割り当てました": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@さんが「%2$@」であなたに %3$@ を割り当てました"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ assigned you %3$@ for “%2$@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@さんが「%2$@」であなたに %3$@ を割り当てました"
           }
         }
       }
@@ -668,16 +668,16 @@
     "Budgety Premium": {},
     "Budgety のシート「%@」に招待します。\n下のリンクをタップして参加してください:\n%@": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "Budgety のシート「%1$@」に招待します。\n下のリンクをタップして参加してください:\n%2$@"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You’re invited to the Budgety sheet “%1$@”.\nTap the link below to join:\n%2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Budgety のシート「%1$@」に招待します。\n下のリンクをタップして参加してください:\n%2$@"
           }
         }
       }
@@ -789,6 +789,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allow opening with Face ID"
+          }
+        }
+      }
+    },
+    "filterDescription.suffix": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%@でフィルタされています。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtered by %@."
+          }
+        }
+      }
+    },
+    "filterList.separator": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "・"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
           }
         }
       }
@@ -1107,6 +1141,23 @@
       }
     },
     "Show sheet": {},
+    "sortField.date.label": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "追加"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
+          }
+        }
+      }
+    },
     "Touch ID で開けるようにする": {
       "localizations": {
         "en": {
@@ -2643,6 +2694,16 @@
         }
       }
     },
+    "なし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
     "ニックネーム": {
       "localizations": {
         "en": {
@@ -3343,6 +3404,16 @@
         }
       }
     },
+    "並び順": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort"
+          }
+        }
+      }
+    },
     "予算 %@": {
       "localizations": {
         "en": {
@@ -3403,6 +3474,26 @@
         }
       }
     },
+    "今年": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Year"
+          }
+        }
+      }
+    },
+    "今年の支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This year's spending"
+          }
+        }
+      }
+    },
     "今日の支出": {
       "localizations": {
         "en": {
@@ -3419,6 +3510,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Month"
+          }
+        }
+      }
+    },
+    "今月の支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month's spending"
           }
         }
       }
@@ -3459,6 +3560,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transfers recorded earlier. They’re reflected in balances."
+          }
+        }
+      }
+    },
+    "低い順": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lowest first"
           }
         }
       }
@@ -3543,12 +3654,32 @@
         }
       }
     },
+    "先月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last Month"
+          }
+        }
+      }
+    },
     "先月: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Last month: %@"
+          }
+        }
+      }
+    },
+    "先月の支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last month's spending"
           }
         }
       }
@@ -3605,16 +3736,16 @@
     },
     "全データ削除のためロックを解除 (%lld/%lld)": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "全データ削除のためロックを解除 (%1$lld/%2$lld)"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Unlock to delete all data (%1$lld/%2$lld)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "全データ削除のためロックを解除 (%1$lld/%2$lld)"
           }
         }
       }
@@ -3685,6 +3816,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "All time"
+          }
+        }
+      }
+    },
+    "全期間の支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All-time spending"
           }
         }
       }
@@ -3959,6 +4100,26 @@
         }
       }
     },
+    "割り勘あり": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split"
+          }
+        }
+      }
+    },
+    "割り勘なし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not split"
+          }
+        }
+      }
+    },
     "加ドル": {
       "localizations": {
         "en": {
@@ -4115,6 +4276,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose beneficiaries"
+          }
+        }
+      }
+    },
+    "古い順": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldest first"
           }
         }
       }
@@ -4979,6 +5150,16 @@
         }
       }
     },
+    "新しい順": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Newest first"
+          }
+        }
+      }
+    },
     "旅行・アウトドア": {
       "localizations": {
         "en": {
@@ -5205,6 +5386,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clothes (shirt)"
+          }
+        }
+      }
+    },
+    "期間「%@」": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Period “%@”"
           }
         }
       }
@@ -6321,6 +6512,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hong Kong Dollar"
+          }
+        }
+      }
+    },
+    "高い順": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Highest first"
           }
         }
       }
