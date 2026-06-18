@@ -59,8 +59,8 @@ struct SheetDetailView: View {
         /// SummaryCard / 検索結果カードの期間ピッカーで共通利用する。
         var headerLabel: String {
             let df = DateFormatter()
-            df.locale = Locale(identifier: "ja_JP")
-            df.dateFormat = "yyyy年M月"
+            df.locale = .autoupdatingCurrent
+            df.setLocalizedDateFormatFromTemplate("yMMMM")
             switch self {
             case .thisMonth:
                 return df.string(from: .now)
@@ -69,8 +69,8 @@ struct SheetDetailView: View {
                 return df.string(from: last)
             case .thisYear:
                 let yf = DateFormatter()
-                yf.locale = Locale(identifier: "ja_JP")
-                yf.dateFormat = "yyyy年"
+                yf.locale = .autoupdatingCurrent
+                yf.setLocalizedDateFormatFromTemplate("y")
                 return yf.string(from: .now)
             case .all:
                 return "全期間"
@@ -1064,11 +1064,11 @@ struct SheetDetailView: View {
         // 今年の日付は「M月d日 (E)」、それ以外は「yyyy年M月d日 (E)」で年を付ける。
         let currentYear = cal.component(.year, from: .now)
         let shortFormatter = DateFormatter()
-        shortFormatter.locale = Locale(identifier: "ja_JP")
-        shortFormatter.dateFormat = "M月d日 (E)"
+        shortFormatter.locale = .autoupdatingCurrent
+        shortFormatter.setLocalizedDateFormatFromTemplate("MMMdEEE")
         let longFormatter = DateFormatter()
-        longFormatter.locale = Locale(identifier: "ja_JP")
-        longFormatter.dateFormat = "yyyy年M月d日 (E)"
+        longFormatter.locale = .autoupdatingCurrent
+        longFormatter.setLocalizedDateFormatFromTemplate("yMMMdEEE")
 
         let target = record.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared

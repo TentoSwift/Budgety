@@ -169,8 +169,8 @@ private struct RecurringRow: View {
 
     private func formatted(_ date: Date) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ja_JP")
-        f.dateFormat = "M月d日"
+        f.locale = .autoupdatingCurrent
+        f.setLocalizedDateFormatFromTemplate("MMMd")
         return f.string(from: date)
     }
 }

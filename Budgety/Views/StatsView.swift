@@ -409,8 +409,8 @@ struct StatsView: View {
 
     private var monthLabel: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ja_JP")
-        f.dateFormat = "yyyy年 M月"
+        f.locale = .autoupdatingCurrent
+        f.setLocalizedDateFormatFromTemplate("yMMMM")
         return f.string(from: selectedMonth)
     }
 }
