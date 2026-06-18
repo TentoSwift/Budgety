@@ -34,7 +34,6 @@ struct BudgetyApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .environment(\.locale, Locale(identifier: "ja_JP"))
                 .appUpdateGate()
                 #if os(iOS)
                 .fullScreenCover(item: $onboardingFlow) { step in
@@ -253,7 +252,6 @@ struct BudgetyApp: App {
             }
         }
         .environment(\.managedObjectContext, persistenceController.container.viewContext)
-        .environment(\.locale, Locale(identifier: "ja_JP"))
     }
 
     /// 全シートの ParticipantProfile.recordName (= 共有相手の URN を含む) を集めて
