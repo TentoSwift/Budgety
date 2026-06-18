@@ -3,6 +3,7 @@
 //  Expenso
 //
 
+import Foundation
 import CoreData
 import CloudKit
 import Combine
@@ -104,7 +105,7 @@ final class PersistenceController: ObservableObject {
                 NotificationCenter.default.post(
                     name: .expensoStoreReset,
                     object: nil,
-                    userInfo: ["message": "前回の保存エラーを検出したためデータベースをリセットしました。"]
+                    userInfo: ["message": String(localized: "前回の保存エラーを検出したためデータベースをリセットしました。")]
                 )
             }
         }
@@ -123,7 +124,7 @@ final class PersistenceController: ObservableObject {
                     NotificationCenter.default.post(
                         name: .expensoStoreReset,
                         object: nil,
-                        userInfo: ["message": "データベースを再構築しました。アプリを再起動してください。"]
+                        userInfo: ["message": String(localized: "データベースを再構築しました。アプリを再起動してください。")]
                     )
                 }
                 return
@@ -560,7 +561,7 @@ final class PersistenceController: ObservableObject {
                 NotificationCenter.default.post(
                     name: .expensoStoreReset,
                     object: nil,
-                    userInfo: ["message": "データベースの構造変更に伴い古いデータをリセットしました。"]
+                    userInfo: ["message": String(localized: "データベースの構造変更に伴い古いデータをリセットしました。")]
                 )
             }
         }
@@ -587,13 +588,13 @@ final class PersistenceController: ObservableObject {
                 NotificationCenter.default.post(
                     name: .expensoSaveFailed,
                     object: nil,
-                    userInfo: ["message": "データベース構造の不整合を検出しました。アプリを再起動するとデータをリセットして復旧します。"]
+                    userInfo: ["message": String(localized: "データベース構造の不整合を検出しました。アプリを再起動するとデータをリセットして復旧します。")]
                 )
             } else {
                 NotificationCenter.default.post(
                     name: .expensoSaveFailed,
                     object: nil,
-                    userInfo: ["message": "保存に失敗しました: \(error.localizedDescription)"]
+                    userInfo: ["message": String(localized: "保存に失敗しました: \(error.localizedDescription)")]
                 )
             }
         }
@@ -655,7 +656,7 @@ final class PersistenceController: ObservableObject {
             NotificationCenter.default.post(
                 name: .expensoSaveFailed,
                 object: nil,
-                userInfo: ["message": "削除に失敗しました: \(error.localizedDescription)"]
+                userInfo: ["message": String(localized: "削除に失敗しました: \(error.localizedDescription)")]
             )
             return
         }
@@ -686,7 +687,7 @@ final class PersistenceController: ObservableObject {
         NotificationCenter.default.post(
             name: .expensoStoreReset,
             object: nil,
-            userInfo: ["message": "すべてのデータを削除しました。アプリを再起動してください。"]
+            userInfo: ["message": String(localized: "すべてのデータを削除しました。アプリを再起動してください。")]
         )
     }
 
@@ -747,7 +748,7 @@ final class PersistenceController: ObservableObject {
                         NotificationCenter.default.post(
                             name: .expensoSaveFailed,
                             object: nil,
-                            userInfo: ["message": "保存に失敗しました: \(error.localizedDescription)"]
+                            userInfo: ["message": String(localized: "保存に失敗しました: \(error.localizedDescription)")]
                         )
                     }
                     continuation.resume(returning: false)

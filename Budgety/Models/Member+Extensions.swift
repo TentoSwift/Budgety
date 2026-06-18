@@ -11,7 +11,7 @@ import CloudKit
 #endif
 
 extension Member {
-    var displayName: String { name?.isEmpty == false ? name! : "メンバー" }
+    var displayName: String { name?.isEmpty == false ? name! : String(localized: "メンバー") }
     var displayColorHex: String { colorHex ?? "#5B8DEF" }
     var tint: Color { Color(hex: displayColorHex) ?? .blue }
 

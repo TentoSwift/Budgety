@@ -408,7 +408,7 @@ struct EditSheetView: View {
     }
 
     private var deleteButtonTitle: String {
-        record.isOwnedByCurrentUser ? "シートを削除" : "シートから退出"
+        record.isOwnedByCurrentUser ? String(localized: "シートを削除") : String(localized: "シートから退出")
     }
 
     private var deleteButtonIcon: String {
@@ -417,8 +417,8 @@ struct EditSheetView: View {
 
     private var deleteFooterMessage: String {
         record.isOwnedByCurrentUser
-            ? "シートを削除するとすべての支出も削除されます。共有中のメンバーからもアクセスできなくなります。"
-            : "退出するとあなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。"
+            ? String(localized: "シートを削除するとすべての支出も削除されます。共有中のメンバーからもアクセスできなくなります。")
+            : String(localized: "退出するとあなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。")
     }
 
     private func loadIfNeeded() {

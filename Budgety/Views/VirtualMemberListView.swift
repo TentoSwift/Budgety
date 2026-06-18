@@ -43,7 +43,7 @@ struct VirtualMemberListView: View {
                             AvatarView(photoData: pp.photoData,
                                        displayName: pp.displayNameOrEmpty,
                                        colorHex: pp.displayColorHex, size: 32)
-                            Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
+                            Text(pp.displayNameOrEmpty.isEmpty ? String(localized: "メンバー") : pp.displayNameOrEmpty)
                                 .foregroundStyle(.primary)
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -56,7 +56,7 @@ struct VirtualMemberListView: View {
                             if let rn = pp.recordName {
                                 pendingDelete = PendingDelete(
                                     id: rn,
-                                    displayName: pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty
+                                    displayName: pp.displayNameOrEmpty.isEmpty ? String(localized: "メンバー") : pp.displayNameOrEmpty
                                 )
                             }
                         } label: { Label("削除", systemImage: "trash") }

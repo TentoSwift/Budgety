@@ -140,11 +140,11 @@ final class SplitNotificationManager {
         let ids = e.resolvedBeneficiaryIDs()
         let share = e.amountDecimal / Decimal(max(ids.count, 1))
         let shareText = CurrencyCatalog.format(share, code: e.resolvedCurrencyCode)
-        let payerName = sheet?.memberDisplayInfo(for: e.payerProfileID ?? "").name ?? "メンバー"
+        let payerName = sheet?.memberDisplayInfo(for: e.payerProfileID ?? "").name ?? String(localized: "メンバー")
         let title = e.displayTitle.isEmpty ? e.categoryDisplayName : e.displayTitle
         return Payload(
             key: e.objectID.uriRepresentation().absoluteString,
-            sheetName: sheet?.displayName ?? "シート",
+            sheetName: sheet?.displayName ?? String(localized: "シート"),
             payerName: payerName,
             title: title,
             shareText: shareText
@@ -164,11 +164,11 @@ final class SplitNotificationManager {
         if payloads.count == 1 {
             let p = payloads[0]
             content.title = p.sheetName
-            content.body = "\(p.payerName)さんが「\(p.title)」であなたに \(p.shareText) を割り当てました"
+            content.body = String(localized: "\(p.payerName)さんが「\(p.title)」であなたに \(p.shareText) を割り当てました")
             identifier = "split-\(p.key)"
         } else {
-            content.title = "新しい割り勘"
-            content.body = "あなたに \(payloads.count) 件の割り勘が割り当てられました"
+            content.title = String(localized: "新しい割り勘")
+            content.body = String(localized: "あなたに \(payloads.count) 件の割り勘が割り当てられました")
             content.badge = NSNumber(value: payloads.count)
             identifier = "split-summary-\(Int(Date().timeIntervalSince1970))"
         }

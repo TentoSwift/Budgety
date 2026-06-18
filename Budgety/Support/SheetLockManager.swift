@@ -113,7 +113,7 @@ final class SheetLockManager: ObservableObject {
     func verifyBiometric(_ sheet: ExpenseSheet) async -> Bool {
         guard isBiometricEnabled(for: sheet) else { return false }
         let ctx = LAContext()
-        ctx.localizedFallbackTitle = "パスワードを入力"
+        ctx.localizedFallbackTitle = String(localized: "パスワードを入力")
         var policyError: NSError?
         // 生体認証が失敗した場合に端末パスコードへフォールバックさせるため
         // `.deviceOwnerAuthentication` を使う (= 純粋な biometrics-only より親切)。
@@ -127,7 +127,7 @@ final class SheetLockManager: ObservableObject {
         do {
             return try await ctx.evaluatePolicy(
                 policy,
-                localizedReason: "「\(sheet.displayName)」を開く"
+                localizedReason: String(localized: "「\(sheet.displayName)」を開く")
             )
         } catch {
             #if DEBUG

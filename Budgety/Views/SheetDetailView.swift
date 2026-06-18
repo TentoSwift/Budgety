@@ -952,7 +952,7 @@ struct SheetDetailView: View {
         let isAllSelected = selectedCategory == nil && !filterUncategorized
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                filterPill(icon: "square.grid.2x2.fill", label: "すべて",
+                filterPill(icon: "square.grid.2x2.fill", label: String(localized: "すべて"),
                            color: record.tint, selected: isAllSelected) {
                     selectedCategory = nil
                     filterUncategorized = false
@@ -973,7 +973,7 @@ struct SheetDetailView: View {
 
                 // カテゴリなしの支出が 1 件でもあれば「カテゴリなし」ピルを出す。
                 if hasUncategorizedExpenses {
-                    filterPill(icon: "tag.slash", label: "カテゴリなし",
+                    filterPill(icon: "tag.slash", label: String(localized: "カテゴリなし"),
                                color: .gray, selected: filterUncategorized) {
                         filterUncategorized.toggle()
                         if filterUncategorized { selectedCategory = nil }
@@ -1576,7 +1576,7 @@ private struct SummaryCard: View {
         if showRemaining {
             let remaining = (budget ?? 0) - expense
             metricColumn(
-                label: "残予算",
+                label: String(localized: "残予算"),
                 value: CurrencyCatalog.format(remaining, code: code),
                 dotStyle: .filled(remaining < 0 ? .red : .primary),
                 valueColor: remaining < 0 ? .red : .primary

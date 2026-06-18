@@ -23,10 +23,10 @@ enum DemoVideoExporter {
 
         var errorDescription: String? {
             switch self {
-            case .writerSetup: "ビデオライターの初期化に失敗しました。"
-            case .frameRender: "フレームの描画に失敗しました。"
-            case .pixelBuffer: "ピクセルバッファの作成に失敗しました。"
-            case .finishFailed(let s): "エンコード完了に失敗しました: \(s)"
+            case .writerSetup: String(localized: "ビデオライターの初期化に失敗しました。")
+            case .frameRender: String(localized: "フレームの描画に失敗しました。")
+            case .pixelBuffer: String(localized: "ピクセルバッファの作成に失敗しました。")
+            case .finishFailed(let s): String(localized: "エンコード完了に失敗しました: \(s)")
             }
         }
     }

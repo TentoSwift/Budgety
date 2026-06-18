@@ -18,7 +18,7 @@ extension DemoVariant {
 
     static let intro = DemoVariant(
         id: "intro",
-        title: "イントロ",
+        title: String(localized: "イントロ"),
         subtitle: "Budgety の紹介 (タイトル + 機能 + クロージング)",
         symbol: "sparkles",
         totalDuration: 12.0,
@@ -30,7 +30,7 @@ extension DemoVariant {
     static let quickInput = DemoVariant(
         id: "quick-input",
         title: "クイック記録",
-        subtitle: "AI が自動でカテゴリも提案",
+        subtitle: String(localized: "AI が自動でカテゴリも提案"),
         symbol: "pencil.tip.crop.circle.badge.plus",
         totalDuration: 12.0,
         exportSize: CGSize(width: 1080, height: 1920),
@@ -41,7 +41,7 @@ extension DemoVariant {
     static let categoryStats = DemoVariant(
         id: "category-stats",
         title: "カテゴリ別集計",
-        subtitle: "支出をカテゴリでまとめて可視化",
+        subtitle: String(localized: "支出をカテゴリでまとめて可視化"),
         symbol: "chart.pie.fill",
         totalDuration: 10.0,
         exportSize: CGSize(width: 1080, height: 1920),
@@ -61,7 +61,7 @@ struct IntroDemoView: View {
         let title: String
     }
     private let features: [Feature] = [
-        .init(symbol: "yensign.circle.fill", title: "家計を 1 タップで記録"),
+        .init(symbol: "yensign.circle.fill", title: String(localized: "家計を 1 タップで記録")),
         .init(symbol: "person.2.fill",       title: "家族とシートを共有"),
         .init(symbol: "chart.pie.fill",      title: "カテゴリ別に自動集計"),
         .init(symbol: "arrow.left.arrow.right.circle", title: "メンバー間の精算プラン")
@@ -596,7 +596,7 @@ struct CategoryStatsDemoView: View {
     }
 
     private let slices: [Slice] = [
-        .init(name: "食費",   color: Color(red: 1.00, green: 0.58, blue: 0.00), value: 32),
+        .init(name: String(localized: "食費"),   color: Color(red: 1.00, green: 0.58, blue: 0.00), value: 32),
         .init(name: "住居",   color: Color(red: 0.36, green: 0.55, blue: 0.94), value: 24),
         .init(name: "交通",   color: Color(red: 0.95, green: 0.30, blue: 0.45), value: 14),
         .init(name: "娯楽",   color: Color(red: 0.69, green: 0.32, blue: 0.87), value: 18),

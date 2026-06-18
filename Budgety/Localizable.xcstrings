@@ -17,16 +17,16 @@
     "·": {},
     "\"%@\" • %lld 件": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "\"%1$@\" • %2$lld 件"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "\"%1$@\" • %2$lld results"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "\"%1$@\" • %2$lld 件"
           }
         }
       }
@@ -47,6 +47,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "You will leave “%@”. The owner's and other participants' data will remain."
+          }
+        }
+      }
+    },
+    "(無題)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(Untitled)"
+          }
+        }
+      }
+    },
+    "(空の応答)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(Empty response)"
           }
         }
       }
@@ -83,16 +103,26 @@
     },
     "「%@」に %@ を追加しました": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added %2$@ to “%1$@”"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "new",
             "value": "「%1$@」に %2$@ を追加しました"
           }
-        },
+        }
+      }
+    },
+    "「%@」に参加しました": {
+      "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Added %2$@ to “%1$@”"
+            "value": "Joined “%@”"
           }
         }
       }
@@ -103,6 +133,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove the password lock for “%@”. Enter the current password before proceeding."
+          }
+        }
+      }
+    },
+    "「%@」の支出について何でも聞いてください。\n例: 「今月の食費は?」「先週いちばん多く使った日は?」": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask anything about spending in “%@”.\nE.g. “How much did I spend on food this month?” “Which day last week did I spend the most?”"
           }
         }
       }
@@ -123,6 +163,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete “%@”?"
+          }
+        }
+      }
+    },
+    "「%@」を開く": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open “%@”"
+          }
+        }
+      }
+    },
+    "「コーヒー 350 円」と話しかけるだけで支出を記録できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just say “Coffee 350 yen” to record an expense."
           }
         }
       }
@@ -268,12 +328,58 @@
         }
       }
     },
+    "%@さんが「%@」であなたに %@ を割り当てました": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@さんが「%2$@」であなたに %3$@ を割り当てました"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ assigned you %3$@ for “%2$@”"
+          }
+        }
+      }
+    },
     "%@として記録できるのはこのシートのオーナー・参加者・バーチャルメンバーです。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Only the owner, participants, and virtual members of this sheet can be recorded as %@."
+          }
+        }
+      }
+    },
+    "%@を編集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit %@"
+          }
+        }
+      }
+    },
+    "%@を追加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add %@"
+          }
+        }
+      }
+    },
+    "%@を選択": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select %@"
           }
         }
       }
@@ -289,6 +395,16 @@
       }
     },
     "%lld %%": {},
+    "%lld ヶ月ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld months"
+          }
+        }
+      }
+    },
     "%lld 件": {
       "localizations": {
         "en": {
@@ -305,6 +421,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Imported %lld items"
+          }
+        }
+      }
+    },
+    "%lld 年ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld years"
+          }
+        }
+      }
+    },
+    "%lld 日ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld days"
+          }
+        }
+      }
+    },
+    "%lld 週ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld weeks"
           }
         }
       }
@@ -357,12 +503,32 @@
         }
       }
     },
+    "1 シートあたり 20 個の上限を解除できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removes the 20-per-sheet limit."
+          }
+        }
+      }
+    },
     "4 桁以上の数字。絶対に忘れないようにしてください。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "At least 4 digits. Be sure not to forget it."
+          }
+        }
+      }
+    },
+    "AI が自動でカテゴリも提案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI suggests categories automatically"
           }
         }
       }
@@ -377,12 +543,42 @@
         }
       }
     },
+    "AI チャットには iOS 26+ と Apple Intelligence 対応端末が必要です。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Chat requires iOS 26+ and an Apple Intelligence–capable device."
+          }
+        }
+      }
+    },
     "AI でカテゴリを推測中…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Guessing category with AI…"
+          }
+        }
+      }
+    },
+    "AI と Siri で簡単入力": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Easy entry with AI and Siri"
+          }
+        }
+      }
+    },
+    "AI 提案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Suggestion"
           }
         }
       }
@@ -457,9 +653,35 @@
         }
       }
     },
+    "Apple Intelligence によるカテゴリ自動推測と、Siri ショートカットで素早く記録できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-guess categories with Apple Intelligence and record quickly with Siri Shortcuts."
+          }
+        }
+      }
+    },
     "Budgety": {},
     "Budgety MCP": {},
     "Budgety Premium": {},
+    "Budgety のシート「%@」に招待します。\n下のリンクをタップして参加してください:\n%@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Budgety のシート「%1$@」に招待します。\n下のリンクをタップして参加してください:\n%2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re invited to the Budgety sheet “%1$@”.\nTap the link below to join:\n%2$@"
+          }
+        }
+      }
+    },
     "Budgety のシートに支出を 1 件記録します。今日の日付・支払者は自分が使われます。": {
       "localizations": {
         "en": {
@@ -496,6 +718,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invitation to Budgety \"%@\""
+          }
+        }
+      }
+    },
+    "Claude / MCP と連携": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect with Claude / MCP"
           }
         }
       }
@@ -551,6 +783,36 @@
         }
       }
     },
+    "Face ID で開けるようにする": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow opening with Face ID"
+          }
+        }
+      }
+    },
+    "iCloud アカウントが制限されています。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your iCloud account is restricted."
+          }
+        }
+      }
+    },
+    "iCloud から取得中...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fetching from iCloud…"
+          }
+        }
+      }
+    },
     "iCloud から既存のシートを取得中です。少し待ってからもう一度お試しください。": {
       "localizations": {
         "en": {
@@ -561,12 +823,102 @@
         }
       }
     },
+    "iCloud が一時的に利用できません。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud is temporarily unavailable."
+          }
+        }
+      }
+    },
+    "iCloud が制限されています": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud is restricted"
+          }
+        }
+      }
+    },
+    "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The iCloud store isn’t ready yet. Please wait a moment and try again."
+          }
+        }
+      }
+    },
+    "iCloud にサインインしていません。設定アプリから iCloud にサインインしてください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re not signed in to iCloud. Sign in to iCloud from the Settings app."
+          }
+        }
+      }
+    },
     "iCloud にサインインしてください": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Please sign in to iCloud"
+          }
+        }
+      }
+    },
+    "iCloud に接続できません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t connect to iCloud"
+          }
+        }
+      }
+    },
+    "iCloud に未サインイン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in to iCloud"
+          }
+        }
+      }
+    },
+    "iCloud の状態を確認できませんでした。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t check iCloud status."
+          }
+        }
+      }
+    },
+    "iCloud を通じてシートを共有。立て替えと精算プランも自動で計算します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share sheets via iCloud. Reimbursements and settlement plans are calculated automatically."
+          }
+        }
+      }
+    },
+    "iCloud 状態を確認中...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking iCloud status…"
           }
         }
       }
@@ -587,6 +939,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "If an ISO 8601 string (e.g. 2026-05-03T19:30:00Z) is provided, it takes precedence over \"Date\"."
+          }
+        }
+      }
+    },
+    "MDM や Screen Time の制限を確認してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check MDM or Screen Time restrictions."
           }
         }
       }
@@ -612,6 +974,16 @@
       }
     },
     "name@icloud.com": {},
+    "NZドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Zealand Dollar"
+          }
+        }
+      }
+    },
     "OK": {},
     "ON で定期項目を保存せず、表示時にルールから算出します (実験的)。既存の生成済みデータはそのまま残ります。": {
       "localizations": {
@@ -629,6 +1001,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "op='add' or 'get'. Example: {\"op\":\"add\",\"amount\":500,\"title\":\"Lunch\"}"
+          }
+        }
+      }
+    },
+    "Optic ID で開けるようにする": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow opening with Optic ID"
+          }
+        }
+      }
+    },
+    "PDF / CSV で書き出し": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export to PDF / CSV"
           }
         }
       }
@@ -715,6 +1107,26 @@
       }
     },
     "Show sheet": {},
+    "Touch ID で開けるようにする": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow opening with Touch ID"
+          }
+        }
+      }
+    },
+    "URL の構築に失敗しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to build the URL"
+          }
+        }
+      }
+    },
     "UTF-8 / Shift_JIS の CSV に対応。ヘッダ行は date, title, amount, kind, currency, category, payer, note を認識します (日本語ヘッダもOK)。amount 列は必須、それ以外は省略可。": {
       "localizations": {
         "en": {
@@ -765,6 +1177,16 @@
         }
       }
     },
+    "アイスランドクローナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icelandic Króna"
+          }
+        }
+      }
+    },
     "アクティブなシートがありません": {
       "localizations": {
         "en": {
@@ -795,12 +1217,32 @@
         }
       }
     },
+    "あなたに %lld 件の割り勘が割り当てられました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’ve been assigned %lld split items"
+          }
+        }
+      }
+    },
     "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This sheet will be removed from your device. The owner's and other participants' data will remain."
+          }
+        }
+      }
+    },
+    "アプリを使っていない人も追加して、旅行や食事会の割り勘対象にできます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add people who don’t use the app to split bills for trips and dinners."
           }
         }
       }
@@ -845,6 +1287,16 @@
         }
       }
     },
+    "イスラエルシェケル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Israeli Shekel"
+          }
+        }
+      }
+    },
     "インターネット接続が必要です": {
       "localizations": {
         "en": {
@@ -855,12 +1307,72 @@
         }
       }
     },
+    "インドネシアルピア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indonesian Rupiah"
+          }
+        }
+      }
+    },
+    "インドルピー": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indian Rupee"
+          }
+        }
+      }
+    },
+    "イントロ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intro"
+          }
+        }
+      }
+    },
+    "エンコード完了に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to finish encoding: %@"
+          }
+        }
+      }
+    },
     "オーナー": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Owner"
+          }
+        }
+      }
+    },
+    "オンにすると、対応端末では Face ID / Touch ID で素早く開けます。失敗した場合はパスワードで開けます。設定は同じ iCloud のすべての端末に同期されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, you can quickly open with Face ID / Touch ID on supported devices. If it fails, you can open with your password. The setting syncs across all devices on the same iCloud account."
+          }
+        }
+      }
+    },
+    "お金・買い物": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Money & Shopping"
           }
         }
       }
@@ -885,6 +1397,26 @@
         }
       }
     },
+    "カテゴリなし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncategorized"
+          }
+        }
+      }
+    },
+    "カテゴリなしで保存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save without a category"
+          }
+        }
+      }
+    },
     "カテゴリなしに分類": {
       "localizations": {
         "en": {
@@ -905,12 +1437,32 @@
         }
       }
     },
+    "カテゴリを無制限に": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlimited categories"
+          }
+        }
+      }
+    },
     "カテゴリを管理": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Manage categories"
+          }
+        }
+      }
+    },
+    "カテゴリを編集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit category"
           }
         }
       }
@@ -1015,6 +1567,16 @@
         }
       }
     },
+    "コーヒー": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coffee"
+          }
+        }
+      }
+    },
     "このカテゴリを使っている支出を「カテゴリなし」に変えてカテゴリのみ削除するか、支出ごとすべて削除するかを選んでください。": {
       "localizations": {
         "en": {
@@ -1081,6 +1643,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only the owner of this sheet can set or change the password."
+          }
+        }
+      }
+    },
+    "このシートのオーナーのみが変更できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the owner of this sheet can change it."
           }
         }
       }
@@ -1215,6 +1787,16 @@
         }
       }
     },
+    "この端末は生体認証に対応していませんが、設定は同期され、Face ID / Touch ID 対応の端末で有効になります。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device doesn’t support biometrics, but the setting syncs and takes effect on Face ID / Touch ID–capable devices."
+          }
+        }
+      }
+    },
     "この記録を取り消すと、精算残高が元に戻ります。": {
       "localizations": {
         "en": {
@@ -1261,6 +1843,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copied"
+          }
+        }
+      }
+    },
+    "コンビニ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convenience store"
           }
         }
       }
@@ -1317,16 +1909,16 @@
     },
     "シート \"%@\" が見つかりません。利用可能: %@": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "シート \"%1$@\" が見つかりません。利用可能: %2$@"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Sheet \"%1$@\" not found. Available: %2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "シート \"%1$@\" が見つかりません。利用可能: %2$@"
           }
         }
       }
@@ -1407,6 +1999,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sheet not found."
+          }
+        }
+      }
+    },
+    "シートで分けて管理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organize with separate sheets"
+          }
+        }
+      }
+    },
+    "シートとカテゴリで使える特別なアイコンを利用できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use special icons for sheets and categories."
           }
         }
       }
@@ -1541,6 +2153,26 @@
         }
       }
     },
+    "シートを削除するとすべての支出も削除されます。共有中のメンバーからもアクセスできなくなります。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting a sheet deletes all its expenses. Shared members will also lose access."
+          }
+        }
+      }
+    },
+    "シートを無制限に": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlimited sheets"
+          }
+        }
+      }
+    },
     "シートを編集": {
       "localizations": {
         "en": {
@@ -1601,6 +2233,46 @@
         }
       }
     },
+    "シンガポールドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Singapore Dollar"
+          }
+        }
+      }
+    },
+    "シンボル・その他": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbols & Other"
+          }
+        }
+      }
+    },
+    "スイスフラン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swiss Franc"
+          }
+        }
+      }
+    },
+    "スウェーデンクローナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swedish Krona"
+          }
+        }
+      }
+    },
     "スキップ": {
       "localizations": {
         "en": {
@@ -1621,12 +2293,42 @@
         }
       }
     },
+    "すべて": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
+    "すべてのデータを削除しました。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All data has been deleted. Please restart the app."
+          }
+        }
+      }
+    },
     "すべてのデータを削除します": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Delete all data"
+          }
+        }
+      }
+    },
+    "スポーツ・運動": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sports & Fitness"
           }
         }
       }
@@ -1651,12 +2353,42 @@
         }
       }
     },
+    "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No iCloud account was found for that email address. Please check the email registered to the Apple Account."
+          }
+        }
+      }
+    },
+    "その他": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        }
+      }
+    },
     "その他のアイコン": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "More icons"
+          }
+        }
+      }
+    },
+    "タイトル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
           }
         }
       }
@@ -1701,12 +2433,32 @@
         }
       }
     },
+    "タイトルから自動推測": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-guess from the title"
+          }
+        }
+      }
+    },
     "タイトルが空です。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The title is empty."
+          }
+        }
+      }
+    },
+    "タイバーツ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thai Baht"
           }
         }
       }
@@ -1731,6 +2483,16 @@
         }
       }
     },
+    "チェココルナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Czech Koruna"
+          }
+        }
+      }
+    },
     "チェックした人で均等割りします。": {
       "localizations": {
         "en": {
@@ -1751,12 +2513,62 @@
         }
       }
     },
+    "データベースの構造変更に伴い古いデータをリセットしました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Old data was reset due to a database structure change."
+          }
+        }
+      }
+    },
+    "データベースをリセットしました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The database has been reset"
+          }
+        }
+      }
+    },
+    "データベースを再構築しました。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The database has been rebuilt. Please restart the app."
+          }
+        }
+      }
+    },
+    "データベース構造の不整合を検出しました。アプリを再起動するとデータをリセットして復旧します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A database structure inconsistency was detected. Restarting the app will reset the data and recover."
+          }
+        }
+      }
+    },
     "テーマ色": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Theme color"
+          }
+        }
+      }
+    },
+    "デバイス・IT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices & IT"
           }
         }
       }
@@ -1791,6 +2603,26 @@
         }
       }
     },
+    "デンマーククローネ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danish Krone"
+          }
+        }
+      }
+    },
+    "ドラッグストア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drugstore"
+          }
+        }
+      }
+    },
     "ドラッグで移動・ピンチで拡大縮小": {
       "localizations": {
         "en": {
@@ -1801,12 +2633,42 @@
         }
       }
     },
+    "トルコリラ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turkish Lira"
+          }
+        }
+      }
+    },
     "ニックネーム": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Nickname"
+          }
+        }
+      }
+    },
+    "ネットワーク状況を確認して、しばらくしてから再度お試しください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your network connection and try again later."
+          }
+        }
+      }
+    },
+    "ノルウェークローネ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norwegian Krone"
           }
         }
       }
@@ -1851,12 +2713,42 @@
         }
       }
     },
+    "パスワードが一致しないか、短すぎます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The passwords don’t match or are too short."
+          }
+        }
+      }
+    },
+    "パスワードが違います": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incorrect password"
+          }
+        }
+      }
+    },
     "パスワードでこのシートを保護します": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Protect this sheet with a password"
+          }
+        }
+      }
+    },
+    "パスワードでロック": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock with a password"
           }
         }
       }
@@ -1891,6 +2783,36 @@
         }
       }
     },
+    "ハンガリーフォリント": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hungarian Forint"
+          }
+        }
+      }
+    },
+    "ピクセルバッファの作成に失敗しました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to create the pixel buffer."
+          }
+        }
+      }
+    },
+    "ビデオライターの初期化に失敗しました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to initialize the video writer."
+          }
+        }
+      }
+    },
     "ビデオを書き出し中...": {
       "localizations": {
         "en": {
@@ -1911,12 +2833,62 @@
         }
       }
     },
+    "ひとつの購入で家族 (最大 6 人) と Premium を共有できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One purchase shares Premium with your family (up to 6 people)."
+          }
+        }
+      }
+    },
     "ファイル": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "File"
+          }
+        }
+      }
+    },
+    "ファイルを解析できませんでした (エンコーディング不明)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t parse the file (unknown encoding)"
+          }
+        }
+      }
+    },
+    "ファッション・美容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fashion & Beauty"
+          }
+        }
+      }
+    },
+    "ファミリー共有対応": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Family Sharing supported"
+          }
+        }
+      }
+    },
+    "フィリピンペソ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Philippine Peso"
           }
         }
       }
@@ -1961,12 +2933,52 @@
         }
       }
     },
+    "ブラジルレアル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brazilian Real"
+          }
+        }
+      }
+    },
+    "ブルガリアレフ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulgarian Lev"
+          }
+        }
+      }
+    },
+    "フレームの描画に失敗しました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to render the frame."
+          }
+        }
+      }
+    },
     "プレビュー (最大 8 件)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Preview (up to 8)"
+          }
+        }
+      }
+    },
+    "プレミアムアイコン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium icons"
           }
         }
       }
@@ -1991,6 +3003,26 @@
         }
       }
     },
+    "ペット・自然": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pets & Nature"
+          }
+        }
+      }
+    },
+    "ポーランドズウォティ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polish Zloty"
+          }
+        }
+      }
+    },
     "ほか %lld 件は省略": {
       "localizations": {
         "en": {
@@ -2011,12 +3043,32 @@
         }
       }
     },
+    "マレーシアリンギット": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Malaysian Ringgit"
+          }
+        }
+      }
+    },
     "メール送信ができません": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Can't send mail"
+          }
+        }
+      }
+    },
+    "メキシコペソ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mexican Peso"
           }
         }
       }
@@ -2071,6 +3123,16 @@
         }
       }
     },
+    "ユーロ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Euro"
+          }
+        }
+      }
+    },
     "ようこそ": {
       "localizations": {
         "en": {
@@ -2087,6 +3149,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Licenses"
+          }
+        }
+      }
+    },
+    "ランチ (定食)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lunch (set meal)"
           }
         }
       }
@@ -2131,6 +3203,16 @@
         }
       }
     },
+    "ルーマニアレウ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Romanian Leu"
+          }
+        }
+      }
+    },
     "レートが見つからず除外された通貨": {
       "localizations": {
         "en": {
@@ -2147,6 +3229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scan from receipt"
+          }
+        }
+      }
+    },
+    "ローカル単独モードで動作します。設定からサインインすると同期されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs in local-only mode. Sign in from Settings to sync."
           }
         }
       }
@@ -2221,12 +3313,32 @@
         }
       }
     },
+    "一度の支払いで永続": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time payment, lasts forever"
+          }
+        }
+      }
+    },
     "下の「アーカイブ済み」セクションから戻すか、新しいシートを作成してください。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Restore one from the \"Archived\" section below, or create a new sheet."
+          }
+        }
+      }
+    },
+    "不明": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown"
           }
         }
       }
@@ -2241,12 +3353,42 @@
         }
       }
     },
+    "交通・移動": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
+          }
+        }
+      }
+    },
     "人": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "People"
+          }
+        }
+      }
+    },
+    "人民元": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chinese Yuan"
+          }
+        }
+      }
+    },
+    "人物・アクション": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People & Actions"
           }
         }
       }
@@ -2291,6 +3433,36 @@
         }
       }
     },
+    "仕事・勉強": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work & Study"
+          }
+        }
+      }
+    },
+    "他の端末で作ったシートが降りてくるまでお待ちください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please wait for sheets created on other devices to sync down."
+          }
+        }
+      }
+    },
+    "以前に記録した送金です。残高に反映されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfers recorded earlier. They’re reflected in balances."
+          }
+        }
+      }
+    },
     "作成": {
       "localizations": {
         "en": {
@@ -2307,6 +3479,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        }
+      }
+    },
+    "保存しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "保存に失敗しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to save"
+          }
+        }
+      }
+    },
+    "保存に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to save: %@"
+          }
+        }
+      }
+    },
+    "健康・スポーツ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health & Sports"
+          }
+        }
+      }
+    },
+    "健康・医療": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health & Medical"
           }
         }
       }
@@ -2377,6 +3599,32 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete all data?"
+          }
+        }
+      }
+    },
+    "全データ削除のためロックを解除 (%lld/%lld)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "全データ削除のためロックを解除 (%1$lld/%2$lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock to delete all data (%1$lld/%2$lld)"
+          }
+        }
+      }
+    },
+    "全データ削除のためロックを解除してください": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock to delete all data"
           }
         }
       }
@@ -2461,6 +3709,36 @@
         }
       }
     },
+    "共有ストアが準備できていません。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared store isn’t ready. Please restart the app."
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share"
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share: %@"
+          }
+        }
+      }
+    },
     "共有メンバー": {
       "localizations": {
         "en": {
@@ -2487,6 +3765,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Details"
+          }
+        }
+      }
+    },
+    "最新バージョンに更新してから続けてください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please update to the latest version to continue."
+          }
+        }
+      }
+    },
+    "最終更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last updated"
           }
         }
       }
@@ -2611,12 +3909,42 @@
         }
       }
     },
+    "削除に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to delete: %@"
+          }
+        }
+      }
+    },
     "削除中…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Deleting…"
+          }
+        }
+      }
+    },
+    "削除済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed"
+          }
+        }
+      }
+    },
+    "前回の保存エラーを検出したためデータベースをリセットしました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The database was reset because a previous save error was detected."
           }
         }
       }
@@ -2631,12 +3959,62 @@
         }
       }
     },
+    "加ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canadian Dollar"
+          }
+        }
+      }
+    },
+    "南アフリカランド": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South African Rand"
+          }
+        }
+      }
+    },
+    "参加済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joined"
+          }
+        }
+      }
+    },
     "参加者": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Participants"
+          }
+        }
+      }
+    },
+    "収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income"
+          }
+        }
+      }
+    },
+    "収入は精算対象外です。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income is not included in settlement."
           }
         }
       }
@@ -2682,6 +4060,16 @@
       }
     },
     "受け取る": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receive"
+          }
+        }
+      }
+    },
+    "受取": {
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2741,6 +4129,16 @@
         }
       }
     },
+    "各メンバーの残高": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each member’s balance"
+          }
+        }
+      }
+    },
     "同期完了を待っています": {
       "localizations": {
         "en": {
@@ -2777,6 +4175,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rename"
+          }
+        }
+      }
+    },
+    "商品の読み込みに失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to load products: %@"
+          }
+        }
+      }
+    },
+    "基本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basics"
+          }
+        }
+      }
+    },
+    "基準通貨": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Base currency"
           }
         }
       }
@@ -2837,6 +4265,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies to expenses added after the change. The currency of existing expenses does not change."
+          }
+        }
+      }
+    },
+    "多通貨対応": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multi-currency support"
+          }
+        }
+      }
+    },
+    "大事なシートをパスワードと Face ID / Touch ID で保護できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protect important sheets with a password and Face ID / Touch ID."
+          }
+        }
+      }
+    },
+    "天気・自然": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weather & Nature"
+          }
+        }
+      }
+    },
+    "娯楽・メディア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entertainment & Media"
+          }
+        }
+      }
+    },
+    "季節・イベント": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seasons & Events"
+          }
+        }
+      }
+    },
+    "季節・行事": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seasons & Events"
           }
         }
       }
@@ -2921,6 +4409,56 @@
         }
       }
     },
+    "定期項目を追加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add recurring item"
+          }
+        }
+      }
+    },
+    "家・家電": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home & Appliances"
+          }
+        }
+      }
+    },
+    "家・暮らし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home & Living"
+          }
+        }
+      }
+    },
+    "家族・人": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Family & People"
+          }
+        }
+      }
+    },
+    "家族・子供": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Family & Kids"
+          }
+        }
+      }
+    },
     "家族で家計を、スマートに": {
       "localizations": {
         "en": {
@@ -2941,12 +4479,72 @@
         }
       }
     },
+    "家族やパートナーを招待して、ひとつの家計簿を一緒に管理できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite family or a partner to manage one budget together."
+          }
+        }
+      }
+    },
+    "家族や友人と共有": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share with family and friends"
+          }
+        }
+      }
+    },
+    "家計・旅行・サークルなど、用途ごとにシートを作って独立した家計簿として使えます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a sheet for each purpose—household, travel, clubs—and use them as independent budgets."
+          }
+        }
+      }
+    },
+    "家計データを書き出してバックアップや共有ができます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export your budget data to back it up or share it."
+          }
+        }
+      }
+    },
+    "家計を 1 タップで記録": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record your budget in one tap"
+          }
+        }
+      }
+    },
     "家賃・サブスク・給料など、毎月や毎週に繰り返される支出/収入を登録すると、自動でシートに追加されます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Register expenses/income that repeat monthly or weekly—like rent, subscriptions, or salary—and they're added to the sheet automatically."
+          }
+        }
+      }
+    },
+    "宿泊 (1 泊)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lodging (1 night)"
           }
         }
       }
@@ -2961,12 +4559,32 @@
         }
       }
     },
+    "工具・DIY": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools & DIY"
+          }
+        }
+      }
+    },
     "差し替え": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Replace"
+          }
+        }
+      }
+    },
+    "年額": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yearly"
           }
         }
       }
@@ -3001,6 +4619,16 @@
         }
       }
     },
+    "応答できませんでした: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t respond: %@"
+          }
+        }
+      }
+    },
     "招待する": {
       "localizations": {
         "en": {
@@ -3031,6 +4659,16 @@
         }
       }
     },
+    "招待リンクを取得できませんでした。iCloud にサインインしているか確認してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t get the invite link. Make sure you’re signed in to iCloud."
+          }
+        }
+      }
+    },
     "招待を準備中...": {
       "localizations": {
         "en": {
@@ -3057,6 +4695,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invited"
+          }
+        }
+      }
+    },
+    "支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expense"
           }
         }
       }
@@ -3131,6 +4779,16 @@
         }
       }
     },
+    "支出をカテゴリでまとめて可視化": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visualize spending grouped by category"
+          }
+        }
+      }
+    },
     "支出を記録するシート": {
       "localizations": {
         "en": {
@@ -3181,6 +4839,16 @@
         }
       }
     },
+    "支払": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pay"
+          }
+        }
+      }
+    },
     "支払う": {
       "localizations": {
         "en": {
@@ -3221,6 +4889,26 @@
         }
       }
     },
+    "教育・仕事": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Education & Work"
+          }
+        }
+      }
+    },
+    "新しいカテゴリ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New category"
+          }
+        }
+      }
+    },
     "新しいカテゴリを追加": {
       "localizations": {
         "en": {
@@ -3247,6 +4935,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Used for the default currency of new sheets and for converting search result totals. \"Automatic\" follows your system region settings (currently: %@)."
+          }
+        }
+      }
+    },
+    "新しいチャットを始めました。何でも聞いてください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Started a new chat. Ask anything."
+          }
+        }
+      }
+    },
+    "新しいバージョン %@ が利用できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %@ is now available."
+          }
+        }
+      }
+    },
+    "新しいパスワード": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New password"
+          }
+        }
+      }
+    },
+    "新しい割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New split"
+          }
+        }
+      }
+    },
+    "旅行・アウトドア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travel & Outdoors"
+          }
+        }
+      }
+    },
+    "旅行・移動": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travel"
           }
         }
       }
@@ -3351,6 +5099,26 @@
         }
       }
     },
+    "日本円": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Japanese Yen"
+          }
+        }
+      }
+    },
+    "映画": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Movie"
+          }
+        }
+      }
+    },
     "更新": {
       "localizations": {
         "en": {
@@ -3367,6 +5135,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Export error"
+          }
+        }
+      }
+    },
+    "書籍 (技術書)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Books (technical)"
           }
         }
       }
@@ -3401,6 +5179,16 @@
         }
       }
     },
+    "月額": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly"
+          }
+        }
+      }
+    },
     "月額・年額プランは自動更新サブスクリプションです。期間終了の24時間以上前に解約しない限り自動更新され、購入確定時に Apple ID へ請求されます。解約・管理は「設定 > Apple ID > サブスクリプション」から行えます。買い切りプランは一度のお支払いで永続します。": {
       "localizations": {
         "en": {
@@ -3411,12 +5199,42 @@
         }
       }
     },
+    "服 (シャツ)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clothes (shirt)"
+          }
+        }
+      }
+    },
     "期間「%@」で絞り込まれています。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Filtered by period \"%@\"."
+          }
+        }
+      }
+    },
+    "未分類": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncategorized"
+          }
+        }
+      }
+    },
+    "未取得": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not fetched"
           }
         }
       }
@@ -3521,6 +5339,106 @@
         }
       }
     },
+    "残予算": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remaining budget"
+          }
+        }
+      }
+    },
+    "毎年": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yearly"
+          }
+        }
+      }
+    },
+    "毎年自動更新 (2ヶ月分お得)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-renews yearly (2 months free)"
+          }
+        }
+      }
+    },
+    "毎日": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily"
+          }
+        }
+      }
+    },
+    "毎月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly"
+          }
+        }
+      }
+    },
+    "毎月自動更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-renews monthly"
+          }
+        }
+      }
+    },
+    "毎週": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weekly"
+          }
+        }
+      }
+    },
+    "海外旅行や外貨支出も同じシートで管理。為替レートで自動換算します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage overseas trips and foreign-currency spending in the same sheet. Amounts are converted automatically using exchange rates."
+          }
+        }
+      }
+    },
+    "為替サーバから応答がありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No response from the exchange rate server"
+          }
+        }
+      }
+    },
+    "為替の取得に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to fetch exchange rates: %@"
+          }
+        }
+      }
+    },
     "為替レート": {
       "localizations": {
         "en": {
@@ -3531,12 +5449,42 @@
         }
       }
     },
+    "無料プランは 3 個までですが、用途ごとにいくつでも作成できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The free plan allows up to 3, but you can create as many as you like."
+          }
+        }
+      }
+    },
     "現在のシート参加者にいない名前で記録された支出があります。タップして選び直すか、行を長押し (右クリック) して「○○に統合する」を選んで一括正規化できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Some expenses were recorded under names that aren't current sheet participants. Tap to reassign, or long-press (right-click) a row and choose \"Merge into …\" to normalize them in bulk."
+          }
+        }
+      }
+    },
+    "現在のパスワード": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current password"
+          }
+        }
+      }
+    },
+    "現在のパスワードが違います。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current password is incorrect."
           }
         }
       }
@@ -3561,12 +5509,42 @@
         }
       }
     },
+    "生体認証で開けるようにする": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow opening with biometrics"
+          }
+        }
+      }
+    },
+    "確認用パスワード (もう一度)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm password (again)"
+          }
+        }
+      }
+    },
     "種別": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Type"
+          }
+        }
+      }
+    },
+    "米ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "US Dollar"
           }
         }
       }
@@ -3741,6 +5719,16 @@
         }
       }
     },
+    "英ポンド": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "British Pound"
+          }
+        }
+      }
+    },
     "行 %lld": {
       "localizations": {
         "en": {
@@ -3831,12 +5819,82 @@
         }
       }
     },
+    "読み込みエラー: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load error: %@"
+          }
+        }
+      }
+    },
+    "豪ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Australian Dollar"
+          }
+        }
+      }
+    },
+    "買い切り": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time"
+          }
+        }
+      }
+    },
+    "買い物・お金": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shopping & Money"
+          }
+        }
+      }
+    },
     "購入する": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Buy"
+          }
+        }
+      }
+    },
+    "購入できませんでした: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t complete the purchase: %@"
+          }
+        }
+      }
+    },
+    "購入の復元に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to restore purchases: %@"
+          }
+        }
+      }
+    },
+    "購入の検証に失敗しました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to verify the purchase."
           }
         }
       }
@@ -3851,6 +5909,16 @@
         }
       }
     },
+    "購入処理が保留中です。承認後に反映されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your purchase is pending. It will be applied after approval."
+          }
+        }
+      }
+    },
     "超過 %@": {
       "localizations": {
         "en": {
@@ -3861,12 +5929,32 @@
         }
       }
     },
+    "趣味・娯楽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hobbies & Fun"
+          }
+        }
+      }
+    },
     "追加": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Add"
+          }
+        }
+      }
+    },
+    "追加日": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date added"
           }
         }
       }
@@ -3891,12 +5979,32 @@
         }
       }
     },
+    "退出に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to leave: %@"
+          }
+        }
+      }
+    },
     "送信済み": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Sent"
+          }
+        }
+      }
+    },
+    "送金プラン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer plan"
           }
         }
       }
@@ -3931,6 +6039,16 @@
         }
       }
     },
+    "送金履歴": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer history"
+          }
+        }
+      }
+    },
     "送金日": {
       "localizations": {
         "en": {
@@ -3947,6 +6065,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sender (From)"
+          }
+        }
+      }
+    },
+    "通信・連絡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Communication"
           }
         }
       }
@@ -4031,6 +6159,26 @@
         }
       }
     },
+    "金額列が空または解析不能": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The amount column is empty or unparseable"
+          }
+        }
+      }
+    },
+    "金額列が見つかりません。ヘッダに「amount / 金額 / 利用金額 / 出金額・入金額」などの列名が必要です": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No amount column found. The header needs a column such as “amount / 金額 / 利用金額 / 出金額・入金額”."
+          }
+        }
+      }
+    },
     "閉じる": {
       "localizations": {
         "en": {
@@ -4053,16 +6201,16 @@
     },
     "開始 %@ · 終了 %@ · 最終生成 %@": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "開始 %1$@ · 終了 %2$@ · 最終生成 %3$@"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Start %1$@ · End %2$@ · Last generated %3$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "開始 %1$@ · 終了 %2$@ · 最終生成 %3$@"
           }
         }
       }
@@ -4097,6 +6245,36 @@
         }
       }
     },
+    "電気代": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Electricity"
+          }
+        }
+      }
+    },
+    "電車 (定期)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Train (pass)"
+          }
+        }
+      }
+    },
+    "韓国ウォン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korean Won"
+          }
+        }
+      }
+    },
     "項目を追加": {
       "localizations": {
         "en": {
@@ -4117,12 +6295,32 @@
         }
       }
     },
+    "食べ物・飲み物": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Food & Drink"
+          }
+        }
+      }
+    },
     "食費": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Food"
+          }
+        }
+      }
+    },
+    "香港ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hong Kong Dollar"
           }
         }
       }

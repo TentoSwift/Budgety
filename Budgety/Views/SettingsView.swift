@@ -121,11 +121,11 @@ struct SettingsView: View {
                 }
 
                 Section("為替レート") {
-                    infoRow("基準通貨", systemImage: "dollarsign.circle") {
+                    infoRow(String(localized: "基準通貨"), systemImage: "dollarsign.circle") {
                         Text(fx.baseCurrency)
                     }
-                    infoRow("最終更新", systemImage: "clock.arrow.circlepath") {
-                        Text(fx.lastRateDate ?? "未取得")
+                    infoRow(String(localized: "最終更新"), systemImage: "clock.arrow.circlepath") {
+                        Text(fx.lastRateDate ?? String(localized: "未取得"))
                     }
                     if let err = fx.lastError {
                         Text(err)

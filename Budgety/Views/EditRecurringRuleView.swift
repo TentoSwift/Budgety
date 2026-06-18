@@ -257,8 +257,8 @@ struct EditRecurringRuleView: View {
 
     private var navTitle: String {
         switch mode {
-        case .create: "定期項目を追加"
-        case .edit:   "定期項目を編集"
+        case .create: String(localized: "定期項目を追加")
+        case .edit:   String(localized: "定期項目を編集")
         }
     }
 

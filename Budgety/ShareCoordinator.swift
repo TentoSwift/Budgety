@@ -15,9 +15,9 @@ enum ShareError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .storeNotReady: "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。"
-        case .urlNotAvailable: "招待リンクを取得できませんでした。iCloud にサインインしているか確認してください。"
-        case .userNotFound: "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。"
+        case .storeNotReady: String(localized: "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。")
+        case .urlNotAvailable: String(localized: "招待リンクを取得できませんでした。iCloud にサインインしているか確認してください。")
+        case .userNotFound: String(localized: "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。")
         }
     }
 }

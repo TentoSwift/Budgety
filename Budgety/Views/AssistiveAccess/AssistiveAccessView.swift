@@ -156,7 +156,7 @@ struct AssistiveAccessView: View {
     }
 
     private func flashSavedToast() {
-        withAnimation { savedToast = "保存しました" }
+        withAnimation { savedToast = String(localized: "保存しました") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             withAnimation { savedToast = nil }
         }

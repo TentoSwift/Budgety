@@ -14,8 +14,8 @@ enum TransactionKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .expense: "支出"
-        case .income: "収入"
+        case .expense: String(localized: "支出")
+        case .income: String(localized: "収入")
         }
     }
 
@@ -44,13 +44,13 @@ enum TransactionKind: String, CaseIterable, Identifiable {
     /// 「支払者」「受取者」相当のラベル (種別に応じて切替)
     var partyLabel: String {
         switch self {
-        case .expense: "支払"
-        case .income:  "受取"
+        case .expense: String(localized: "支払")
+        case .income:  String(localized: "受取")
         }
     }
 
     /// Picker のナビゲーションタイトル等
     var partySelectionTitle: String {
-        "\(partyLabel)を選択"
+        String(localized: "\(partyLabel)を選択")
     }
 }

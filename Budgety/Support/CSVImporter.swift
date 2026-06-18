@@ -56,7 +56,7 @@ enum CSVImporter {
         guard indices.hasAmount else {
             return PreviewResult(
                 rows: [],
-                skipped: [(1, "金額列が見つかりません。ヘッダに「amount / 金額 / 利用金額 / 出金額・入金額」などの列名が必要です")],
+                skipped: [(1, String(localized: "金額列が見つかりません。ヘッダに「amount / 金額 / 利用金額 / 出金額・入金額」などの列名が必要です"))],
                 header: header
             )
         }
@@ -318,9 +318,9 @@ enum CSVImporter {
             splitKind = .income
         }
         guard var amount = parsedAmount else {
-            return .failure("金額列が空または解析不能")
+            return .failure(String(localized: "金額列が空または解析不能"))
         }
-        let title = col(indices.title) ?? "(無題)"
+        let title = col(indices.title) ?? String(localized: "(無題)")
         let date = col(indices.date).flatMap(parseDate(_:)) ?? defaultDate
         // kind: 分離列で確定 > kind 列 > 既定は支出。
         let kind: TransactionKind

@@ -35,8 +35,8 @@ struct EditCategoryView: View {
 
     private var navTitle: String {
         switch mode {
-        case .create: "新しいカテゴリ"
-        case .edit:   "カテゴリを編集"
+        case .create: String(localized: "新しいカテゴリ")
+        case .edit:   String(localized: "カテゴリを編集")
         }
     }
 

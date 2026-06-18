@@ -20,27 +20,27 @@ struct iCloudStatusBanner: View {
             }
             return ("icloud.and.arrow.down",
                     .blue,
-                    "iCloud から取得中...",
-                    "他の端末で作ったシートが降りてくるまでお待ちください。")
+                    String(localized: "iCloud から取得中..."),
+                    String(localized: "他の端末で作ったシートが降りてくるまでお待ちください。"))
         case .noAccount:
             return ("icloud.slash",
                     .orange,
-                    "iCloud に未サインイン",
-                    "ローカル単独モードで動作します。設定からサインインすると同期されます。")
+                    String(localized: "iCloud に未サインイン"),
+                    String(localized: "ローカル単独モードで動作します。設定からサインインすると同期されます。"))
         case .restricted:
             return ("exclamationmark.icloud.fill",
                     .red,
-                    "iCloud が制限されています",
-                    "MDM や Screen Time の制限を確認してください。")
+                    String(localized: "iCloud が制限されています"),
+                    String(localized: "MDM や Screen Time の制限を確認してください。"))
         case .temporarilyUnavailable:
             return ("icloud.slash",
                     .orange,
-                    "iCloud に接続できません",
-                    "ネットワーク状況を確認して、しばらくしてから再度お試しください。")
+                    String(localized: "iCloud に接続できません"),
+                    String(localized: "ネットワーク状況を確認して、しばらくしてから再度お試しください。"))
         case .couldNotDetermine:
             return ("icloud",
                     .secondary,
-                    "iCloud 状態を確認中...",
+                    String(localized: "iCloud 状態を確認中..."),
                     "")
         @unknown default:
             return nil

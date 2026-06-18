@@ -63,12 +63,12 @@ struct BudgetyApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAccepted)) { note in
-                    let title = (note.userInfo?["shareTitle"] as? String) ?? "シート"
-                    showToast("「\(title)」に参加しました")
+                    let title = (note.userInfo?["shareTitle"] as? String) ?? String(localized: "シート")
+                    showToast(String(localized: "「\(title)」に参加しました"))
                     // 共有相手にあなたが誰か分かるよう、プロフィール未設定なら設定 UI を出す
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAcceptanceFailed)) { note in
-                    let message = (note.userInfo?["message"] as? String) ?? "共有の受諾に失敗しました"
+                    let message = (note.userInfo?["message"] as? String) ?? String(localized: "共有の受諾に失敗しました")
                     showToast(message)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoPremiumExpired)) { _ in
@@ -80,11 +80,11 @@ struct BudgetyApp: App {
                     Text("自分が作成した共有を解除しました。設定済みのシートロックはそのまま残ります。")
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoSaveFailed)) { note in
-                    let message = (note.userInfo?["message"] as? String) ?? "保存に失敗しました"
+                    let message = (note.userInfo?["message"] as? String) ?? String(localized: "保存に失敗しました")
                     showToast(message)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoStoreReset)) { note in
-                    let message = (note.userInfo?["message"] as? String) ?? "データベースをリセットしました"
+                    let message = (note.userInfo?["message"] as? String) ?? String(localized: "データベースをリセットしました")
                     showToast(message)
                 }
                 .task {

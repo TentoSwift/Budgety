@@ -46,7 +46,7 @@ struct SheetLockView: View {
                 }
                 Text(record.displayName)
                     .font(.title3.bold())
-                Text(subtitle ?? "このシートはロックされています")
+                Text(subtitle ?? String(localized: "このシートはロックされています"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -177,7 +177,7 @@ struct SheetLockView: View {
             Haptics.success()
             finishUnlock()
         } else {
-            errorMessage = "パスワードが違います"
+            errorMessage = String(localized: "パスワードが違います")
             withAnimation(.spring(response: 0.2, dampingFraction: 0.35)) {
                 shake = true
             }

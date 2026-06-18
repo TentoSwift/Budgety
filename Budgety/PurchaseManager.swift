@@ -22,17 +22,17 @@ final class PurchaseManager: ObservableObject {
 
         var label: String {
             switch self {
-            case .monthly: "月額"
-            case .yearly: "年額"
-            case .lifetime: "買い切り"
+            case .monthly: String(localized: "月額")
+            case .yearly: String(localized: "年額")
+            case .lifetime: String(localized: "買い切り")
             }
         }
 
         var subtitle: String {
             switch self {
-            case .monthly: "毎月自動更新"
-            case .yearly: "毎年自動更新 (2ヶ月分お得)"
-            case .lifetime: "一度の支払いで永続"
+            case .monthly: String(localized: "毎月自動更新")
+            case .yearly: String(localized: "毎年自動更新 (2ヶ月分お得)")
+            case .lifetime: String(localized: "一度の支払いで永続")
             }
         }
     }
@@ -95,7 +95,7 @@ final class PurchaseManager: ObservableObject {
                 return (order[lhs.id] ?? 99) < (order[rhs.id] ?? 99)
             }
         } catch {
-            lastError = "商品の読み込みに失敗しました: \(error.localizedDescription)"
+            lastError = String(localized: "商品の読み込みに失敗しました: \(error.localizedDescription)")
         }
     }
 
@@ -117,19 +117,19 @@ final class PurchaseManager: ObservableObject {
                     await refreshEntitlements()
                     return true
                 case .unverified:
-                    lastError = "購入の検証に失敗しました。"
+                    lastError = String(localized: "購入の検証に失敗しました。")
                     return false
                 }
             case .userCancelled:
                 return false
             case .pending:
-                lastError = "購入処理が保留中です。承認後に反映されます。"
+                lastError = String(localized: "購入処理が保留中です。承認後に反映されます。")
                 return false
             @unknown default:
                 return false
             }
         } catch {
-            lastError = "購入できませんでした: \(error.localizedDescription)"
+            lastError = String(localized: "購入できませんでした: \(error.localizedDescription)")
             return false
         }
     }
@@ -141,7 +141,7 @@ final class PurchaseManager: ObservableObject {
             try await AppStore.sync()
             await refreshEntitlements()
         } catch {
-            lastError = "購入の復元に失敗しました: \(error.localizedDescription)"
+            lastError = String(localized: "購入の復元に失敗しました: \(error.localizedDescription)")
         }
     }
 

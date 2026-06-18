@@ -137,14 +137,14 @@ private struct RecurringRow: View {
     }
 
     private var categoryName: String {
-        resolvedCategory?.displayName ?? (rule.categoryRaw?.isEmpty == false ? rule.categoryRaw! : "未分類")
+        resolvedCategory?.displayName ?? (rule.categoryRaw?.isEmpty == false ? rule.categoryRaw! : String(localized: "未分類"))
     }
 
     var body: some View {
         HStack(spacing: 12) {
             icon
             VStack(alignment: .leading, spacing: 2) {
-                Text(rule.displayTitle.isEmpty ? "(無題)" : rule.displayTitle)
+                Text(rule.displayTitle.isEmpty ? String(localized: "(無題)") : rule.displayTitle)
                     .font(.body)
                 HStack(spacing: 6) {
                     Image(systemName: "repeat")

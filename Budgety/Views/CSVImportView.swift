@@ -208,10 +208,10 @@ struct CSVImportView: View {
                 ) {
                     preview = parsed
                 } else {
-                    errorMessage = "ファイルを解析できませんでした (エンコーディング不明)"
+                    errorMessage = String(localized: "ファイルを解析できませんでした (エンコーディング不明)")
                 }
             } catch {
-                errorMessage = "読み込みエラー: \(error.localizedDescription)"
+                errorMessage = String(localized: "読み込みエラー: \(error.localizedDescription)")
             }
         case .failure(let err):
             errorMessage = err.localizedDescription
