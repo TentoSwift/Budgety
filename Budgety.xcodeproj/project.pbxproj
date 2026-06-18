@@ -13,9 +13,6 @@
 		2D95E7092FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
 		2D95E70A2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
 		2D95E70B2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */; };
-		2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
-		2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
-		2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */; };
 		4D8484612FADB766001AB1B7 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 4D8484602FADB766001AB1B7 /* CustomPicker */; };
 		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 		B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */ = {isa = PBXBuildFile; productRef = B0030000B0030000B0030000 /* CustomNavigationTitle */; };
@@ -48,7 +45,6 @@
 /* Begin PBXFileReference section */
 		2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Budgety For watchOS Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D95E7082FCEF664001F6A43 /* Budgety StoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Budgety StoreKit.storekit"; sourceTree = "<group>"; };
-		2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = BudgetyIcon.icon; sourceTree = "<group>"; };
 		2DDCE11E2FA8974700A42F60 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D18B4C22FB31605006F2C2A /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D18B4C22FB31605006F2C30 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -58,6 +54,8 @@
 		2D18B4D92FB31696006F2C29 /* Exceptions for "Budgety" folder in "Budgety For watchOS Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				BudgetyIcon.icon,
+				"Budgety-Develop.icon",
 				Expenso.xcdatamodeld,
 				FXRatesService.swift,
 				Models/CategorySeeds.swift,
@@ -129,6 +127,8 @@
 		4D18B4D92FB31696006F2C30 /* Exceptions for "Budgety" folder in "Budgety For macOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				BudgetyIcon.icon,
+				"Budgety-Develop.icon",
 				Expenso.xcdatamodeld,
 				FXRatesService.swift,
 				Intents/AddExpenseIntent.swift,
@@ -300,7 +300,6 @@
 				3D18B4C32FB31605006F2C2A /* Budgety For visionOS */,
 				4D18B4C32FB31605006F2C30 /* Budgety For macOS */,
 				2DDCE11F2FA8974700A42F60 /* Products */,
-				2DACB2AA2FB9FEEC000917FB /* BudgetyIcon.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -470,7 +469,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2DACB2AD2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
 				2D95E7092FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -479,7 +477,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2DACB2AC2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
 				2D95E70A2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -496,7 +493,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				2D95E70B2FCEF664001F6A43 /* Budgety StoreKit.storekit in Resources */,
-				2DACB2AB2FB9FEEC000917FB /* BudgetyIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -740,7 +736,7 @@
 		2DDCE12A2FA8974800A42F60 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = BudgetyIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Budgety-Develop;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = Budgety/Expenso.entitlements;
