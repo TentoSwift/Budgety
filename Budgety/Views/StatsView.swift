@@ -126,7 +126,7 @@ struct StatsView: View {
 
     var body: some View {
         statsScroll
-            .navigationTitle("\(record.displayName) の統計")
+            .navigationTitle(String(localized: "\(record.displayName) の統計"))
             .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -289,11 +289,11 @@ struct StatsView: View {
             Text(CurrencyCatalog.format(totalAmount, code: primaryCurrencyCode))
                 .font(.largeTitle.bold().monospacedDigit())
             HStack(spacing: 8) {
-                Text("\(monthlyExpenses.count) 件")
+                Text(String(localized: "\(monthlyExpenses.count) 件"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if previousMonthTotal > 0 {
-                    Text("先月: \(CurrencyCatalog.format(previousMonthTotal, code: primaryCurrencyCode))")
+                    Text(String(localized: "先月: \(CurrencyCatalog.format(previousMonthTotal, code: primaryCurrencyCode))"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -353,7 +353,7 @@ struct StatsView: View {
 
     private var payerBreakdownSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(selectedKind.partyLabel)別")
+            Text(String(localized: "\(selectedKind.partyLabel)別"))
                 .font(.headline)
             ForEach(byPayer) { item in
                 HStack {
@@ -409,8 +409,8 @@ struct StatsView: View {
 
     private var monthLabel: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ja_JP")
-        f.dateFormat = "yyyy年 M月"
+        f.locale = .autoupdatingCurrent
+        f.setLocalizedDateFormatFromTemplate("yMMMM")
         return f.string(from: selectedMonth)
     }
 }

@@ -80,40 +80,40 @@ struct PaywallView: View {
 
             featureRow("person.2.fill",
                        color: Color(red: 0.36, green: 0.55, blue: 0.94),
-                       title: "シートを共有",
-                       detail: "家族やパートナーを招待して、ひとつの家計簿を一緒に管理できます。")
+                       title: String(localized: "シートを共有"),
+                       detail: String(localized: "家族やパートナーを招待して、ひとつの家計簿を一緒に管理できます。"))
             featureRow("person.crop.circle.badge.plus",
                        color: Color(red: 0.00, green: 0.70, blue: 0.69),
-                       title: "バーチャルメンバー",
-                       detail: "アプリを使っていない人も追加して、旅行や食事会の割り勘対象にできます。")
+                       title: String(localized: "バーチャルメンバー"),
+                       detail: String(localized: "アプリを使っていない人も追加して、旅行や食事会の割り勘対象にできます。"))
             featureRow("sparkles",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
-                       title: "Claude / MCP と連携",
-                       detail: "「コーヒー 350 円」と話しかけるだけで支出を記録できます。")
+                       title: String(localized: "Claude / MCP と連携"),
+                       detail: String(localized: "「コーヒー 350 円」と話しかけるだけで支出を記録できます。"))
             featureRow("lock.fill",
                        color: Color(red: 0.96, green: 0.26, blue: 0.33),
-                       title: "パスワードでロック",
-                       detail: "大事なシートをパスワードと Face ID / Touch ID で保護できます。")
+                       title: String(localized: "パスワードでロック"),
+                       detail: String(localized: "大事なシートをパスワードと Face ID / Touch ID で保護できます。"))
             featureRow("rectangle.stack.fill.badge.plus",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
-                       title: "シートを無制限に",
-                       detail: "無料プランは 3 個までですが、用途ごとにいくつでも作成できます。")
+                       title: String(localized: "シートを無制限に"),
+                       detail: String(localized: "無料プランは 3 個までですが、用途ごとにいくつでも作成できます。"))
             featureRow("tag.fill",
                        color: Color(red: 1.00, green: 0.58, blue: 0.00),
-                       title: "カテゴリを無制限に",
-                       detail: "1 シートあたり 20 個の上限を解除できます。")
+                       title: String(localized: "カテゴリを無制限に"),
+                       detail: String(localized: "1 シートあたり 20 個の上限を解除できます。"))
             featureRow("doc.richtext",
                        color: Color(red: 0.20, green: 0.78, blue: 0.35),
-                       title: "PDF / CSV で書き出し",
-                       detail: "家計データを書き出してバックアップや共有ができます。")
+                       title: String(localized: "PDF / CSV で書き出し"),
+                       detail: String(localized: "家計データを書き出してバックアップや共有ができます。"))
             featureRow("paintpalette.fill",
                        color: Color(red: 0.93, green: 0.35, blue: 0.62),
-                       title: "プレミアムアイコン",
-                       detail: "シートとカテゴリで使える特別なアイコンを利用できます。")
+                       title: String(localized: "プレミアムアイコン"),
+                       detail: String(localized: "シートとカテゴリで使える特別なアイコンを利用できます。"))
             featureRow("figure.2.and.child.holdinghands",
                        color: Color(red: 0.30, green: 0.69, blue: 0.31),
-                       title: "ファミリー共有対応",
-                       detail: "ひとつの購入で家族 (最大 6 人) と Premium を共有できます。")
+                       title: String(localized: "ファミリー共有対応"),
+                       detail: String(localized: "ひとつの購入で家族 (最大 6 人) と Premium を共有できます。"))
         }
     }
 

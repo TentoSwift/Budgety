@@ -333,7 +333,7 @@ extension Expense {
     }
 
     var categoryDisplayName: String {
-        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : "カテゴリなし")
+        resolvedCategory?.displayName ?? (categoryRaw?.isEmpty == false ? categoryRaw! : String(localized: "カテゴリなし"))
     }
 
     var categoryTint: Color {

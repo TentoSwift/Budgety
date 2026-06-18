@@ -172,26 +172,26 @@ enum CategoryDefaults {
     /// 各セクションの symbols は OS に存在するものだけにフィルタ済み。
     /// 結果空になったセクションは除外。
     static let symbolSections: [SymbolSection] = [
-        SymbolSection(id: "free",                  title: "基本",             symbols: freeSymbols),
-        SymbolSection(id: "foodAndDrink",          title: "食べ物・飲み物",   symbols: SFCatalog.foodAndDrink.filter(isSymbolAvailable)),
-        SymbolSection(id: "transport",             title: "交通・移動",       symbols: SFCatalog.transport.filter(isSymbolAvailable)),
-        SymbolSection(id: "homeAndAppliance",      title: "家・家電",         symbols: SFCatalog.homeAndAppliance.filter(isSymbolAvailable)),
-        SymbolSection(id: "shoppingAndMoney",      title: "買い物・お金",     symbols: SFCatalog.shoppingAndMoney.filter(isSymbolAvailable)),
-        SymbolSection(id: "entertainmentAndMedia", title: "娯楽・メディア",   symbols: SFCatalog.entertainmentAndMedia.filter(isSymbolAvailable)),
-        SymbolSection(id: "sportsAndFitness",      title: "スポーツ・運動",   symbols: SFCatalog.sportsAndFitness.filter(isSymbolAvailable)),
-        SymbolSection(id: "healthAndMedical",      title: "健康・医療",       symbols: SFCatalog.healthAndMedical.filter(isSymbolAvailable)),
-        SymbolSection(id: "educationAndWork",      title: "教育・仕事",       symbols: SFCatalog.educationAndWork.filter(isSymbolAvailable)),
-        SymbolSection(id: "devicesAndTech",        title: "デバイス・IT",     symbols: SFCatalog.devicesAndTech.filter(isSymbolAvailable)),
-        SymbolSection(id: "communication",         title: "通信・連絡",       symbols: SFCatalog.communication.filter(isSymbolAvailable)),
-        SymbolSection(id: "petsAndNature",         title: "ペット・自然",     symbols: SFCatalog.petsAndNature.filter(isSymbolAvailable)),
-        SymbolSection(id: "fashionAndBeauty",      title: "ファッション・美容", symbols: SFCatalog.fashionAndBeauty.filter(isSymbolAvailable)),
-        SymbolSection(id: "toolsAndDIY",           title: "工具・DIY",        symbols: SFCatalog.toolsAndDIY.filter(isSymbolAvailable)),
-        SymbolSection(id: "travelAndOutdoor",      title: "旅行・アウトドア", symbols: SFCatalog.travelAndOutdoor.filter(isSymbolAvailable)),
-        SymbolSection(id: "familyAndKids",         title: "家族・子供",       symbols: SFCatalog.familyAndKids.filter(isSymbolAvailable)),
-        SymbolSection(id: "seasonsAndHolidays",    title: "季節・行事",       symbols: SFCatalog.seasonsAndHolidays.filter(isSymbolAvailable)),
-        SymbolSection(id: "weatherAndNature",      title: "天気・自然",       symbols: SFCatalog.weatherAndNature.filter(isSymbolAvailable)),
-        SymbolSection(id: "figures",               title: "人物・アクション", symbols: SFCatalog.figures.filter(isSymbolAvailable)),
-        SymbolSection(id: "symbolsAndMisc",        title: "シンボル・その他", symbols: SFCatalog.symbolsAndMisc.filter(isSymbolAvailable))
+        SymbolSection(id: "free",                  title: String(localized: "基本"),             symbols: freeSymbols),
+        SymbolSection(id: "foodAndDrink",          title: String(localized: "食べ物・飲み物"),   symbols: SFCatalog.foodAndDrink.filter(isSymbolAvailable)),
+        SymbolSection(id: "transport",             title: String(localized: "交通・移動"),       symbols: SFCatalog.transport.filter(isSymbolAvailable)),
+        SymbolSection(id: "homeAndAppliance",      title: String(localized: "家・家電"),         symbols: SFCatalog.homeAndAppliance.filter(isSymbolAvailable)),
+        SymbolSection(id: "shoppingAndMoney",      title: String(localized: "買い物・お金"),     symbols: SFCatalog.shoppingAndMoney.filter(isSymbolAvailable)),
+        SymbolSection(id: "entertainmentAndMedia", title: String(localized: "娯楽・メディア"),   symbols: SFCatalog.entertainmentAndMedia.filter(isSymbolAvailable)),
+        SymbolSection(id: "sportsAndFitness",      title: String(localized: "スポーツ・運動"),   symbols: SFCatalog.sportsAndFitness.filter(isSymbolAvailable)),
+        SymbolSection(id: "healthAndMedical",      title: String(localized: "健康・医療"),       symbols: SFCatalog.healthAndMedical.filter(isSymbolAvailable)),
+        SymbolSection(id: "educationAndWork",      title: String(localized: "教育・仕事"),       symbols: SFCatalog.educationAndWork.filter(isSymbolAvailable)),
+        SymbolSection(id: "devicesAndTech",        title: String(localized: "デバイス・IT"),     symbols: SFCatalog.devicesAndTech.filter(isSymbolAvailable)),
+        SymbolSection(id: "communication",         title: String(localized: "通信・連絡"),       symbols: SFCatalog.communication.filter(isSymbolAvailable)),
+        SymbolSection(id: "petsAndNature",         title: String(localized: "ペット・自然"),     symbols: SFCatalog.petsAndNature.filter(isSymbolAvailable)),
+        SymbolSection(id: "fashionAndBeauty",      title: String(localized: "ファッション・美容"), symbols: SFCatalog.fashionAndBeauty.filter(isSymbolAvailable)),
+        SymbolSection(id: "toolsAndDIY",           title: String(localized: "工具・DIY"),        symbols: SFCatalog.toolsAndDIY.filter(isSymbolAvailable)),
+        SymbolSection(id: "travelAndOutdoor",      title: String(localized: "旅行・アウトドア"), symbols: SFCatalog.travelAndOutdoor.filter(isSymbolAvailable)),
+        SymbolSection(id: "familyAndKids",         title: String(localized: "家族・子供"),       symbols: SFCatalog.familyAndKids.filter(isSymbolAvailable)),
+        SymbolSection(id: "seasonsAndHolidays",    title: String(localized: "季節・行事"),       symbols: SFCatalog.seasonsAndHolidays.filter(isSymbolAvailable)),
+        SymbolSection(id: "weatherAndNature",      title: String(localized: "天気・自然"),       symbols: SFCatalog.weatherAndNature.filter(isSymbolAvailable)),
+        SymbolSection(id: "figures",               title: String(localized: "人物・アクション"), symbols: SFCatalog.figures.filter(isSymbolAvailable)),
+        SymbolSection(id: "symbolsAndMisc",        title: String(localized: "シンボル・その他"), symbols: SFCatalog.symbolsAndMisc.filter(isSymbolAvailable))
     ].filter { !$0.symbols.isEmpty }
 }
 

@@ -118,8 +118,8 @@ extension ExpenseCategoryEntity {
         let purple = "#AF52DE"
         return ExpenseCategoryEntity(
             id: aiSuggestionSentinelID,
-            name: "AI 提案",
-            sheetName: "タイトルから自動推測",
+            name: String(localized: "AI 提案"),
+            sheetName: String(localized: "タイトルから自動推測"),
             kindRaw: TransactionKind.expense.rawValue,
             symbol: "apple.intelligence",
             colorHex: purple,
@@ -133,8 +133,8 @@ extension ExpenseCategoryEntity {
         let gray = "#8E8E93"
         return ExpenseCategoryEntity(
             id: AddExpenseIntent.skipCategoryID,
-            name: "カテゴリなし",
-            sheetName: "カテゴリなしで保存",
+            name: String(localized: "カテゴリなし"),
+            sheetName: String(localized: "カテゴリなしで保存"),
             kindRaw: "",
             symbol: "tag.slash",
             colorHex: gray,

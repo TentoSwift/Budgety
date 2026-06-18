@@ -340,7 +340,7 @@ extension ExpenseSheet {
         // バーチャルメンバーは Public DB に居ないので、PP に保存した photoData を優先で使う。
         if let pp = ppMatch {
             return (
-                name: pp.displayName?.isEmpty == false ? pp.displayName! : "メンバー",
+                name: pp.displayName?.isEmpty == false ? pp.displayName! : String(localized: "メンバー"),
                 colorHex: fallbackColor,
                 photoData: pp.photoData ?? photoFromCache
             )
@@ -361,7 +361,7 @@ extension ExpenseSheet {
                 photoData: m.photoData
             )
         }
-        return (name: "メンバー", colorHex: "#8E8E93", photoData: nil)
+        return (name: String(localized: "メンバー"), colorHex: "#8E8E93", photoData: nil)
     }
 
     /// `share` の owner / participants から `profileID` (URN) と一致するエントリを探し、

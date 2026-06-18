@@ -145,7 +145,7 @@ private struct AppUpdateGate: ViewModifier {
                 Button("後で", role: .cancel) { checker.dismissCurrentOptional() }
             } message: {
                 if case let .optional(latest, message, _) = checker.status {
-                    Text(message ?? "新しいバージョン \(latest) が利用できます。")
+                    Text(message ?? String(localized: "新しいバージョン \(latest) が利用できます。"))
                 }
             }
             .task { await checker.check() }
@@ -191,7 +191,7 @@ private struct ForceUpdateView: View {
                 Text("アップデートが必要です")
                     .font(.title2.weight(.bold))
                     .multilineTextAlignment(.center)
-                Text(message ?? "最新バージョンに更新してから続けてください。")
+                Text(message ?? String(localized: "最新バージョンに更新してから続けてください。"))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)

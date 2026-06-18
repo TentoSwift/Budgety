@@ -43,13 +43,13 @@ final class FXRatesService: ObservableObject {
 
         let urlString = "https://api.frankfurter.dev/v1/latest?base=\(baseCurrency)&symbols=\(symbols)"
         guard let url = URL(string: urlString) else {
-            lastError = "URL の構築に失敗しました"
+            lastError = String(localized: "URL の構築に失敗しました")
             return
         }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                lastError = "為替サーバから応答がありません"
+                lastError = String(localized: "為替サーバから応答がありません")
                 return
             }
             let decoded = try JSONDecoder().decode(Frankfurter.self, from: data)
@@ -58,7 +58,7 @@ final class FXRatesService: ObservableObject {
             self.lastUpdated = .now
             saveToDisk()
         } catch {
-            lastError = "為替の取得に失敗しました: \(error.localizedDescription)"
+            lastError = String(localized: "為替の取得に失敗しました: \(error.localizedDescription)")
         }
     }
 

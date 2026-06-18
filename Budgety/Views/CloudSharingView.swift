@@ -213,7 +213,7 @@ struct CloudSharingView: View {
             Haptics.warning()
             dismiss()
         } catch {
-            errorMessage = "退出に失敗しました: \(error.localizedDescription)"
+            errorMessage = String(localized: "退出に失敗しました: \(error.localizedDescription)")
         }
         isProcessing = false
     }
@@ -424,11 +424,11 @@ struct CloudSharingView: View {
     }
 
     private func invitationMessage(url: URL) -> String {
-        """
+        String(localized: """
         Budgety のシート「\(record.displayName)」に招待します。
         下のリンクをタップして参加してください:
         \(url.absoluteString)
-        """
+        """)
     }
 
     @MainActor
@@ -533,10 +533,10 @@ struct CloudSharingView: View {
     private static func hint(for status: CKAccountStatus?) -> String? {
         switch status {
         case .some(.available), .none: return nil
-        case .some(.noAccount): return "iCloud にサインインしていません。設定アプリから iCloud にサインインしてください。"
-        case .some(.restricted): return "iCloud アカウントが制限されています。"
-        case .some(.couldNotDetermine): return "iCloud の状態を確認できませんでした。"
-        case .some(.temporarilyUnavailable): return "iCloud が一時的に利用できません。"
+        case .some(.noAccount): return String(localized: "iCloud にサインインしていません。設定アプリから iCloud にサインインしてください。")
+        case .some(.restricted): return String(localized: "iCloud アカウントが制限されています。")
+        case .some(.couldNotDetermine): return String(localized: "iCloud の状態を確認できませんでした。")
+        case .some(.temporarilyUnavailable): return String(localized: "iCloud が一時的に利用できません。")
         @unknown default: return nil
         }
     }
@@ -668,11 +668,11 @@ private struct ParticipantRow: View {
 
     private var statusText: String {
         switch participant.acceptanceStatus {
-        case .pending: "招待中"
-        case .accepted: "参加済み"
-        case .removed: "削除済み"
-        case .unknown: "不明"
-        @unknown default: "不明"
+        case .pending: String(localized: "招待中")
+        case .accepted: String(localized: "参加済み")
+        case .removed: String(localized: "削除済み")
+        case .unknown: String(localized: "不明")
+        @unknown default: String(localized: "不明")
         }
     }
 

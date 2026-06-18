@@ -7,7 +7,7 @@ import Foundation
 import CoreData
 
 extension ExpenseTemplate {
-    var displayTitle: String { title?.isEmpty == false ? title! : "(無題)" }
+    var displayTitle: String { title?.isEmpty == false ? title! : String(localized: "(無題)") }
 
     var amountDecimal: Decimal {
         get { (amount ?? 0) as Decimal }

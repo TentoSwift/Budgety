@@ -14,10 +14,10 @@ enum RecurrenceFrequency: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .daily:   "毎日"
-        case .weekly:  "毎週"
-        case .monthly: "毎月"
-        case .yearly:  "毎年"
+        case .daily:   String(localized: "毎日")
+        case .weekly:  String(localized: "毎週")
+        case .monthly: String(localized: "毎月")
+        case .yearly:  String(localized: "毎年")
         }
     }
 
@@ -35,10 +35,10 @@ enum RecurrenceFrequency: String, CaseIterable, Identifiable {
         let n = max(1, interval)
         if n == 1 { return label }
         switch self {
-        case .daily:   return "\(n) 日ごと"
-        case .weekly:  return "\(n) 週ごと"
-        case .monthly: return "\(n) ヶ月ごと"
-        case .yearly:  return "\(n) 年ごと"
+        case .daily:   return String(localized: "\(n) 日ごと")
+        case .weekly:  return String(localized: "\(n) 週ごと")
+        case .monthly: return String(localized: "\(n) ヶ月ごと")
+        case .yearly:  return String(localized: "\(n) 年ごと")
         }
     }
 }

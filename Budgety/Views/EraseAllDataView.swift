@@ -124,8 +124,8 @@ struct EraseAllDataView: View {
 
     private var gateSubtitle: String {
         lockedSheets.count > 1
-            ? "全データ削除のためロックを解除 (\(unlockIndex + 1)/\(lockedSheets.count))"
-            : "全データ削除のためロックを解除してください"
+            ? String(localized: "全データ削除のためロックを解除 (\(unlockIndex + 1)/\(lockedSheets.count))")
+            : String(localized: "全データ削除のためロックを解除してください")
     }
 
     // MARK: - Actions

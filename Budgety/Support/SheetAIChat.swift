@@ -51,7 +51,7 @@ final class SheetAIChat: ObservableObject {
                 self.messages = [
                     Message(
                         role: .assistant,
-                        text: "「\(sheet.displayName)」の支出について何でも聞いてください。\n例: 「今月の食費は?」「先週いちばん多く使った日は?」"
+                        text: String(localized: "「\(sheet.displayName)」の支出について何でも聞いてください。\n例: 「今月の食費は?」「先週いちばん多く使った日は?」")
                     )
                 ]
             }
@@ -60,7 +60,7 @@ final class SheetAIChat: ObservableObject {
             self.messages = [
                 Message(
                     role: .error,
-                    text: "AI チャットには iOS 26+ と Apple Intelligence 対応端末が必要です。"
+                    text: String(localized: "AI チャットには iOS 26+ と Apple Intelligence 対応端末が必要です。")
                 )
             ]
         }
@@ -133,7 +133,7 @@ final class SheetAIChat: ObservableObject {
                 if let i = messages.firstIndex(where: { $0.id == placeholderID }) {
                     let trimmedFinal = messages[i].text
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    messages[i].text = trimmedFinal.isEmpty ? "(空の応答)" : trimmedFinal
+                    messages[i].text = trimmedFinal.isEmpty ? String(localized: "(空の応答)") : trimmedFinal
                 }
             } catch {
                 #if DEBUG
@@ -143,7 +143,7 @@ final class SheetAIChat: ObservableObject {
                 if let i = messages.firstIndex(where: { $0.id == placeholderID }) {
                     messages.remove(at: i)
                 }
-                messages.append(Message(role: .error, text: "応答できませんでした: \(error.localizedDescription)"))
+                messages.append(Message(role: .error, text: String(localized: "応答できませんでした: \(error.localizedDescription)")))
             }
         }
     }
@@ -153,7 +153,7 @@ final class SheetAIChat: ObservableObject {
         messages = [
             Message(
                 role: .assistant,
-                text: "新しいチャットを始めました。何でも聞いてください。"
+                text: String(localized: "新しいチャットを始めました。何でも聞いてください。")
             )
         ]
         // session 自体は同じものを引き続き使う (instructions は不変)。

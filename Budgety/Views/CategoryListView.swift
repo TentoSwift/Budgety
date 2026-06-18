@@ -81,7 +81,7 @@ struct CategoryListView: View {
             PaywallView()
         }
         .confirmationDialog(
-            deletingCategory.map { "「\($0.displayName)」を削除しますか?" } ?? "",
+            deletingCategory.map { String(localized: "「\($0.displayName)」を削除しますか?") } ?? "",
             isPresented: Binding(
                 get: { deletingCategory != nil },
                 set: { if !$0 { deletingCategory = nil } }

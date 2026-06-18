@@ -217,8 +217,8 @@ struct SettlementView: View {
     @ViewBuilder
     private func summarySection(result: SettlementResult) -> some View {
         card(
-            title: "サマリ",
-            footer: "収入は精算対象外です。"
+            title: String(localized: "サマリ"),
+            footer: String(localized: "収入は精算対象外です。")
         ) {
             HStack(alignment: .firstTextBaseline) {
                 Text("通貨")
@@ -236,7 +236,7 @@ struct SettlementView: View {
 
     @ViewBuilder
     private func balancesSection(result: SettlementResult) -> some View {
-        card(title: "各メンバーの残高") {
+        card(title: String(localized: "各メンバーの残高")) {
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 130), spacing: 12)],
                 spacing: 12
@@ -340,7 +340,7 @@ struct SettlementView: View {
     @ViewBuilder
     private func transfersSection(result: SettlementResult) -> some View {
         if result.transfers.isEmpty {
-            card(title: "送金プラン") {
+            card(title: String(localized: "送金プラン")) {
                 Label("既に精算済みです", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.secondary)
             }
@@ -426,7 +426,7 @@ struct SettlementView: View {
     @ViewBuilder
     private var settlementHistorySection: some View {
         let records = settlementsInCurrentRange
-        card(title: "送金履歴", footer: records.isEmpty ? "" : "以前に記録した送金です。残高に反映されます。") {
+        card(title: String(localized: "送金履歴"), footer: records.isEmpty ? "" : String(localized: "以前に記録した送金です。残高に反映されます。")) {
             VStack(spacing: 12) {
                 Button {
                     showingNewLog = true

@@ -129,17 +129,17 @@ enum SheetSymbols {
     /// 各 section の symbols は OS に存在するものだけにフィルタ済み。
     /// (フィルタの結果空になったセクションは除外)
     static let sections: [Section] = [
-        Section(id: "free",                  title: "基本",           symbols: freeOptions),
-        Section(id: "lifeAndHome",           title: "家・暮らし",     symbols: lifeAndHome.filter(isSymbolAvailable)),
-        Section(id: "workAndStudy",          title: "仕事・勉強",     symbols: workAndStudy.filter(isSymbolAvailable)),
-        Section(id: "travelAndLeisure",      title: "旅行・移動",     symbols: travelAndLeisure.filter(isSymbolAvailable)),
-        Section(id: "hobbiesAndEntertainment", title: "趣味・娯楽",  symbols: hobbiesAndEntertainment.filter(isSymbolAvailable)),
-        Section(id: "financeAndShopping",    title: "お金・買い物",   symbols: financeAndShopping.filter(isSymbolAvailable)),
-        Section(id: "healthAndSports",       title: "健康・スポーツ", symbols: healthAndSports.filter(isSymbolAvailable)),
-        Section(id: "familyAndPeople",       title: "家族・人",       symbols: familyAndPeople.filter(isSymbolAvailable)),
-        Section(id: "foodAndDrink",          title: "食べ物・飲み物", symbols: foodAndDrink.filter(isSymbolAvailable)),
-        Section(id: "seasonalAndEvents",     title: "季節・イベント", symbols: seasonalAndEvents.filter(isSymbolAvailable)),
-        Section(id: "misc",                  title: "その他",         symbols: misc.filter(isSymbolAvailable))
+        Section(id: "free",                  title: String(localized: "基本"),           symbols: freeOptions),
+        Section(id: "lifeAndHome",           title: String(localized: "家・暮らし"),     symbols: lifeAndHome.filter(isSymbolAvailable)),
+        Section(id: "workAndStudy",          title: String(localized: "仕事・勉強"),     symbols: workAndStudy.filter(isSymbolAvailable)),
+        Section(id: "travelAndLeisure",      title: String(localized: "旅行・移動"),     symbols: travelAndLeisure.filter(isSymbolAvailable)),
+        Section(id: "hobbiesAndEntertainment", title: String(localized: "趣味・娯楽"),  symbols: hobbiesAndEntertainment.filter(isSymbolAvailable)),
+        Section(id: "financeAndShopping",    title: String(localized: "お金・買い物"),   symbols: financeAndShopping.filter(isSymbolAvailable)),
+        Section(id: "healthAndSports",       title: String(localized: "健康・スポーツ"), symbols: healthAndSports.filter(isSymbolAvailable)),
+        Section(id: "familyAndPeople",       title: String(localized: "家族・人"),       symbols: familyAndPeople.filter(isSymbolAvailable)),
+        Section(id: "foodAndDrink",          title: String(localized: "食べ物・飲み物"), symbols: foodAndDrink.filter(isSymbolAvailable)),
+        Section(id: "seasonalAndEvents",     title: String(localized: "季節・イベント"), symbols: seasonalAndEvents.filter(isSymbolAvailable)),
+        Section(id: "misc",                  title: String(localized: "その他"),         symbols: misc.filter(isSymbolAvailable))
     ].filter { !$0.symbols.isEmpty }
 
     // MARK: - Premium catalog (curated for sheets)

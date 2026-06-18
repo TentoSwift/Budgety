@@ -387,10 +387,10 @@ struct AddExpenseView: View {
 
     private var navTitle: String {
         // kind を切り替えたらタイトルも追従する (支出 ↔ 収入)。
-        let noun = kind == .income ? "収入" : "支出"
+        let noun = kind == .income ? String(localized: "収入") : String(localized: "支出")
         switch mode {
-        case .create: return "\(noun)を追加"
-        case .edit:   return "\(noun)を編集"
+        case .create: return String(localized: "\(noun)を追加")
+        case .edit:   return String(localized: "\(noun)を編集")
         }
     }
 
@@ -876,7 +876,7 @@ struct AddExpenseView: View {
             // selectedPayer が解決失敗。編集対象 Expense の payerProfileID を canonical として
             // 動的に名前/写真を引く (= PP / CKShare 参加者 / paidBy fallback)。
             // 「未指定 = 自分」という思い込みで誤って自分を表示しない。
-            let name = expense.displayPaidBy.isEmpty ? "メンバー" : expense.displayPaidBy
+            let name = expense.displayPaidBy.isEmpty ? String(localized: "メンバー") : expense.displayPaidBy
             AvatarView(
                 photoData: expense.payerPhotoData,
                 displayName: name,
@@ -1010,7 +1010,7 @@ struct AddExpenseView: View {
                     DynamicTextField(
                         text: $title,
                         focus: $titleFocused,
-                        placeholder: "タイトル",
+                        placeholder: String(localized: "タイトル"),
                         dismissOnDeleteWhenEmpty: true,
                         onSubmit: { titleFocused = false }
                     )

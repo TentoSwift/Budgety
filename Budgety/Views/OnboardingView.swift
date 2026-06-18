@@ -45,26 +45,26 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 22) {
                         FeatureRow(
                             icon: "rectangle.stack.fill",
-                            title: "シートで分けて管理",
-                            description: "家計・旅行・サークルなど、用途ごとにシートを作って独立した家計簿として使えます。",
+                            title: String(localized: "シートで分けて管理"),
+                            description: String(localized: "家計・旅行・サークルなど、用途ごとにシートを作って独立した家計簿として使えます。"),
                             iconWidth: featureIconWidth
                         )
                         FeatureRow(
                             icon: "person.2.fill",
-                            title: "家族や友人と共有",
-                            description: "iCloud を通じてシートを共有。立て替えと精算プランも自動で計算します。",
+                            title: String(localized: "家族や友人と共有"),
+                            description: String(localized: "iCloud を通じてシートを共有。立て替えと精算プランも自動で計算します。"),
                             iconWidth: featureIconWidth
                         )
                         FeatureRow(
                             icon: "globe",
-                            title: "多通貨対応",
-                            description: "海外旅行や外貨支出も同じシートで管理。為替レートで自動換算します。",
+                            title: String(localized: "多通貨対応"),
+                            description: String(localized: "海外旅行や外貨支出も同じシートで管理。為替レートで自動換算します。"),
                             iconWidth: featureIconWidth
                         )
                         FeatureRow(
                             icon: "sparkles",
-                            title: "AI と Siri で簡単入力",
-                            description: "Apple Intelligence によるカテゴリ自動推測と、Siri ショートカットで素早く記録できます。",
+                            title: String(localized: "AI と Siri で簡単入力"),
+                            description: String(localized: "Apple Intelligence によるカテゴリ自動推測と、Siri ショートカットで素早く記録できます。"),
                             iconWidth: featureIconWidth
                         )
                     }

@@ -106,16 +106,16 @@ struct ExpenseDetailView: View {
     @ViewBuilder
     private var detailsSection: some View {
         Section {
-            detailRow("日付", expense.date.map { $0.formatted(date: .long, time: .omitted) } ?? "—")
-            detailRow("カテゴリ", expense.categoryDisplayName)
+            detailRow(String(localized: "日付"), expense.date.map { $0.formatted(date: .long, time: .omitted) } ?? "—")
+            detailRow(String(localized: "カテゴリ"), expense.categoryDisplayName)
             if !expense.displayTitle.isEmpty {
-                detailRow("タイトル", expense.displayTitle)
+                detailRow(String(localized: "タイトル"), expense.displayTitle)
             }
             if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {
-                detailRow("通貨", expense.resolvedCurrencyCode)
+                detailRow(String(localized: "通貨"), expense.resolvedCurrencyCode)
             }
             if let created = expense.createdAt {
-                detailRow("追加日", created.formatted(date: .long, time: .shortened))
+                detailRow(String(localized: "追加日"), created.formatted(date: .long, time: .shortened))
             }
         }
     }

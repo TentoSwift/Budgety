@@ -37,10 +37,10 @@ struct SetSheetPasswordView: View {
         let ctx = LAContext()
         _ = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
         switch ctx.biometryType {
-        case .faceID: return "Face ID で開けるようにする"
-        case .touchID: return "Touch ID で開けるようにする"
-        case .opticID: return "Optic ID で開けるようにする"
-        default: return "生体認証で開けるようにする"
+        case .faceID: return String(localized: "Face ID で開けるようにする")
+        case .touchID: return String(localized: "Touch ID で開けるようにする")
+        case .opticID: return String(localized: "Optic ID で開けるようにする")
+        default: return String(localized: "生体認証で開けるようにする")
         }
     }
 
@@ -48,9 +48,9 @@ struct SetSheetPasswordView: View {
     /// 端末では「対応端末で有効になる」旨を案内する。
     private var biometricFooterText: String {
         if biometricSupported {
-            return "オンにすると、対応端末では Face ID / Touch ID で素早く開けます。失敗した場合はパスワードで開けます。設定は同じ iCloud のすべての端末に同期されます。"
+            return String(localized: "オンにすると、対応端末では Face ID / Touch ID で素早く開けます。失敗した場合はパスワードで開けます。設定は同じ iCloud のすべての端末に同期されます。")
         } else {
-            return "この端末は生体認証に対応していませんが、設定は同期され、Face ID / Touch ID 対応の端末で有効になります。"
+            return String(localized: "この端末は生体認証に対応していませんが、設定は同期され、Face ID / Touch ID 対応の端末で有効になります。")
         }
     }
 
@@ -113,7 +113,7 @@ struct SetSheetPasswordView: View {
 
             if hasExistingPassword {
                 Section {
-                    numericSecureField("現在のパスワード", text: $currentPassword)
+                    numericSecureField(String(localized: "現在のパスワード"), text: $currentPassword)
                 } header: {
                     Text("本人確認")
                 } footer: {
@@ -122,8 +122,8 @@ struct SetSheetPasswordView: View {
             }
 
             Section {
-                numericSecureField("新しいパスワード", text: $newPassword)
-                numericSecureField("確認用パスワード (もう一度)", text: $confirmPassword)
+                numericSecureField(String(localized: "新しいパスワード"), text: $newPassword)
+                numericSecureField(String(localized: "確認用パスワード (もう一度)"), text: $confirmPassword)
             } header: {
                 Text(hasExistingPassword ? "パスワードを変更" : "パスワードを設定")
             } footer: {
@@ -243,16 +243,16 @@ struct SetSheetPasswordView: View {
 
     private func save() {
         guard record.isOwnedByCurrentUser else {
-            errorMessage = "このシートのオーナーのみが変更できます。"
+            errorMessage = String(localized: "このシートのオーナーのみが変更できます。")
             return
         }
         guard newPassword.count >= 4, newPassword == confirmPassword else {
-            errorMessage = "パスワードが一致しないか、短すぎます。"
+            errorMessage = String(localized: "パスワードが一致しないか、短すぎます。")
             return
         }
         if hasExistingPassword {
             guard lockManager.unlock(record, withPassword: currentPassword) else {
-                errorMessage = "現在のパスワードが違います。"
+                errorMessage = String(localized: "現在のパスワードが違います。")
                 currentPassword = ""
                 Haptics.warning()
                 return
