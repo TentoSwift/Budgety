@@ -30,6 +30,8 @@ struct CloudSharingView: View {
     @State private var pendingURL: URL?
     @State private var showPaywall: Bool = false
     @State private var isLoadingShare: Bool = false
+    /// 招待手順の説明を出す ⓘ ポップオーバーの表示状態。
+    @State private var showInviteInfo: Bool = false
 
     private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isValidEmail: Bool {
@@ -331,9 +333,9 @@ struct CloudSharingView: View {
                     if isProcessing {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(systemName: "paperplane.fill")
+                        Image(systemName: "plus")
                     }
-                    Text(isProcessing ? "招待を準備中..." : "招待を送る")
+                    Text(isProcessing ? "招待を準備中..." : "招待する")
                         .fontWeight(.semibold)
                     Spacer()
                 }
@@ -341,9 +343,41 @@ struct CloudSharingView: View {
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
-            Text("メールで招待")
-        } footer: {
-            Text("招待したい人の Apple Account のメールアドレスを入力して招待を送ります。")
+            HStack {
+                Text("Apple Account のメールアドレスで招待")
+                Spacer()
+                Button {
+                    showInviteInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("招待の手順")
+                .sheet(isPresented: $showInviteInfo) {
+                    NavigationStack {
+                        ScrollView {
+                            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をタップすると「招待中」として登録されます。続いて開くメール作成画面からリンクをメールで送るか、下の「リンクを送る」で別の方法でもリンクを送ることができます。招待した相手はリンクをタップすることで参加できます。")
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                        .scrollBounceBehavior(.basedOnSize)
+                        .navigationTitle("招待の手順")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    showInviteInfo = false
+                                } label: {
+                                    Label("閉じる", systemImage: "xmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -385,7 +419,7 @@ struct CloudSharingView: View {
         } header: {
             Text("リンクを送る")
         } footer: {
-            Text("招待済みの人にリンクを送ってください。受け取った相手はリンクをタップして参加できます。")
+            Text("「招待する」で登録した相手に、AirDrop やメッセージなどでこのリンクを送ることもできます。相手はリンクをタップして参加できます。")
         }
     }
 
@@ -431,9 +465,11 @@ struct CloudSharingView: View {
     private func sendInvitation() async {
         isProcessing = true
         errorMessage = nil
+        // メールクリア前に宛先を退避 (メール作成画面の To に使う)。
+        let recipient = trimmedEmail
         do {
             let result = try await ShareCoordinator.shared.invite(
-                email: trimmedEmail,
+                email: recipient,
                 permission: .readWrite,
                 to: record
             )
@@ -442,6 +478,17 @@ struct CloudSharingView: View {
             email = ""
             participantsRefresh += 1
             Haptics.success()
+            // 参加可能リストへ登録できたので、招待リンク入りのメール作成画面を開く。
+            // メール未設定の端末では代替手段 (リンクをコピー) を案内する。
+            if MFMailComposeViewController.canSendMail() {
+                mailData = MailData(
+                    recipient: recipient,
+                    subject: "Budgety「\(record.displayName)」への招待",
+                    body: invitationMessage(url: result.url)
+                )
+            } else {
+                showMailUnavailable = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -629,16 +676,6 @@ private struct ParticipantRow: View {
         }
     }
 
-    private var roleText: String {
-        switch participant.role {
-        case .owner: "オーナー"
-        case .privateUser: "プライベート"
-        case .publicUser: "公開"
-        case .unknown: ""
-        @unknown default: ""
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
@@ -671,9 +708,12 @@ private struct ParticipantRow: View {
                             .lineLimit(1)
                     }
                     HStack(spacing: 6) {
-                        Text(roleText)
-                        if participant.role != .owner {
-                            Text("·")
+                        if participant.role == .owner {
+                            Text("オーナー")
+                        } else {
+                            // CloudKit のロール (privateUser/publicUser) は内部的な区分で
+                            // ユーザーには無意味かつ「非公開?」と誤解を招くため表示しない。
+                            // 意味のある参加状況 (招待中 / 参加済み) だけを出す。
                             Text(statusText)
                                 .foregroundStyle(participant.acceptanceStatus == .pending ? .orange : .secondary)
                         }
