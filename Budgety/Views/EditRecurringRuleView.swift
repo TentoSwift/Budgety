@@ -547,7 +547,7 @@ struct EditRecurringRuleView: View {
             if selectedCategory == nil {
                 let cats = (record.categories as? Set<ExpenseCategory>) ?? []
                 let sorted = cats.sorted { $0.sortOrder < $1.sortOrder }
-                selectedCategory = sorted.first(where: { $0.name == "食費" }) ?? sorted.first
+                selectedCategory = sorted.first(where: { $0.name == String(localized: "食費") }) ?? sorted.first
             }
             if selectedPayer == nil, let id = profile.selfMemberID {
                 let req = NSFetchRequest<Member>(entityName: "Member")

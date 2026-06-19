@@ -796,16 +796,16 @@
     "filterDescription.suffix": {
       "extractionState": "extracted_with_value",
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%@でフィルタされています。"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Filtered by %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%@でフィルタされています。"
           }
         }
       }
@@ -813,16 +813,16 @@
     "filterList.separator": {
       "extractionState": "extracted_with_value",
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "・"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": ", "
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "・"
           }
         }
       }
@@ -1144,16 +1144,16 @@
     "sortField.date.label": {
       "extractionState": "extracted_with_value",
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "追加"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Date"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "追加"
           }
         }
       }
@@ -2434,6 +2434,16 @@
         }
       }
     },
+    "その他収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Income"
+          }
+        }
+      }
+    },
     "タイトル": {
       "localizations": {
         "en": {
@@ -3074,6 +3084,16 @@
         }
       }
     },
+    "ボーナス": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bonus"
+          }
+        }
+      }
+    },
     "ポーランドズウォティ": {
       "localizations": {
         "en": {
@@ -3424,6 +3444,16 @@
         }
       }
     },
+    "交通": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
+          }
+        }
+      }
+    },
     "交通・移動": {
       "localizations": {
         "en": {
@@ -3574,6 +3604,16 @@
         }
       }
     },
+    "住居": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Housing"
+          }
+        }
+      }
+    },
     "作成": {
       "localizations": {
         "en": {
@@ -3680,6 +3720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last month's spending"
+          }
+        }
+      }
+    },
+    "光熱費": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilities"
           }
         }
       }
@@ -4090,6 +4140,16 @@
         }
       }
     },
+    "副業": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Side Job"
+          }
+        }
+      }
+    },
     "割り勘": {
       "localizations": {
         "en": {
@@ -4126,6 +4186,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Canadian Dollar"
+          }
+        }
+      }
+    },
+    "医療": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medical"
           }
         }
       }
@@ -4470,6 +4540,16 @@
         }
       }
     },
+    "娯楽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entertainment"
+          }
+        }
+      }
+    },
     "娯楽・メディア": {
       "localizations": {
         "en": {
@@ -4800,6 +4880,16 @@
         }
       }
     },
+    "投資": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Investment"
+          }
+        }
+      }
+    },
     "招待する": {
       "localizations": {
         "en": {
@@ -4876,6 +4966,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expense"
+          }
+        }
+      }
+    },
+    "支出・収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expenses & Income"
           }
         }
       }
@@ -5060,6 +5160,16 @@
         }
       }
     },
+    "教育": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Education"
+          }
+        }
+      }
+    },
     "教育・仕事": {
       "localizations": {
         "en": {
@@ -5156,6 +5266,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Newest first"
+          }
+        }
+      }
+    },
+    "旅行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travel"
           }
         }
       }
@@ -5810,6 +5930,16 @@
         }
       }
     },
+    "給料": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salary"
+          }
+        }
+      }
+    },
     "統計": {
       "localizations": {
         "en": {
@@ -6036,6 +6166,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "One-time"
+          }
+        }
+      }
+    },
+    "買い物": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shopping"
           }
         }
       }

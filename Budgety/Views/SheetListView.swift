@@ -14,6 +14,12 @@ private enum SearchScope: String, CaseIterable, Identifiable {
     case sheets = "シート"
     case expenses = "支出・収入"
     var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .sheets:   String(localized: "シート")
+        case .expenses: String(localized: "支出・収入")
+        }
+    }
 }
 
 /// シート行のコンテキストメニューから開くサブ画面（モーダル提示）。
@@ -193,7 +199,7 @@ struct SheetListView: View {
             .searchFocused($searchFocused)
             .searchScopes($searchScope) {
                 ForEach(SearchScope.allCases) { scope in
-                    Text(scope.rawValue).tag(scope)
+                    Text(scope.label).tag(scope)
                 }
             }
             .onChange(of: searchFocused) { _, focused in
@@ -561,15 +567,15 @@ struct SheetListView: View {
     private func makeRowMenu(for sheet: ExpenseSheet) -> UIMenu {
         var top: [UIMenuElement] = []
         if lockManager.isUnlocked(sheet) {
-            top.append(UIAction(title: "精算",
+            top.append(UIAction(title: String(localized: "精算"),
                                 image: UIImage(systemName: "arrow.left.arrow.right.circle")) { _ in
                 subScreen = .settlement(sheet)
             })
-            top.append(UIAction(title: "統計",
+            top.append(UIAction(title: String(localized: "統計"),
                                 image: UIImage(systemName: "chart.pie.fill")) { _ in
                 subScreen = .stats(sheet)
             })
-            top.append(UIAction(title: "カテゴリを管理",
+            top.append(UIAction(title: String(localized: "カテゴリを管理"),
                                 image: UIImage(systemName: "tag.fill")) { _ in
                 subScreen = .categories(sheet)
             })
@@ -578,20 +584,20 @@ struct SheetListView: View {
         var lock: [UIMenuElement] = []
         if lockManager.hasPassword(for: sheet) {
             if lockManager.isUnlocked(sheet) {
-                lock.append(UIAction(title: "今すぐロック",
+                lock.append(UIAction(title: String(localized: "今すぐロック"),
                                      image: UIImage(systemName: "lock.fill")) { _ in
                     lockManager.lock(sheet)
                     Haptics.warning()
                 })
             }
             if sheet.isOwnedByCurrentUser {
-                lock.append(UIAction(title: "ロック設定",
+                lock.append(UIAction(title: String(localized: "ロック設定"),
                                      image: UIImage(systemName: "lock.fill")) { _ in
                     presentLockSetup(sheet)
                 })
             }
         } else if sheet.isOwnedByCurrentUser {
-            lock.append(UIAction(title: "シートをロック",
+            lock.append(UIAction(title: String(localized: "シートをロック"),
                                  image: UIImage(systemName: "lock")) { _ in
                 presentLockSetup(sheet)
             })
@@ -712,7 +718,7 @@ struct SheetListView: View {
                             Image(systemName: searchPeriod.isFiltering ? "line.3.horizontal.decrease.circle" : "magnifyingglass")
                                 .font(.title2)
                                 .foregroundStyle(.secondary)
-                            Text(trimmedQuery.isEmpty ? "検索ワードを入力してください" : "“\(trimmedQuery)” の検索結果なし")
+                            Text(trimmedQuery.isEmpty ? String(localized: "検索ワードを入力してください") : String(localized: "“\(trimmedQuery)” の検索結果なし"))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
