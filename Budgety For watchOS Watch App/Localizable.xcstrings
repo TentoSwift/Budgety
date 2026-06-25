@@ -64,6 +64,16 @@
     "%lld%%": {
       "localizations": {}
     },
+    "%lld人で割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split %lld ways"
+          }
+        }
+      }
+    },
     "+%lld": {
       "localizations": {}
     },
@@ -407,6 +417,26 @@
         }
       }
     },
+    "パスワードが違います": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incorrect password"
+          }
+        }
+      }
+    },
+    "パスワードを入力": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter password"
+          }
+        }
+      }
+    },
     "ハンガリーフォリント": {
       "localizations": {
         "en": {
@@ -547,6 +577,16 @@
         }
       }
     },
+    "ロック中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locked"
+          }
+        }
+      }
+    },
     "交通": {
       "localizations": {
         "en": {
@@ -593,6 +633,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Month"
+          }
+        }
+      }
+    },
+    "今月 ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month "
           }
         }
       }
@@ -653,6 +703,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Utilities"
+          }
+        }
+      }
+    },
+    "全員で割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split with everyone"
+          }
+        }
+      }
+    },
+    "共有ストアが準備できていません。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared store isn’t ready. Please restart the app."
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share: %@"
           }
         }
       }
@@ -727,6 +807,16 @@
         }
       }
     },
+    "割り勘なし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not split"
+          }
+        }
+      }
+    },
     "割る相手": {
       "localizations": {
         "en": {
@@ -787,6 +877,16 @@
         }
       }
     },
+    "受取者": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipient"
+          }
+        }
+      }
+    },
     "基本": {
       "localizations": {
         "en": {
@@ -843,6 +943,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Done"
+          }
+        }
+      }
+    },
+    "定期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring"
           }
         }
       }
@@ -923,6 +1033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pay"
+          }
+        }
+      }
+    },
+    "支払い者": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payer"
           }
         }
       }

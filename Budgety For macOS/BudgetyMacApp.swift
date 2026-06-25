@@ -80,11 +80,11 @@ struct BudgetyMacApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAccepted)) { note in
-                    let title = (note.userInfo?["shareTitle"] as? String) ?? "共有"
-                    showToast("「\(title)」に参加しました")
+                    let title = (note.userInfo?["shareTitle"] as? String) ?? String(localized: "共有")
+                    showToast(String(localized: "「\(title)」に参加しました"))
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .expensoShareAcceptanceFailed)) { note in
-                    let msg = (note.userInfo?["message"] as? String) ?? "共有の受諾に失敗しました"
+                    let msg = (note.userInfo?["message"] as? String) ?? String(localized: "共有の受諾に失敗しました")
                     showToast(msg)
                 }
         }

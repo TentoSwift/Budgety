@@ -46,7 +46,7 @@ struct WatchSheetLockView: View {
         ["1", "2", "3"],
         ["4", "5", "6"],
         ["7", "8", "9"],
-        ["⌫", "0", "→"],
+        ["⌫", "0", "→∫"],
     ]
 
     var body: some View {
@@ -90,7 +90,7 @@ struct WatchSheetLockView: View {
     /// 入力状況の 1 行表示 (案内 / ● / エラー)。
     private var statusText: String {
         if let errorMessage { return errorMessage }
-        return password.isEmpty ? "パスワードを入力" : String(repeating: "●", count: password.count)
+        return password.isEmpty ? String(localized: "パスワードを入力") : String(repeating: "●", count: password.count)
     }
     private var statusColor: Color {
         if errorMessage != nil { return .red }
@@ -144,7 +144,7 @@ struct WatchSheetLockView: View {
             errorMessage = nil
         } else {
             WKInterfaceDevice.current().play(.failure)
-            errorMessage = "パスワードが違います"
+            errorMessage = String(localized: "パスワードが違います")
             password = ""
         }
     }

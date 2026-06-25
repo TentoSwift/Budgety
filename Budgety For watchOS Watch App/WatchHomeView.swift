@@ -130,7 +130,7 @@ struct WatchHomeView: View {
                     .font(.body)
                     .lineLimit(1)
                 // ロック中 (パスワードあり & 未解錠) のシートは合計を出さない。
-                Text(lockManager.isUnlocked(sheet) ? monthlyLabel(for: sheet) : "ロック中")
+                Text(lockManager.isUnlocked(sheet) ? monthlyLabel(for: sheet) : String(localized: "ロック中"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -164,7 +164,7 @@ struct WatchHomeView: View {
                 return c.year == comps.year && c.month == comps.month
             }
             .reduce(Decimal(0)) { $0 + $1.amount }
-        return "今月 " + CurrencyCatalog.format(total + virtualTotal, code: sheet.resolvedDefaultCurrencyCode)
+        return String(localized: "今月 ") + CurrencyCatalog.format(total + virtualTotal, code: sheet.resolvedDefaultCurrencyCode)
     }
 
 }
@@ -461,7 +461,7 @@ private struct WatchSheetPage: View {
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(Color.gray.gradient))
             VStack(alignment: .leading, spacing: 2) {
-                Text(occ.title.isEmpty ? "定期" : occ.title)
+                Text(occ.title.isEmpty ? String(localized: "定期") : occ.title)
                     .font(.caption2)
                     .foregroundStyle(.white)
                     .lineLimit(1)

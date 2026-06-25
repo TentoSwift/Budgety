@@ -38,16 +38,16 @@
     },
     "「%@」 · %lld件": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "「%1$@」 · %2$lld件"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "“%1$@” · %2$lld items"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "「%1$@」 · %2$lld件"
           }
         }
       }
@@ -74,16 +74,16 @@
     },
     "「%@」に %@ を追加しました": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "「%1$@」に %2$@ を追加しました"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Added %2$@ to “%1$@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "「%1$@」に %2$@ を追加しました"
           }
         }
       }
@@ -94,6 +94,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No items match “%@”"
+          }
+        }
+      }
+    },
+    "「%@」に参加しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joined “%@”"
           }
         }
       }
@@ -201,6 +211,16 @@
         }
       }
     },
+    "%@ (自分)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (You)"
+          }
+        }
+      }
+    },
     "%@ (自分) に統合": {
       "localizations": {
         "en": {
@@ -267,6 +287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ Statistics"
+          }
+        }
+      }
+    },
+    "%@ を招待しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invited %@"
           }
         }
       }
@@ -970,6 +1000,16 @@
         }
       }
     },
+    "アーカイブ:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived:"
+          }
+        }
+      }
+    },
     "アーカイブしたシートはシート一覧の下部の「アーカイブ済み」セクションにまとまります。データは削除されず、トグルでいつでも戻せます。変更は「保存」で反映されます。": {
       "localizations": {
         "en": {
@@ -1652,16 +1692,16 @@
     },
     "シート \"%@\" が見つかりません。利用可能: %@": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "new",
-            "value": "シート \"%1$@\" が見つかりません。利用可能: %2$@"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Sheet \"%1$@\" not found. Available: %2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "シート \"%1$@\" が見つかりません。利用可能: %2$@"
           }
         }
       }
@@ -2596,6 +2636,16 @@
         }
       }
     },
+    "メンバー:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Members:"
+          }
+        }
+      }
+    },
     "メンバーの名前": {
       "localizations": {
         "en": {
@@ -2636,12 +2686,32 @@
         }
       }
     },
+    "リンクの取得に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to get the link: %@"
+          }
+        }
+      }
+    },
     "リンクを取得": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Get link"
+          }
+        }
+      }
+    },
+    "リンク参加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Via link"
           }
         }
       }
@@ -2702,6 +2772,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Set lock"
+          }
+        }
+      }
+    },
+    "ロック中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locked"
           }
         }
       }
@@ -2802,6 +2882,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lock now"
+          }
+        }
+      }
+    },
+    "今月 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month %@"
           }
         }
       }
@@ -3006,6 +3096,46 @@
         }
       }
     },
+    "共有": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared"
+          }
+        }
+      }
+    },
+    "共有ストアが準備できていません。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared store isn’t ready. Please restart the app."
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share"
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share: %@"
+          }
+        }
+      }
+    },
     "共有メンバー": {
       "localizations": {
         "en": {
@@ -3032,6 +3162,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop sharing"
+          }
+        }
+      }
+    },
+    "共有解除に失敗した share がありました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some shares could not be stopped."
           }
         }
       }
@@ -3136,6 +3276,16 @@
         }
       }
     },
+    "削除済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed"
+          }
+        }
+      }
+    },
     "前回の保存エラーを検出したためデータベースをリセットしました。": {
       "localizations": {
         "en": {
@@ -3192,6 +3342,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "South African Rand"
+          }
+        }
+      }
+    },
+    "参加済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joined"
           }
         }
       }
@@ -3382,6 +3542,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit name and photo"
+          }
+        }
+      }
+    },
+    "名前:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name:"
           }
         }
       }
@@ -3756,6 +3926,16 @@
         }
       }
     },
+    "招待に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to invite: %@"
+          }
+        }
+      }
+    },
     "招待は Premium 限定": {
       "localizations": {
         "en": {
@@ -4036,6 +4216,16 @@
         }
       }
     },
+    "新規シート": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Sheet"
+          }
+        }
+      }
+    },
     "旅行": {
       "localizations": {
         "en": {
@@ -4082,6 +4272,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Default currency"
+          }
+        }
+      }
+    },
+    "既定通貨:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default currency:"
           }
         }
       }
@@ -4202,6 +4402,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monthly budget (optional)"
+          }
+        }
+      }
+    },
+    "月予算:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly budget:"
           }
         }
       }
@@ -4502,6 +4712,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Type"
+          }
+        }
+      }
+    },
+    "種別:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type:"
           }
         }
       }

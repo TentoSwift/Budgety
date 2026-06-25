@@ -108,7 +108,7 @@ struct BudgetyVisionContentView: View {
                 return c.year == comps.year && c.month == comps.month
             }
             .reduce(Decimal(0)) { $0 + $1.amountDecimal }
-        return "今月 \(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))"
+        return String(localized: "今月 \(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))")
     }
 }
 

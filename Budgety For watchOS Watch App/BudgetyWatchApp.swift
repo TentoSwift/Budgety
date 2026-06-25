@@ -44,7 +44,7 @@ final class BudgetyWatchAppDelegate: NSObject, WKApplicationDelegate {
             NotificationCenter.default.post(
                 name: .expensoShareAcceptanceFailed,
                 object: nil,
-                userInfo: ["message": "共有ストアが準備できていません。アプリを再起動してください。"]
+                userInfo: ["message": String(localized: "共有ストアが準備できていません。アプリを再起動してください。")]
             )
             return
         }
@@ -54,7 +54,7 @@ final class BudgetyWatchAppDelegate: NSObject, WKApplicationDelegate {
                     NotificationCenter.default.post(
                         name: .expensoShareAcceptanceFailed,
                         object: nil,
-                        userInfo: ["message": "共有の受諾に失敗しました: \(error.localizedDescription)"]
+                        userInfo: ["message": String(localized: "共有の受諾に失敗しました: \(error.localizedDescription)")]
                     )
                 } else {
                     // 受諾直後に自分の ParticipantProfile を ensure。これがないと

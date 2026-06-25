@@ -239,8 +239,8 @@ struct BudgetyVisionSheetView: View {
 
     private func dayHeader(_ d: Date) -> String {
         let df = DateFormatter()
-        df.locale = Locale(identifier: "ja_JP")
-        df.dateFormat = "yyyy年M月d日 (E)"
+        df.locale = .autoupdatingCurrent
+        df.setLocalizedDateFormatFromTemplate("yMMMdEEE")
         return df.string(from: d)
     }
 
@@ -262,9 +262,9 @@ struct BudgetyVisionSheetView: View {
                 Image(systemName: "repeat").foregroundStyle(.gray).font(.callout)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(occ.title.isEmpty ? (category?.displayName ?? "定期項目") : occ.title)
+                Text(occ.title.isEmpty ? (category?.displayName ?? String(localized: "定期項目")) : occ.title)
                     .font(.body).foregroundStyle(.primary)
-                Text(category?.displayName ?? (occ.categoryRaw.isEmpty ? "定期" : occ.categoryRaw))
+                Text(category?.displayName ?? (occ.categoryRaw.isEmpty ? String(localized: "定期") : occ.categoryRaw))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

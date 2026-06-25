@@ -155,22 +155,22 @@ struct MacShareSheetView: View {
                 return cached.displayName
             }
             if let email = identity.lookupInfo?.emailAddress { return email }
-            return "メンバー"
+            return String(localized: "メンバー")
         }()
         let isMe = isSelfPlaceholder
         let role: String = {
             switch p.role {
-            case .owner: return "オーナー"
-            case .privateUser: return "参加者"
-            case .publicUser: return "リンク参加"
+            case .owner: return String(localized: "オーナー")
+            case .privateUser: return String(localized: "参加者")
+            case .publicUser: return String(localized: "リンク参加")
             default: return ""
             }
         }()
         let acceptance: String = {
             switch p.acceptanceStatus {
-            case .pending: return "招待中"
-            case .accepted: return "参加済み"
-            case .removed: return "削除済み"
+            case .pending: return String(localized: "招待中")
+            case .accepted: return String(localized: "参加済み")
+            case .removed: return String(localized: "削除済み")
             default: return ""
             }
         }()
@@ -185,7 +185,7 @@ struct MacShareSheetView: View {
                 size: 36
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(isMe ? "\(displayName) (自分)" : displayName)
+                Text(isMe ? String(localized: "\(displayName) (自分)") : displayName)
                     .font(.body)
                 HStack(spacing: 8) {
                     Text(role).font(.caption2).foregroundStyle(.secondary)
@@ -357,11 +357,11 @@ struct MacShareSheetView: View {
                 to: sheet
             )
             inviteEmail = ""
-            inviteSucceedMessage = "\(email) を招待しました"
+            inviteSucceedMessage = String(localized: "\(email) を招待しました")
             shareURL = result.url
             await reload()
         } catch {
-            self.error = "招待に失敗しました: \(error.localizedDescription)"
+            self.error = String(localized: "招待に失敗しました: \(error.localizedDescription)")
         }
     }
 
@@ -373,7 +373,7 @@ struct MacShareSheetView: View {
             try await ShareCoordinator.shared.remove(participant: p, from: share)
             await reload()
         } catch {
-            self.error = "削除に失敗しました: \(error.localizedDescription)"
+            self.error = String(localized: "削除に失敗しました: \(error.localizedDescription)")
         }
     }
 
@@ -388,7 +388,7 @@ struct MacShareSheetView: View {
             shareURL = url
             await reload()
         } catch {
-            self.error = "リンクの取得に失敗しました: \(error.localizedDescription)"
+            self.error = String(localized: "リンクの取得に失敗しました: \(error.localizedDescription)")
         }
     }
 
@@ -397,7 +397,7 @@ struct MacShareSheetView: View {
         error = nil
         let ok = await ShareCoordinator.shared.revokeAllOwnedShares()
         if !ok {
-            self.error = "共有解除に失敗した share がありました。"
+            self.error = String(localized: "共有解除に失敗した share がありました。")
         }
         await reload()
     }

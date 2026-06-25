@@ -637,6 +637,16 @@
         }
       }
     },
+    "今月 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month %@"
+          }
+        }
+      }
+    },
     "住居": {
       "localizations": {
         "en": {
@@ -873,6 +883,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seasons & Events"
+          }
+        }
+      }
+    },
+    "定期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring"
+          }
+        }
+      }
+    },
+    "定期項目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring items"
           }
         }
       }

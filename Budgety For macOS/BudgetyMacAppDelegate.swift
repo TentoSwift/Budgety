@@ -46,7 +46,7 @@ final class BudgetyMacAppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.post(
                 name: .expensoShareAcceptanceFailed,
                 object: nil,
-                userInfo: ["message": "共有ストアが準備できていません。アプリを再起動してください。"]
+                userInfo: ["message": String(localized: "共有ストアが準備できていません。アプリを再起動してください。")]
             )
             return
         }
@@ -58,7 +58,7 @@ final class BudgetyMacAppDelegate: NSObject, NSApplicationDelegate {
                     NotificationCenter.default.post(
                         name: .expensoShareAcceptanceFailed,
                         object: nil,
-                        userInfo: ["message": "共有の受諾に失敗しました: \(error.localizedDescription)"]
+                        userInfo: ["message": String(localized: "共有の受諾に失敗しました: \(error.localizedDescription)")]
                     )
                 } else {
                     // 受諾後は新シートに自分の ParticipantProfile を作って共有相手に名前を見せる
