@@ -184,7 +184,7 @@ struct SheetAIChatView: View {
         //   `HStack(alignment: .bottom)` で素直に下揃えする。
         HStack(alignment: .bottom, spacing: 6) {
             TextField(
-                SheetAIChat.isAvailable ? "" : "利用できません",
+                SheetAIChat.isAvailable ? "" : String(localized: "利用できません"),
                 text: $chat.inputText,
                 axis: .vertical
             )

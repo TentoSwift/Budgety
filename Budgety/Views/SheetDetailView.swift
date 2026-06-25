@@ -46,10 +46,10 @@ struct SheetDetailView: View {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .thisMonth: "今月"
-            case .lastMonth: "先月"
-            case .thisYear:  "今年"
-            case .all:       "全期間"
+            case .thisMonth: String(localized: "今月")
+            case .lastMonth: String(localized: "先月")
+            case .thisYear:  String(localized: "今年")
+            case .all:       String(localized: "全期間")
             }
         }
         /// 期間フィルタが有効か (全期間以外なら絞り込み中)。
@@ -73,7 +73,7 @@ struct SheetDetailView: View {
                 yf.setLocalizedDateFormatFromTemplate("y")
                 return yf.string(from: .now)
             case .all:
-                return "全期間"
+                return String(localized: "全期間")
             }
         }
 
@@ -105,20 +105,20 @@ struct SheetDetailView: View {
 
         var label: String {
             switch self {
-            case .date:   "追加"
-            case .amount: "金額"
+            case .date:   String(localized: "sortField.date.label", defaultValue: "追加")
+            case .amount: String(localized: "金額")
             }
         }
         var firstLabel: String {  // 昇順時
             switch self {
-            case .date:   "古い順"
-            case .amount: "低い順"
+            case .date:   String(localized: "古い順")
+            case .amount: String(localized: "低い順")
             }
         }
         var secondLabel: String { // 降順時
             switch self {
-            case .date:   "新しい順"
-            case .amount: "高い順"
+            case .date:   String(localized: "新しい順")
+            case .amount: String(localized: "高い順")
             }
         }
     }
@@ -479,7 +479,7 @@ struct SheetDetailView: View {
                           ? "person.crop.circle.badge.checkmark"
                           : "person.crop.circle.badge.plus")
                 }
-                .accessibilityLabel(hasAcceptedOtherMembers ? "共有メンバー" : "シートを共有")
+                .accessibilityLabel(hasAcceptedOtherMembers ? String(localized: "共有メンバー") : String(localized: "シートを共有"))
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -509,7 +509,7 @@ struct SheetDetailView: View {
                     CustomPickerView(
                         selection: sortFieldBinding,
                         isSortAscending: $sortAscending,
-                        title: "並び順"
+                        title: String(localized: "並び順")
                     )
                     Divider()
                     Button {
@@ -776,14 +776,15 @@ struct SheetDetailView: View {
 
     private var filterDescription: String {
         var parts: [String] = []
-        if isSearchActive && searchPeriod.isFiltering { parts.append("期間「\(searchPeriod.label)」") }
-        if selectedCategory != nil || filterUncategorized { parts.append("カテゴリ") }
+        if isSearchActive && searchPeriod.isFiltering { parts.append(String(localized: "期間「\(searchPeriod.label)」")) }
+        if selectedCategory != nil || filterUncategorized { parts.append(String(localized: "カテゴリ")) }
         // メンバー選択は支出の支払い者と収入の受け取り者の両方を絞り込むので
         // 「支払い者」ではなく「メンバー」と表示する。
-        if selectedPayerID != nil { parts.append("メンバー") }
-        if selectedBeneficiaryID != nil { parts.append("受益者") }
-        if splitFilter != .all { parts.append("割り勘") }
-        return parts.joined(separator: "・") + "でフィルタされています。"
+        if selectedPayerID != nil { parts.append(String(localized: "メンバー")) }
+        if selectedBeneficiaryID != nil { parts.append(String(localized: "受益者")) }
+        if splitFilter != .all { parts.append(String(localized: "割り勘")) }
+        let sep = String(localized: "filterList.separator", defaultValue: "・")
+        return String(localized: "filterDescription.suffix", defaultValue: "\(parts.joined(separator: sep))でフィルタされています。")
     }
 
     @ViewBuilder
@@ -793,7 +794,7 @@ struct SheetDetailView: View {
         if isFilterActive {
             let q = searchText.trimmingCharacters(in: .whitespaces)
             ContentUnavailableView {
-                Label(q.isEmpty ? "該当する項目なし" : "“\(q)” の検索結果なし",
+                Label(q.isEmpty ? String(localized: "該当する項目なし") : String(localized: "“\(q)” の検索結果なし"),
                       systemImage: "line.3.horizontal.decrease")
             } description: {
                 Text(filterDescription)
@@ -1546,10 +1547,10 @@ private struct SummaryCard: View {
     /// 期間に応じた支出キャプション
     private var expenseCaption: String {
         switch period {
-        case .thisMonth: "今月の支出"
-        case .lastMonth: "先月の支出"
-        case .thisYear:  "今年の支出"
-        case .all:       "全期間の支出"
+        case .thisMonth: String(localized: "今月の支出")
+        case .lastMonth: String(localized: "先月の支出")
+        case .thisYear:  String(localized: "今年の支出")
+        case .all:       String(localized: "全期間の支出")
         }
     }
 
@@ -2218,9 +2219,9 @@ enum ExpenseSplitFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .all:   "すべて"
-        case .split: "割り勘あり"
-        case .solo:  "割り勘なし"
+        case .all:   String(localized: "すべて")
+        case .split: String(localized: "割り勘あり")
+        case .solo:  String(localized: "割り勘なし")
         }
     }
     /// アプリ本体 (AddExpenseView のロード判定) と同じ割り勘判定:
@@ -2364,7 +2365,7 @@ struct ExpenseFilterSheet: View {
     private var categorySection: some View {
         Section {
             NavigationLink {
-                FilterOptionList(title: "カテゴリ", options: categoryOptions, selection: categoryChoice)
+                FilterOptionList(title: String(localized: "カテゴリ"), options: categoryOptions, selection: categoryChoice)
             } label: {
                 LabeledContent("カテゴリ") {
                     Text(currentCategoryName).foregroundStyle(.secondary)
@@ -2390,10 +2391,10 @@ struct ExpenseFilterSheet: View {
     private var memberSection: some View {
         Section {
             NavigationLink {
-                FilterOptionList(title: "人", options: memberOptions(allLabel: "すべて"), selection: payerChoice)
+                FilterOptionList(title: String(localized: "人"), options: memberOptions(allLabel: String(localized: "すべて")), selection: payerChoice)
             } label: {
                 LabeledContent("人") {
-                    Text(memberName(for: draftPayerID, allLabel: "すべて")).foregroundStyle(.secondary)
+                    Text(memberName(for: draftPayerID, allLabel: String(localized: "すべて"))).foregroundStyle(.secondary)
                 }
             }
         }
@@ -2403,10 +2404,10 @@ struct ExpenseFilterSheet: View {
     private var beneficiarySection: some View {
         Section {
             NavigationLink {
-                FilterOptionList(title: "受益者", options: memberOptions(allLabel: "なし"), selection: beneficiaryChoice)
+                FilterOptionList(title: String(localized: "受益者"), options: memberOptions(allLabel: String(localized: "なし")), selection: beneficiaryChoice)
             } label: {
                 LabeledContent("受益者") {
-                    Text(memberName(for: draftBeneficiaryID, allLabel: "なし")).foregroundStyle(.secondary)
+                    Text(memberName(for: draftBeneficiaryID, allLabel: String(localized: "なし"))).foregroundStyle(.secondary)
                 }
             }
         }
@@ -2415,9 +2416,9 @@ struct ExpenseFilterSheet: View {
     // MARK: - 選択状態のラベル / 選択肢
 
     private var currentCategoryName: String {
-        if draftUncategorized { return "カテゴリなし" }
+        if draftUncategorized { return String(localized: "カテゴリなし") }
         if let c = draftCategory { return c.displayName }
-        return "すべて"
+        return String(localized: "すべて")
     }
 
     private func memberName(for id: String?, allLabel: String) -> String {
@@ -2438,7 +2439,7 @@ struct ExpenseFilterSheet: View {
 
     private var categoryOptions: [FilterOptionList.Option] {
         var opts: [FilterOptionList.Option] = [
-            .init(id: "", name: "すべて",
+            .init(id: "", name: String(localized: "すべて"),
                   icon: AnyView(CategoryIconView(symbol: "square.grid.2x2.fill", tint: record.tint, size: 28)))
         ]
         for cat in categories {
@@ -2448,7 +2449,7 @@ struct ExpenseFilterSheet: View {
                 icon: AnyView(CategoryIconView(category: cat, size: 28))))
         }
         if hasUncategorized {
-            opts.append(.init(id: Self.uncategorizedTag, name: "カテゴリなし",
+            opts.append(.init(id: Self.uncategorizedTag, name: String(localized: "カテゴリなし"),
                               icon: AnyView(CategoryIconView(symbol: "tag.slash", tint: .gray, size: 28))))
         }
         return opts
