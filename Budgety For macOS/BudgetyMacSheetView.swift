@@ -38,6 +38,8 @@ struct BudgetyMacSheetView: View {
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
     @State private var detailExpense: Expense?
+    /// スワイプ削除で選択された支出。確認ダイアログの対象。
+    @State private var pendingDelete: Expense?
     /// 仮想 occurrence をタップして materialize した未保存 Expense (commit しなければ詳細を閉じた時に破棄)。
     @State private var materializedPending: Expense?
     /// 詳細から実際に保存 (commit)/削除されたか。materializedPending の破棄判定に使う。
@@ -50,9 +52,6 @@ struct BudgetyMacSheetView: View {
     @State private var showingCSVImport = false
     @State private var showingStats = false
     @State private var showingShare = false
-    /// サマリーヒーローが画面外までスクロールしたか。
-    /// true のときだけツールバーのタイトルにシート名を出す (= iOS の fade 風)。
-    @State private var isScrolledPastHero = false
 
     @StateObject private var lockManager = SheetLockManager.shared
     @State private var showingSetPassword = false
@@ -358,20 +357,10 @@ struct BudgetyMacSheetView: View {
         .onChange(of: sheet.objectID) { _, _ in
             clearFilters()
         }
-        // スクロール量を直接監視 (macOS 15+/26 で確実に動く)。
-        // ヒーローの高さぶん (約 140pt) スクロールしたら「通り過ぎた」とみなす。
-        .onScrollGeometryChange(for: CGFloat.self) { geo in
-            geo.contentOffset.y
-        } action: { _, offsetY in
-            let scrolledPast = offsetY > 120
-            if scrolledPast != isScrolledPastHero {
-                withAnimation(.easeIn(duration: 0.15)) {
-                    isScrolledPastHero = scrolledPast
-                }
-            }
-        }
-        // スクロール前は空文字、ヒーローを通り過ぎたらシート名を三項演算子で代入。
-        .navigationTitle(isScrolledPastHero ? sheet.displayName : "")
+        // タイトルは常時シート名を表示する (ウィンドウのタイトルバー用)。
+        // ヒーローにも大きくシート名が出るが、macOS ではタイトルバーが空だと
+        // ウィンドウの識別性が下がるため常時表示にしている。
+        .navigationTitle(sheet.displayName)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -513,6 +502,37 @@ struct BudgetyMacSheetView: View {
         ) { result in
             if case .success = result { Haptics.success() }
         }
+        .confirmationDialog(
+            "この支出を削除しますか？",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { exp in
+            Button("削除", role: .destructive) {
+                deleteExpense(exp)
+                pendingDelete = nil
+            }
+            Button("キャンセル", role: .cancel) { pendingDelete = nil }
+        }
+    }
+
+    /// 支出を削除する (iOS の SheetDetailView.deleteExpense と同じロジック)。
+    /// 定期由来の支出は、行を消すだけだと仮想で復活するのでルールに skip を記録する。
+    private func deleteExpense(_ expense: Expense) {
+        if RecurringOccurrenceService.virtualizationEnabled,
+           let ruleID = expense.generatedFromRuleID,
+           let rule = (sheet.recurringRules as? Set<RecurringRule>)?.first(where: { $0.id == ruleID }),
+           let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+        }
+        // 未 commit の materialize 済み仮想を削除するケースに備えて後始末する。
+        if materializedPending == expense { materializedPending = nil }
+        viewContext.delete(expense)
+        PersistenceController.shared.save()
+        Haptics.warning()
     }
 
     /// Premium ならロック設定画面を、未加入なら Paywall を開く。
@@ -892,6 +912,35 @@ struct BudgetyMacSheetView: View {
                                 .buttonStyle(.plain)
                                 // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
                                 .transition(.identity)
+                                // トラックパッドの二本指スワイプで削除 / 編集 (iOS の ExpenseRow と整合)。
+                                // role: .destructive は付けない (確認前に行が消えるアニメを避ける)。
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button {
+                                        pendingDelete = e
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                    .tint(.red)
+                                    Button {
+                                        editingExpense = e
+                                    } label: {
+                                        Label("編集", systemImage: "pencil")
+                                    }
+                                    .tint(.blue)
+                                }
+                                // 右クリックからも同じ操作を提供 (別入口)。
+                                .contextMenu {
+                                    Button {
+                                        editingExpense = e
+                                    } label: {
+                                        Label("編集", systemImage: "pencil")
+                                    }
+                                    Button(role: .destructive) {
+                                        pendingDelete = e
+                                    } label: {
+                                        Label("削除", systemImage: "trash")
+                                    }
+                                }
                             case .occurrence(let occ):
                                 // 仮想 occurrence (未実体化の定期分)。iOS と同じく、タップで materialize
                                 // (未保存) して実支出と同じ詳細へ。編集 commit しなければ閉じた時に破棄。
