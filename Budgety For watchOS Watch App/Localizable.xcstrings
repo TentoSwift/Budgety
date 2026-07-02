@@ -1,0 +1,1302 @@
+{
+  "sourceLanguage": "ja",
+  "strings": {
+    "%@: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%@を選択": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select %@"
+          }
+        }
+      }
+    },
+    "%lld ヶ月ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld months"
+          }
+        }
+      }
+    },
+    "%lld 年ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld years"
+          }
+        }
+      }
+    },
+    "%lld 日ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld days"
+          }
+        }
+      }
+    },
+    "%lld 週ごと": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every %lld weeks"
+          }
+        }
+      }
+    },
+    "%lld%%": {
+      "localizations": {}
+    },
+    "%lld人で割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split %lld ways"
+          }
+        }
+      }
+    },
+    "+%lld": {
+      "localizations": {}
+    },
+    "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The iCloud store isn’t ready yet. Please wait a moment and try again."
+          }
+        }
+      }
+    },
+    "iPhone でシートを作成すると同期されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheets you create on iPhone will sync here."
+          }
+        }
+      }
+    },
+    "NZドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Zealand Dollar"
+          }
+        }
+      }
+    },
+    "URL の構築に失敗しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to build the URL"
+          }
+        }
+      }
+    },
+    "アーカイブ済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived"
+          }
+        }
+      }
+    },
+    "アイスランドクローナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icelandic Króna"
+          }
+        }
+      }
+    },
+    "イスラエルシェケル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Israeli Shekel"
+          }
+        }
+      }
+    },
+    "インドネシアルピア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indonesian Rupiah"
+          }
+        }
+      }
+    },
+    "インドルピー": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indian Rupee"
+          }
+        }
+      }
+    },
+    "カテゴリ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Category"
+          }
+        }
+      }
+    },
+    "カテゴリなし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncategorized"
+          }
+        }
+      }
+    },
+    "キャンセル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "この支出を削除します。元に戻せません。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this expense. This cannot be undone."
+          }
+        }
+      }
+    },
+    "サマリー画面の「追加」から記録できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can record from “Add” on the summary screen."
+          }
+        }
+      }
+    },
+    "シート": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheet"
+          }
+        }
+      }
+    },
+    "シートがありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No sheets"
+          }
+        }
+      }
+    },
+    "シンガポールドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Singapore Dollar"
+          }
+        }
+      }
+    },
+    "シンボル・その他": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbols & Other"
+          }
+        }
+      }
+    },
+    "スイスフラン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swiss Franc"
+          }
+        }
+      }
+    },
+    "スウェーデンクローナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swedish Krona"
+          }
+        }
+      }
+    },
+    "すべてのデータを削除しました。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All data has been deleted. Please restart the app."
+          }
+        }
+      }
+    },
+    "スポーツ・運動": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sports & Fitness"
+          }
+        }
+      }
+    },
+    "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No iCloud account was found for that email address. Please check the email registered to the Apple Account."
+          }
+        }
+      }
+    },
+    "その他": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        }
+      }
+    },
+    "その他収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Income"
+          }
+        }
+      }
+    },
+    "タイバーツ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thai Baht"
+          }
+        }
+      }
+    },
+    "チェココルナ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Czech Koruna"
+          }
+        }
+      }
+    },
+    "データベースの構造変更に伴い古いデータをリセットしました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Old data was reset due to a database structure change."
+          }
+        }
+      }
+    },
+    "データベースを再構築しました。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The database has been rebuilt. Please restart the app."
+          }
+        }
+      }
+    },
+    "データベース構造の不整合を検出しました。アプリを再起動するとデータをリセットして復旧します。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A database structure inconsistency was detected. Restarting the app will reset the data and recover."
+          }
+        }
+      }
+    },
+    "デバイス・IT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices & IT"
+          }
+        }
+      }
+    },
+    "デンマーククローネ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danish Krone"
+          }
+        }
+      }
+    },
+    "トルコリラ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turkish Lira"
+          }
+        }
+      }
+    },
+    "ノルウェークローネ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norwegian Krone"
+          }
+        }
+      }
+    },
+    "パスワードが違います": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incorrect password"
+          }
+        }
+      }
+    },
+    "パスワードを入力": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter password"
+          }
+        }
+      }
+    },
+    "ハンガリーフォリント": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hungarian Forint"
+          }
+        }
+      }
+    },
+    "ファッション・美容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fashion & Beauty"
+          }
+        }
+      }
+    },
+    "フィリピンペソ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Philippine Peso"
+          }
+        }
+      }
+    },
+    "ブラジルレアル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brazilian Real"
+          }
+        }
+      }
+    },
+    "ブルガリアレフ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulgarian Lev"
+          }
+        }
+      }
+    },
+    "ペット・自然": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pets & Nature"
+          }
+        }
+      }
+    },
+    "ボーナス": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bonus"
+          }
+        }
+      }
+    },
+    "ポーランドズウォティ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polish Zloty"
+          }
+        }
+      }
+    },
+    "まだ記録がありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No records yet"
+          }
+        }
+      }
+    },
+    "マレーシアリンギット": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Malaysian Ringgit"
+          }
+        }
+      }
+    },
+    "メキシコペソ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mexican Peso"
+          }
+        }
+      }
+    },
+    "メンバー": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Members"
+          }
+        }
+      }
+    },
+    "ユーロ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Euro"
+          }
+        }
+      }
+    },
+    "ルーマニアレウ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Romanian Leu"
+          }
+        }
+      }
+    },
+    "ロック中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locked"
+          }
+        }
+      }
+    },
+    "交通": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
+          }
+        }
+      }
+    },
+    "交通・移動": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
+          }
+        }
+      }
+    },
+    "人民元": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chinese Yuan"
+          }
+        }
+      }
+    },
+    "人物・アクション": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People & Actions"
+          }
+        }
+      }
+    },
+    "今月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Month"
+          }
+        }
+      }
+    },
+    "今月 ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month "
+          }
+        }
+      }
+    },
+    "住居": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Housing"
+          }
+        }
+      }
+    },
+    "保存しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "保存に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to save: %@"
+          }
+        }
+      }
+    },
+    "健康・医療": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health & Medical"
+          }
+        }
+      }
+    },
+    "元に戻せません。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This cannot be undone."
+          }
+        }
+      }
+    },
+    "光熱費": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilities"
+          }
+        }
+      }
+    },
+    "全員で割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split with everyone"
+          }
+        }
+      }
+    },
+    "共有ストアが準備できていません。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared store isn’t ready. Please restart the app."
+          }
+        }
+      }
+    },
+    "共有の受諾に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to accept the share: %@"
+          }
+        }
+      }
+    },
+    "削除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
+    "削除しますか?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete?"
+          }
+        }
+      }
+    },
+    "削除に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to delete: %@"
+          }
+        }
+      }
+    },
+    "前回の保存エラーを検出したためデータベースをリセットしました。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The database was reset because a previous save error was detected."
+          }
+        }
+      }
+    },
+    "副業": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Side Job"
+          }
+        }
+      }
+    },
+    "割り勘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split"
+          }
+        }
+      }
+    },
+    "割り勘する": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split"
+          }
+        }
+      }
+    },
+    "割り勘なし": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not split"
+          }
+        }
+      }
+    },
+    "割る相手": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split with"
+          }
+        }
+      }
+    },
+    "加ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canadian Dollar"
+          }
+        }
+      }
+    },
+    "医療": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medical"
+          }
+        }
+      }
+    },
+    "南アフリカランド": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South African Rand"
+          }
+        }
+      }
+    },
+    "収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income"
+          }
+        }
+      }
+    },
+    "受取": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receive"
+          }
+        }
+      }
+    },
+    "受取者": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recipient"
+          }
+        }
+      }
+    },
+    "基本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basics"
+          }
+        }
+      }
+    },
+    "天気・自然": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weather & Nature"
+          }
+        }
+      }
+    },
+    "娯楽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entertainment"
+          }
+        }
+      }
+    },
+    "娯楽・メディア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entertainment & Media"
+          }
+        }
+      }
+    },
+    "季節・行事": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seasons & Events"
+          }
+        }
+      }
+    },
+    "完了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "定期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring"
+          }
+        }
+      }
+    },
+    "家・家電": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home & Appliances"
+          }
+        }
+      }
+    },
+    "家族・子供": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Family & Kids"
+          }
+        }
+      }
+    },
+    "工具・DIY": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools & DIY"
+          }
+        }
+      }
+    },
+    "投資": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Investment"
+          }
+        }
+      }
+    },
+    "招待リンクを取得できませんでした。iCloud にサインインしているか確認してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t get the invite link. Make sure you’re signed in to iCloud."
+          }
+        }
+      }
+    },
+    "支出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expense"
+          }
+        }
+      }
+    },
+    "支出を追加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add expense"
+          }
+        }
+      }
+    },
+    "支払": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pay"
+          }
+        }
+      }
+    },
+    "支払い者": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payer"
+          }
+        }
+      }
+    },
+    "教育": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Education"
+          }
+        }
+      }
+    },
+    "教育・仕事": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Education & Work"
+          }
+        }
+      }
+    },
+    "旅行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travel"
+          }
+        }
+      }
+    },
+    "旅行・アウトドア": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travel & Outdoors"
+          }
+        }
+      }
+    },
+    "日本円": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Japanese Yen"
+          }
+        }
+      }
+    },
+    "毎年": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yearly"
+          }
+        }
+      }
+    },
+    "毎日": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily"
+          }
+        }
+      }
+    },
+    "毎月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly"
+          }
+        }
+      }
+    },
+    "毎週": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weekly"
+          }
+        }
+      }
+    },
+    "為替サーバから応答がありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No response from the exchange rate server"
+          }
+        }
+      }
+    },
+    "為替の取得に失敗しました: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to fetch exchange rates: %@"
+          }
+        }
+      }
+    },
+    "米ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "US Dollar"
+          }
+        }
+      }
+    },
+    "給料": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salary"
+          }
+        }
+      }
+    },
+    "編集": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
+    "英ポンド": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "British Pound"
+          }
+        }
+      }
+    },
+    "詳細": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
+          }
+        }
+      }
+    },
+    "豪ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Australian Dollar"
+          }
+        }
+      }
+    },
+    "買い物": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shopping"
+          }
+        }
+      }
+    },
+    "買い物・お金": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shopping & Money"
+          }
+        }
+      }
+    },
+    "追加": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "通信・連絡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Communication"
+          }
+        }
+      }
+    },
+    "韓国ウォン": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korean Won"
+          }
+        }
+      }
+    },
+    "食べ物・飲み物": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Food & Drink"
+          }
+        }
+      }
+    },
+    "食費": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Food"
+          }
+        }
+      }
+    },
+    "香港ドル": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hong Kong Dollar"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

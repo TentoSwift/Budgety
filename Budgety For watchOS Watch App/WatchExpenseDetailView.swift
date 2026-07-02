@@ -243,7 +243,7 @@ struct WatchExpenseDetailView: View {
         let pid = expense.payerProfileID ?? ""
         if !pid.isEmpty {
             let info = sheet.memberDisplayInfo(for: pid)
-            let label = expense.kind == .income ? "受取者" : "支払い者"
+            let label = expense.kind == .income ? String(localized: "受取者") : String(localized: "支払い者")
             // ソロかつ自分払いの時は省略 (= シート詳細と同じ判定)
             let hideForSoloSelf = !isShared && pid == (UserProfileStore.shared.userRecordName ?? "")
             if !hideForSoloSelf {

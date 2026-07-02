@@ -57,10 +57,10 @@ struct WatchAddExpenseView: View {
 
     /// 割り勘ボタンのラベル。
     private var splitLabel: String {
-        guard splitEnabled else { return "割り勘なし" }
+        guard splitEnabled else { return String(localized: "割り勘なし") }
         let total = sheet.acceptedMemberProfileIDs().count
         let n = selectedBeneficiaries.isEmpty ? total : selectedBeneficiaries.count
-        return n >= total ? "全員で割り勘" : "\(n)人で割り勘"
+        return n >= total ? String(localized: "全員で割り勘") : String(localized: "\(n)人で割り勘")
     }
 
     /// シートの通貨記号 (¥ / $ / € など)。

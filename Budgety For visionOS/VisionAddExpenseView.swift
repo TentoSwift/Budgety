@@ -81,7 +81,7 @@ struct VisionAddExpenseView: View {
                     }
                 }
             }
-            .navigationTitle(expense == nil ? "支出を追加" : "支出を編集")
+            .navigationTitle(expense == nil ? String(localized: "支出を追加") : String(localized: "支出を編集"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }

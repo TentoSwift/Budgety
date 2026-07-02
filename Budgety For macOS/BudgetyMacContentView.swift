@@ -266,7 +266,7 @@ struct BudgetyMacContentView: View {
     private func monthlyLabel(for sheet: ExpenseSheet) -> String {
         // ロック中のシートは合計金額を一覧に出さない (解錠するまで隠す)。
         if lockManager.hasPassword(for: sheet) && !lockManager.isUnlocked(sheet) {
-            return "ロック中"
+            return String(localized: "ロック中")
         }
         let cal = Calendar.current
         let now = Date()
@@ -278,7 +278,7 @@ struct BudgetyMacContentView: View {
                 return c.year == comps.year && c.month == comps.month
             }
             .reduce(Decimal(0)) { $0 + $1.amountDecimal }
-        return "今月 \(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))"
+        return String(localized: "今月 \(CurrencyCatalog.format(monthlyTotal, code: sheet.resolvedDefaultCurrencyCode))")
     }
 
     // MARK: - 全シート横断検索
@@ -388,7 +388,7 @@ struct BudgetyMacContentView: View {
                 Spacer()
                 searchCurrencyMenu
             }
-            Text(trimmedQuery.isEmpty ? "\(total.count)件" : "「\(trimmedQuery)」 · \(total.count)件")
+            Text(trimmedQuery.isEmpty ? String(localized: "\(total.count)件") : String(localized: "「\(trimmedQuery)」 · \(total.count)件"))
                 .font(.subheadline).foregroundStyle(.secondary)
             Text(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))
                 .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
@@ -496,8 +496,8 @@ struct BudgetyMacContentView: View {
 
                 if groups.isEmpty && matched.isEmpty && locked.isEmpty {
                     Text(trimmedQuery.isEmpty
-                         ? "検索ワードを入力してください"
-                         : "「\(trimmedQuery)」に一致する項目がありません")
+                         ? String(localized: "検索ワードを入力してください")
+                         : String(localized: "「\(trimmedQuery)」に一致する項目がありません"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -586,7 +586,7 @@ struct MacAddSheetView: View {
 
     var body: some View {
         MacSheetFormDialog(
-            title: "新規シート",
+            title: String(localized: "新規シート"),
             name: $name,
             colorHex: $colorHex,
             symbol: $symbol,
@@ -644,7 +644,7 @@ struct MacEditSheetView: View {
 
     var body: some View {
         MacSheetFormDialog(
-            title: "シートを編集",
+            title: String(localized: "シートを編集"),
             name: $name,
             colorHex: $colorHex,
             symbol: $symbol,
@@ -652,19 +652,19 @@ struct MacEditSheetView: View {
             budgetText: $budgetText,
             archiveBinding: $archivedDraft,
             manageMembersAction: { showingMembers = true },
-            primaryActionLabel: "保存",
-            destructiveActionLabel: isOwner ? "削除" : "退出",
+            primaryActionLabel: String(localized: "保存"),
+            destructiveActionLabel: isOwner ? String(localized: "削除") : String(localized: "退出"),
             destructiveAction: { showingDeleteConfirm = true },
             onCancel: { dismiss() },
             onSave: { save() }
         )
         .onAppear { loadOnce() }
         .confirmationDialog(
-            isOwner ? "「\(name)」を削除しますか？" : "「\(name)」から退出しますか？",
+            isOwner ? String(localized: "「\(name)」を削除しますか？") : String(localized: "「\(name)」から退出しますか？"),
             isPresented: $showingDeleteConfirm,
             titleVisibility: .visible
         ) {
-            Button(isOwner ? "削除" : "退出", role: .destructive) {
+            Button(isOwner ? String(localized: "削除") : String(localized: "退出"), role: .destructive) {
                 Task { @MainActor in
                     if isOwner {
                         viewContext.delete(record)
@@ -678,8 +678,8 @@ struct MacEditSheetView: View {
             Button("キャンセル", role: .cancel) {}
         } message: {
             Text(isOwner
-                 ? "配下の支出・カテゴリ・送金記録もすべて削除されます。"
-                 : "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。")
+                 ? String(localized: "配下の支出・カテゴリ・送金記録もすべて削除されます。")
+                 : String(localized: "あなたの端末からこのシートが消えます。オーナーや他の参加者のデータは残ります。"))
         }
         .sheet(isPresented: $showingMembers) {
             NavigationStack {
@@ -740,7 +740,7 @@ private struct MacSheetFormDialog: View {
     var manageMembersAction: (() -> Void)? = nil
     let primaryActionLabel: String
     /// destructive ボタンのラベル。オーナーなら「削除」、参加者なら「退出」。
-    var destructiveActionLabel: String = "削除"
+    var destructiveActionLabel: String = String(localized: "削除")
     var destructiveAction: (() -> Void)? = nil
     let onCancel: () -> Void
     let onSave: () -> Void
@@ -798,7 +798,7 @@ private struct MacSheetFormDialog: View {
                 // フォーム
                 VStack(spacing: 16) {
                     // 名前
-                    formRow(label: "名前:") {
+                    formRow(label: String(localized: "名前:")) {
                         TextField("", text: $name)
                             .textFieldStyle(.roundedBorder)
                     }
@@ -809,7 +809,7 @@ private struct MacSheetFormDialog: View {
                     Divider().padding(.top, 4)
 
                     // 既定通貨
-                    formRow(label: "既定通貨:") {
+                    formRow(label: String(localized: "既定通貨:")) {
                         Picker("", selection: $currencyCode) {
                             ForEach(CurrencyCatalog.all) { opt in
                                 Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
@@ -824,7 +824,7 @@ private struct MacSheetFormDialog: View {
                     Divider().padding(.top, 4)
 
                     // 月予算 (任意・「今月」表示時に進捗バーで残額を可視化)
-                    formRow(label: "月予算:") {
+                    formRow(label: String(localized: "月予算:")) {
                         TextField("", text: $budgetText, prompt: Text("0 (なし)"))
                             .textFieldStyle(.roundedBorder)
                             .frame(maxWidth: 160)
@@ -833,7 +833,7 @@ private struct MacSheetFormDialog: View {
 
                     if let manageMembersAction {
                         Divider().padding(.top, 4)
-                        formRow(label: "メンバー:") {
+                        formRow(label: String(localized: "メンバー:")) {
                             Button {
                                 manageMembersAction()
                             } label: {
@@ -845,7 +845,7 @@ private struct MacSheetFormDialog: View {
 
                     if let archiveBinding {
                         Divider().padding(.top, 4)
-                        formRow(label: "アーカイブ:") {
+                        formRow(label: String(localized: "アーカイブ:")) {
                             Toggle(isOn: archiveBinding) {
                                 Text("このシートをアーカイブ")
                             }
@@ -1091,7 +1091,7 @@ struct BudgetyMacSettingsView: View {
                         .foregroundStyle(pm.isPremium ? .yellow : .secondary)
                         .font(.title2)
                     VStack(alignment: .leading) {
-                        Text(pm.isPremium ? "Premium 加入中" : "無料プラン")
+                        Text(pm.isPremium ? String(localized: "Premium 加入中") : String(localized: "無料プラン"))
                             .font(.body.weight(.medium))
                         Text(pm.isPremium
                              ? "すべての機能をご利用いただけます。"

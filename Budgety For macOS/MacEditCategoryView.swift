@@ -53,7 +53,7 @@ struct MacEditCategoryView: View {
     }
 
     private var title: String {
-        isEditing ? "カテゴリを編集" : "新しいカテゴリ"
+        isEditing ? String(localized: "カテゴリを編集") : String(localized: "新しいカテゴリ")
     }
 
     private var selectedSwiftColor: Color {
@@ -94,14 +94,14 @@ struct MacEditCategoryView: View {
 
                 VStack(spacing: 16) {
                     // 名前
-                    formRow(label: "名前:") {
+                    formRow(label: String(localized: "名前:")) {
                         TextField("", text: $name)
                             .textFieldStyle(.roundedBorder)
                     }
 
                     // 種別 (create のみ)
                     if !isEditing {
-                        formRow(label: "種別:") {
+                        formRow(label: String(localized: "種別:")) {
                             Picker("", selection: $kind) {
                                 Text("支出").tag(TransactionKind.expense)
                                 Text("収入").tag(TransactionKind.income)
@@ -131,7 +131,7 @@ struct MacEditCategoryView: View {
                         }
                         Spacer()
                         Button("キャンセル") { dismiss() }
-                        Button(isEditing ? "保存" : "OK") { save() }
+                        Button(isEditing ? String(localized: "保存") : "OK") { save() }
                             .keyboardShortcut(.return)
                             .buttonStyle(.borderedProminent)
                             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
