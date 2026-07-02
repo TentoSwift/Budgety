@@ -20,8 +20,15 @@ struct WatchAddExpenseView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var ctx
 
-    /// Digital Crown で操作する金額 (= 円)。100 円刻み 0 ... 100,000 (= 10 万円)。
+    /// Digital Crown で操作する金額 (= 円)。0 ... 100,000 (= 10 万円)。
+    /// 実際の刻みは回転速度に応じて 1 / 10 / 100 / 1000 と段階的に変わる
+    /// (`CrownSpeedStepper` が算出)。
     @State private var amount: Double = 0
+    /// Digital Crown の生の回転値 (detent アキュムレータ)。速度推定に使う。
+    /// amount とは別に細かい粒度で回し、その変化量と時間差から刻みを決める。
+    @State private var crownRaw: Double = 0
+    /// 回転速度 → 刻み量を決めるロジック (ヒステリシス付き)。
+    @State private var crownStepper = CrownSpeedStepper()
     @FocusState private var crownFocused: Bool
     @State private var saved: Bool = false
     @State private var saveBounce: Int = 0
@@ -182,13 +189,18 @@ struct WatchAddExpenseView: View {
         .padding(.horizontal, 4)
         .focusable(true)
         .focused($crownFocused)
+        // 生の回転値を細かい粒度 (0.5 detent) で受け、変化量と時間差から
+        // 回転速度を推定して amount の刻みを 1x/10x/100x/1000x に切り替える。
         .digitalCrownRotation(
-            $amount,
-            from: 0, through: 100_000, by: amountStep,
+            $crownRaw,
+            from: -1_000_000, through: 1_000_000, by: 0.5,
             sensitivity: .high,
             isContinuous: true,
-            isHapticFeedbackEnabled: true
+            isHapticFeedbackEnabled: false
         )
+        .onChange(of: crownRaw) { oldValue, newValue in
+            applyCrownDelta(from: oldValue, to: newValue)
+        }
         .onAppear { crownFocused = true }
         .opacity(saved ? 0 : 1)
     }
@@ -246,6 +258,27 @@ struct WatchAddExpenseView: View {
                 .foregroundStyle(.white)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Digital Crown の生の回転差分を amount に反映する。回転が速いほど大きい
+    /// 刻み (1 → 10 → 100 → 1000 × 通貨基準) で動かし、大きい刻みの時はその
+    /// 単位に丸める。切替はヒステリシス付きで頻繁に飛び跳ねないようにする。
+    private func applyCrownDelta(from oldValue: Double, to newValue: Double) {
+        let rawDelta = newValue - oldValue
+        guard rawDelta != 0 else { return }
+        // 速度に応じた刻み倍率 (1 / 10 / 100 / 1000)。
+        let multiplier = crownStepper.step(forRawDelta: rawDelta, now: Date())
+        let step = amountStep * Double(multiplier)
+        let direction: Double = rawDelta > 0 ? 1 : -1
+        var next = amount + direction * step
+        // 大きい刻みで動いた時はその刻み単位へ丸めると気持ちよい。
+        if multiplier > 1 {
+            next = (next / step).rounded() * step
+        }
+        next = min(100_000, max(0, next))
+        guard next != amount else { return }
+        amount = next
+        WKInterfaceDevice.current().play(.click)
     }
 
     private func save() {
@@ -312,6 +345,87 @@ struct WatchAddExpenseView: View {
     }
 }
 
+// MARK: - Crown Speed Stepper
+
+/// Digital Crown の回転速度から刻み倍率 (1 / 10 / 100 / 1000) を決める。
+/// - 直近の速度を指数移動平均 (EMA) で平滑化し、単発の急変で刻みが飛ばないようにする。
+/// - しきい値にヒステリシス (上げる閾値 > 下げる閾値) を持たせ、境界で倍率が
+///   チラつかないようにする。
+/// - 一定時間 (idleReset) 回転が止まったら速度をリセットして「遅い」から再開する。
+struct CrownSpeedStepper {
+    /// 平滑化した速度 (raw detents / 秒)。
+    private var smoothedSpeed: Double = 0
+    /// 前回イベントの時刻。
+    private var lastEventTime: Date?
+    /// 現在の刻み倍率 (1 / 10 / 100 / 1000)。ヒステリシス判定の基準。
+    private var currentMultiplier: Int = 1
+
+    /// EMA の平滑化係数 (0..1)。大きいほど直近値に敏感。
+    private let smoothing: Double = 0.35
+    /// この秒数以上イベントが空いたら停止とみなし速度を 0 に戻す。
+    private let idleReset: TimeInterval = 0.35
+
+    /// 倍率を上げるしきい値 (raw detents / 秒)。速い順に判定。
+    /// 下げるしきい値はこれより低くしてヒステリシスにする。
+    private let upThresholds: [(speed: Double, multiplier: Int)] = [
+        (28, 1000),
+        (16, 100),
+        (7,  10),
+    ]
+    /// 倍率を下げる時のしきい値 (= up の 0.6 倍相当)。
+    private let downThresholds: [(speed: Double, multiplier: Int)] = [
+        (18, 1000),
+        (10, 100),
+        (4,  10),
+    ]
+
+    /// 生の回転差分と現在時刻から、この 1 ステップに使う刻み倍率を返す。
+    mutating func step(forRawDelta rawDelta: Double, now: Date) -> Int {
+        let magnitude = abs(rawDelta)
+        // 経過時間 (秒)。初回や長い空白は idleReset で頭打ちにして速度を薄める。
+        let dt: TimeInterval
+        if let last = lastEventTime {
+            dt = min(max(now.timeIntervalSince(last), 0.001), idleReset)
+        } else {
+            dt = idleReset
+        }
+        lastEventTime = now
+
+        // 長時間止まっていたら一旦リセット (= ゆっくり操作に戻す)。
+        if dt >= idleReset {
+            smoothedSpeed = 0
+            currentMultiplier = 1
+        }
+
+        // 瞬間速度を EMA で平滑化。
+        let instantSpeed = magnitude / dt
+        smoothedSpeed = smoothedSpeed * (1 - smoothing) + instantSpeed * smoothing
+
+        currentMultiplier = resolveMultiplier(speed: smoothedSpeed, current: currentMultiplier)
+        return currentMultiplier
+    }
+
+    /// 平滑化速度と現在倍率から、ヒステリシス付きで次の倍率を決める。
+    private func resolveMultiplier(speed: Double, current: Int) -> Int {
+        // まず「上げられる最大倍率」を up しきい値で判定。
+        var target = 1
+        for t in upThresholds where speed >= t.speed {
+            target = t.multiplier
+            break
+        }
+        // 現在より上げる時は up 判定をそのまま採用。
+        if target > current { return target }
+        // 現在を維持 or 下げる時は down しきい値で判定 (ヒステリシス)。
+        // 速度が down しきい値を割った段階のみ倍率を下げる。
+        var held = 1
+        for t in downThresholds where speed >= t.speed {
+            held = t.multiplier
+            break
+        }
+        return max(held, target)
+    }
+}
+
 // MARK: - Category Picker
 
 struct WatchCategoryPicker: View {
@@ -372,7 +486,15 @@ struct WatchSplitPicker: View {
     /// 他メンバーのプロフィール写真がロードされたら再描画する。
     @ObservedObject private var pub = PublicProfileSync.shared
 
-    private var members: [String] { sheet.acceptedMemberProfileIDs() }
+    /// 割り勘候補メンバー。空 id を除き、重複を取り除いた安全なリスト。
+    /// `ForEach(id: \.self)` は id が重複すると watchOS でクラッシュ/描画崩れを
+    /// 起こすため、必ずここで一意化してから使う。
+    private var members: [String] {
+        var seen = Set<String>()
+        return sheet.acceptedMemberProfileIDs().filter {
+            !$0.isEmpty && seen.insert($0).inserted
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -382,7 +504,9 @@ struct WatchSplitPicker: View {
                 }
                 if splitEnabled {
                     Section("割る相手") {
-                        ForEach(members, id: \.self) { id in
+                        // enumerated() で index+id の複合キーにし、万一 id が重複
+                        // していても ForEach の identity が衝突しないようにする。
+                        ForEach(Array(members.enumerated()), id: \.offset) { _, id in
                             memberRow(id)
                         }
                     }

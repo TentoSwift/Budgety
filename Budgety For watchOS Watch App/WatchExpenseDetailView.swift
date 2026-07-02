@@ -74,7 +74,14 @@ struct WatchExpenseDetailView: View {
         // iOS / macOS の挙動に揃えた。
         if isShared {
             let payer = expense.payerProfileID ?? ""
-            let beneficiaries = expense.resolvedBeneficiaryIDs()
+            // 空 id / 重複を除いた安全なリスト。ForEach(id: \.self) の id 重複は
+            // watchOS でクラッシュするため必ず一意化する。
+            let beneficiaries: [String] = {
+                var seen = Set<String>()
+                return expense.resolvedBeneficiaryIDs().filter {
+                    !$0.isEmpty && seen.insert($0).inserted
+                }
+            }()
             let isSplit = !beneficiaries.isEmpty
                 && !(!payer.isEmpty && Set(beneficiaries) == Set([payer]))
             if isSplit {
@@ -90,7 +97,7 @@ struct WatchExpenseDetailView: View {
                     }
                     .foregroundStyle(.white)
 
-                    ForEach(beneficiaries, id: \.self) { id in
+                    ForEach(Array(beneficiaries.enumerated()), id: \.offset) { _, id in
                         let info = sheet.memberDisplayInfo(for: id)
                         HStack(spacing: 6) {
                             avatar(info)
