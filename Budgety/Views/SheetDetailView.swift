@@ -7,6 +7,7 @@ import SwiftUI
 import CoreData
 import CloudKit
 import UIKit
+import TipKit
 import CustomPicker
 #if os(iOS)
 import CustomNavigationTitle
@@ -169,6 +170,9 @@ struct SheetDetailView: View {
     @State private var splitFilter: ExpenseSplitFilter = .all
     /// フィルタシートの表示。
     @State private var showingFilters = false
+    /// TipKit: フィルタボタン / もっと見るメニューの機能紹介。
+    private let filterTip = FilterTip()
+    private let moreMenuTip = MoreMenuTip()
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
@@ -431,6 +435,7 @@ struct SheetDetailView: View {
                     } label: {
                         Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
                     }
+                    .popoverTip(filterTip)
                 }
             }
             if UIDevice.current.userInterfaceIdiom == .pad {
@@ -593,6 +598,7 @@ struct SheetDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+                .popoverTip(moreMenuTip)
             }
         }
         }
