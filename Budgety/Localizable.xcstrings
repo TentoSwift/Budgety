@@ -6725,6 +6725,36 @@
           }
         }
       }
+    },
+    "写真を調整": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust Photo"
+          }
+        }
+      }
+    },
+    "決定": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "切り取り": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

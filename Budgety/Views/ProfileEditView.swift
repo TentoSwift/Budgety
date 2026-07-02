@@ -52,6 +52,11 @@ struct ProfileEditView: View {
     /// Image Playground (iOS 18.2+ / macOS 15.2+) で画像生成を行うシート表示用。
     @State private var showingImagePlayground: Bool = false
 
+    #if canImport(UIKit)
+    /// クロップ対象の画像。新規選択直後や「切り取り」でセットするとシートが開く。
+    @State private var cropImage: CroppableImage? = nil
+    #endif
+
     var body: some View {
         NavigationStack {
             Form {
@@ -92,6 +97,24 @@ struct ProfileEditView: View {
                     draftBgHex = hex
                     pickerItem = nil
                 }
+            }
+            #endif
+            #if canImport(UIKit)
+            // 写真を選んだ / 「切り取り」を選んだ時に円形クロップシートを挟む。
+            .sheet(item: $cropImage) { item in
+                ImageCropView(
+                    image: item.image,
+                    onCancel: { cropImage = nil },
+                    onCrop: { data in
+                        draftPhoto = data
+                        // 写真を採用したら背景色フォールバックは不要。
+                        draftBgHex = nil
+                        #if canImport(PhotosUI)
+                        pickerItem = nil
+                        #endif
+                        cropImage = nil
+                    }
+                )
             }
             #endif
             // concept は渡さない (= 人物 / テキスト / テーマ何からでも生成可能に)。
@@ -166,6 +189,16 @@ struct ProfileEditView: View {
             Label("Image Playground で生成", systemImage: "sparkles")
         }
         if draftPhoto != nil {
+            #if canImport(UIKit)
+            // 既存写真を選び直さずに再度クロップする導線。
+            if let data = draftPhoto, let ui = UIImage(data: data) {
+                Button {
+                    cropImage = CroppableImage(image: ui)
+                } label: {
+                    Label("切り取り", systemImage: "crop")
+                }
+            }
+            #endif
             Divider()
             Button(role: .destructive) {
                 draftPhoto = nil
@@ -255,7 +288,16 @@ struct ProfileEditView: View {
         Task { @MainActor in
             defer { isLoadingPhoto = false }
             if let data = try? await item.loadTransferable(type: Data.self) {
+                #if canImport(UIKit)
+                // 選択直後にクロップシートを挟む (円形アバター用の正方形切り取り)。
+                if let ui = UIImage(data: data) {
+                    cropImage = CroppableImage(image: ui)
+                } else {
+                    draftPhoto = downsize(data, maxDimension: 512)
+                }
+                #else
                 draftPhoto = downsize(data, maxDimension: 512)
+                #endif
             }
         }
     }
@@ -308,3 +350,11 @@ struct ProfileEditView: View {
         dismiss()
     }
 }
+
+#if canImport(UIKit)
+/// `.sheet(item:)` でクロップ対象を渡すための Identifiable ラッパー。
+private struct CroppableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+#endif
