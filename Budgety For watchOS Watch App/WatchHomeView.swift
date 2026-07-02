@@ -176,6 +176,11 @@ private struct WatchSheetPage: View {
     @Environment(\.managedObjectContext) private var ctx
     @State private var showingAdd: Bool = false
     @State private var pendingDeleteExpense: Expense?
+    /// 他メンバーのプロフィール写真が Public DB からロードされたら行を再描画する。
+    @ObservedObject private var pub = PublicProfileSync.shared
+
+    /// 共有シート (他メンバーあり) か。支払い者アバターはこの時だけ行に重ねる。
+    private var isShared: Bool { sheet.hasAcceptedOtherMembers() }
 
     @FetchRequest private var expenses: FetchedResults<Expense>
 
@@ -343,6 +348,7 @@ private struct WatchSheetPage: View {
                     }
                 }
                 .listStyle(.plain)
+                .onAppear { prefetchPayerPhotos(Array(expenses)) }
             }
         }
     }
@@ -425,16 +431,9 @@ private struct WatchSheetPage: View {
 
     private func recentRow(_ e: Expense) -> some View {
         HStack(spacing: 8) {
-            // iOS と同じ resolver を使う。カテゴリが無い時は list.bullet +
-            // 灰色になり、無カテゴリでも一貫した見た目に。
-            Image(systemName: e.categorySymbol)
-                .foregroundStyle(.white)
-                // Dynamic Type で巨大化しないよう固定サイズに。
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 32, height: 32)
-                .background(
-                    Circle().fill(e.categoryTint.gradient)
-                )
+            // iOS の CategoryPayerIconView と同じ見た目: カテゴリアイコン円の
+            // 右下に支払い者/受取者アバターを小さく重ねる。
+            categoryPayerIcon(e)
             // タイトルと金額を縦並びに (狭い画面で折り返しが起きないよう)。
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayTitle(e))
@@ -450,6 +449,86 @@ private struct WatchSheetPage: View {
             Spacer()
         }
         .padding(.horizontal, 8)
+    }
+
+    /// カテゴリアイコン円 + 支払い者/受取者アバター (右下に重ね)。
+    /// iOS の `CategoryPayerIconView` に相当する watch 版。共有シートで、かつ
+    /// 「ソロ + 自分払い」でない時だけアバターを重ねる (= iOS と同じ出し分け)。
+    @ViewBuilder
+    private func categoryPayerIcon(_ e: Expense) -> some View {
+        let pid = e.payerProfileID ?? ""
+        let hasPayer = !pid.isEmpty || e.payerMemberID != nil || !(e.paidBy ?? "").isEmpty
+        // ソロ (他メンバー無し) + 自分払いの時はアバターを出さない。
+        let isSelf = pid.isEmpty
+            ? true
+            : UserProfileStore.shared.canonicalSelfIDs(forShare: nil).contains(pid)
+        let showAvatar = hasPayer && !(!isShared && isSelf)
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: e.categorySymbol)
+                .foregroundStyle(.white)
+                // Dynamic Type で巨大化しないよう固定サイズに。
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle().fill(e.categoryTint.gradient)
+                )
+            if showAvatar {
+                let info = sheet.memberDisplayInfo(for: pid)
+                payerBadge(info)
+                    // カテゴリアイコンと分けるため、背景色の縁取りを一回り敷く。
+                    .background(
+                        Circle()
+                            .fill(sheet.tint)
+                            .padding(-1.5)
+                    )
+                    .offset(x: 3, y: 3)
+            }
+        }
+    }
+
+    /// 行に重ねる小さな支払い者バッジ (写真 or 頭文字)。
+    @ViewBuilder
+    private func payerBadge(_ info: (name: String, colorHex: String, photoData: Data?)) -> some View {
+        let color = Color(hex: info.colorHex) ?? .gray
+        let badgeSize: CGFloat = 12
+        #if canImport(UIKit)
+        if let data = info.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .frame(width: badgeSize, height: badgeSize)
+                .clipShape(Circle())
+        } else {
+            payerInitial(name: info.name, color: color, size: badgeSize)
+        }
+        #else
+        payerInitial(name: info.name, color: color, size: badgeSize)
+        #endif
+    }
+
+    private func payerInitial(name: String, color: Color, size: CGFloat) -> some View {
+        Circle()
+            .fill(color.gradient)
+            .frame(width: size, height: size)
+            .overlay(
+                Text(String(name.prefix(1)))
+                    .font(.system(size: size * 0.6, weight: .bold))
+                    .foregroundStyle(.white)
+            )
+    }
+
+    /// 行に表示する支払い者の写真を Public DB からまとめて先読みする。
+    private func prefetchPayerPhotos(_ items: [Expense]) {
+        guard isShared else { return }
+        let urns = Set(items.compactMap { $0.payerProfileID })
+            .filter {
+                !$0.isEmpty
+                && !$0.hasPrefix("email:")
+                && !$0.hasPrefix("phone:")
+                && !UserProfileStore.isVirtualRecordName($0)
+            }
+        guard !urns.isEmpty else { return }
+        Task { await PublicProfileSync.shared.fetchProfiles(forURNs: Array(urns)) }
     }
 
     /// 仮想 occurrence の行 (watch, 表示のみ・控えめ)。
