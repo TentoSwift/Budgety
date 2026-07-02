@@ -33,8 +33,11 @@ struct ExpenseDetailView: View {
             if let note = expense.note,
                !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("メモ") {
-                    Text(note)
+                    // メモ内の URL を NSDataDetector で検出し、タップ可能なリンクにする。
+                    // URL 以外の部分は従来どおり素のテキスト表示。
+                    Text(note.attributedWithDetectedLinks)
                         .foregroundStyle(.primary)
+                        .tint(expense.sheet?.tint)
                 }
             }
             if expense.generatedFromRuleID != nil {
