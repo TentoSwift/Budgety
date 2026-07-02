@@ -77,26 +77,6 @@
     "+%lld": {
       "localizations": {}
     },
-    "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The iCloud store isn’t ready yet. Please wait a moment and try again."
-          }
-        }
-      }
-    },
-    "iPhone でシートを作成すると同期されます。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sheets you create on iPhone will sync here."
-          }
-        }
-      }
-    },
     "NZドル": {
       "localizations": {
         "en": {
@@ -117,12 +97,92 @@
         }
       }
     },
-    "アーカイブ済み": {
+    "iCloud ストアの初期化が完了していません。少し待ってから再度お試しください。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archived"
+            "value": "The iCloud store isn’t ready yet. Please wait a moment and try again."
+          }
+        }
+      }
+    },
+    "iPhone でシートを作成すると同期されます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheets you create on iPhone will sync here."
+          }
+        }
+      }
+    },
+    "「%@」に参加しました": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joined “%@”"
+          }
+        }
+      }
+    },
+    "この支出を削除します。元に戻せません。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this expense. This cannot be undone."
+          }
+        }
+      }
+    },
+    "すべてのデータを削除しました。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All data has been deleted. Please restart the app."
+          }
+        }
+      }
+    },
+    "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No iCloud account was found for that email address. Please check the email registered to the Apple Account."
+          }
+        }
+      }
+    },
+    "その他": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        }
+      }
+    },
+    "その他収入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other Income"
+          }
+        }
+      }
+    },
+    "まだ記録がありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No records yet"
           }
         }
       }
@@ -133,6 +193,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Icelandic Króna"
+          }
+        }
+      }
+    },
+    "アーカイブ済み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived"
           }
         }
       }
@@ -197,42 +267,12 @@
         }
       }
     },
-    "この支出を削除します。元に戻せません。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete this expense. This cannot be undone."
-          }
-        }
-      }
-    },
     "サマリー画面の「追加」から記録できます。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You can record from “Add” on the summary screen."
-          }
-        }
-      }
-    },
-    "シート": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sheet"
-          }
-        }
-      }
-    },
-    "シートがありません": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No sheets"
           }
         }
       }
@@ -257,6 +297,26 @@
         }
       }
     },
+    "シート": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheet"
+          }
+        }
+      }
+    },
+    "シートがありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No sheets"
+          }
+        }
+      }
+    },
     "スイスフラン": {
       "localizations": {
         "en": {
@@ -277,52 +337,12 @@
         }
       }
     },
-    "すべてのデータを削除しました。アプリを再起動してください。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All data has been deleted. Please restart the app."
-          }
-        }
-      }
-    },
     "スポーツ・運動": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Sports & Fitness"
-          }
-        }
-      }
-    },
-    "そのメールアドレスに紐づく iCloud アカウントが見つかりませんでした。Apple ID に登録されているメールアドレスをご確認ください。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No iCloud account was found for that email address. Please check the email registered to the Apple Account."
-          }
-        }
-      }
-    },
-    "その他": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Other"
-          }
-        }
-      }
-    },
-    "その他収入": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Other Income"
           }
         }
       }
@@ -343,6 +363,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Czech Koruna"
+          }
+        }
+      }
+    },
+    "デバイス・IT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices & IT"
+          }
+        }
+      }
+    },
+    "デンマーククローネ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Danish Krone"
           }
         }
       }
@@ -377,26 +417,6 @@
         }
       }
     },
-    "デバイス・IT": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Devices & IT"
-          }
-        }
-      }
-    },
-    "デンマーククローネ": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Danish Krone"
-          }
-        }
-      }
-    },
     "トルコリラ": {
       "localizations": {
         "en": {
@@ -417,6 +437,16 @@
         }
       }
     },
+    "ハンガリーフォリント": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hungarian Forint"
+          }
+        }
+      }
+    },
     "パスワードが違います": {
       "localizations": {
         "en": {
@@ -433,16 +463,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter password"
-          }
-        }
-      }
-    },
-    "ハンガリーフォリント": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hungarian Forint"
           }
         }
       }
@@ -513,16 +533,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Polish Zloty"
-          }
-        }
-      }
-    },
-    "まだ記録がありません": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No records yet"
           }
         }
       }
@@ -717,12 +727,12 @@
         }
       }
     },
-    "共有ストアが準備できていません。アプリを再起動してください。": {
+    "共有の受諾に失敗しました": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The shared store isn’t ready. Please restart the app."
+            "value": "Failed to accept the share"
           }
         }
       }
@@ -733,6 +743,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Failed to accept the share: %@"
+          }
+        }
+      }
+    },
+    "共有ストアが準備できていません。アプリを再起動してください。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared store isn’t ready. Please restart the app."
           }
         }
       }
@@ -1137,22 +1157,22 @@
         }
       }
     },
-    "為替サーバから応答がありません": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No response from the exchange rate server"
-          }
-        }
-      }
-    },
     "為替の取得に失敗しました: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Failed to fetch exchange rates: %@"
+          }
+        }
+      }
+    },
+    "為替サーバから応答がありません": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No response from the exchange rate server"
           }
         }
       }

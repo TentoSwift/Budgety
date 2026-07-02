@@ -31,6 +31,8 @@ struct WatchHomeView: View {
     /// 前回開いていたシート (= 次回起動時にそこへ自動遷移)。
     @AppStorage("watchLastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
     @State private var didRestorePath = false
+    /// 共有シート受諾の成否を知らせるトースト。iOS の BudgetyApp と同じ仕組み。
+    @State private var shareToast: String?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -76,6 +78,28 @@ struct WatchHomeView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if let shareToast {
+                Text(shareToast)
+                    .font(.caption2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .shadow(radius: 4)
+            }
+        }
+        // 共有シートの受諾結果 (BudgetyWatchAppDelegate が投稿) をトースト表示。
+        .onReceive(NotificationCenter.default.publisher(for: .expensoShareAccepted)) { note in
+            let title = (note.userInfo?["shareTitle"] as? String) ?? String(localized: "シート")
+            showShareToast(String(localized: "「\(title)」に参加しました"))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .expensoShareAcceptanceFailed)) { note in
+            let message = (note.userInfo?["message"] as? String) ?? String(localized: "共有の受諾に失敗しました")
+            showShareToast(message)
+        }
         .onAppear { restoreLastOpenedSheetIfNeeded() }
         .onChange(of: sheets.count) { _, _ in restoreLastOpenedSheetIfNeeded() }
         .onChange(of: path) { oldPath, newPath in
@@ -112,6 +136,14 @@ struct WatchHomeView: View {
         }
         path = [objectID]
         didRestorePath = true
+    }
+
+    /// 共有受諾トーストを表示し 3 秒後に自動で消す (iOS BudgetyApp.showToast と同じ)。
+    private func showShareToast(_ message: String) {
+        withAnimation { shareToast = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            withAnimation { shareToast = nil }
+        }
     }
 
     /// シート一覧の 1 行 (アイコン + 名前 + 今月合計 + ロック表示)。
