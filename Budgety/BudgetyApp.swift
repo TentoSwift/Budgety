@@ -8,6 +8,7 @@
 
 import SwiftUI
 import CoreData
+import TipKit
 
 @main
 struct BudgetyApp: App {
@@ -88,6 +89,13 @@ struct BudgetyApp: App {
                     showToast(message)
                 }
                 .task {
+                    // TipKit: 機能紹介の Tip を初期化。
+                    // displayFrequency は控えめに 1 日 1 回まで。各 Tip は初回表示後に
+                    // 自動 invalidate される (標準挙動)。
+                    try? Tips.configure([
+                        .displayFrequency(.daily),
+                        .datastoreLocation(.applicationDefault)
+                    ])
                     // オンボーディングは初回起動時のみ表示。
                     if onboardingFlow == nil, !hasShownOnboarding {
                         onboardingFlow = .welcome

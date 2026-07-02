@@ -8,6 +8,7 @@ import CoreData
 import PhotosUI
 import CloudKit
 import UIKit
+import TipKit
 
 struct AddExpenseView: View {
     enum Mode {
@@ -131,6 +132,8 @@ struct AddExpenseView: View {
     @State private var pendingEditRuleAction: RecurringRule?
     @State private var showCameraScanner: Bool = false
     @State private var showPhotoScanner: Bool = false
+    /// TipKit: レシート読み取り機能の紹介 (新規追加時のみ表示)。
+    private let receiptScanTip = ReceiptScanTip()
 
     /// 提案中のカテゴリ (出所は履歴学習 or FoundationModels だが、表示は「AI 提案」で統一する)。
     @State private var aiCategorySuggestion: ExpenseCategory?
@@ -1175,6 +1178,7 @@ struct AddExpenseView: View {
                         .accessibilityShowsLargeContentViewer {
                             Label("レシートから読み込み", systemImage: "text.viewfinder")
                         }
+                        .popoverTip(receiptScanTip)
                     }
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 }

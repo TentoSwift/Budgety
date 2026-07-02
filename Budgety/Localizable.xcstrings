@@ -6665,6 +6665,66 @@
           }
         }
       }
+    },
+    "まとめて絞り込み": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter all at once"
+          }
+        }
+      }
+    },
+    "カテゴリ・人・受益者・割り勘でシートの項目を素早く絞り込めます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quickly narrow down sheet entries by category, person, beneficiary, or split."
+          }
+        }
+      }
+    },
+    "レシートから自動入力": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-fill from a receipt"
+          }
+        }
+      }
+    },
+    "レシートを撮影・選択すると、金額や日付を自動で読み取って入力できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snap or pick a receipt to automatically read and fill in the amount and date."
+          }
+        }
+      }
+    },
+    "便利な機能はこちら": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Handy features are here"
+          }
+        }
+      }
+    },
+    "AI チャットや精算・統計・エクスポートなどの機能をここから開けます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open AI Chat, settlement, statistics, export, and more from here."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
