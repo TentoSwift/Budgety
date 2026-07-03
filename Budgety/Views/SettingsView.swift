@@ -136,6 +136,14 @@ struct SettingsView: View {
 
                 // Claude / MCP 連携は macOS 専用 (アプリ本体を MCP サーバーとして登録する方式)。
                 // iOS はバイナリを CLI 起動できないため、この導線は macOS のみに置く。
+                // iOS では設定できないため、案内のみ footer に表示する。
+                Section {
+                    Label("Claude / MCP 連携", systemImage: "sparkles")
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text("Claude / MCP との連携は macOS 版でご利用いただけます。Mac 版の設定画面からセットアップできます。")
+                        .font(.caption)
+                }
 
                 Section("バージョン") {
                     infoRow("Budgety") {
