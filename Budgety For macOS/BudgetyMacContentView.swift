@@ -198,10 +198,15 @@ struct BudgetyMacContentView: View {
         }
     }
 
-    /// Apple Music の sidebar footer 風プロフィール行。タップで ProfileEditView を開く。
+    /// Apple Music の sidebar footer 風プロフィール行。タップで「プロフィールを編集」/「設定」を選べるメニューを開く。
     private var profileFooter: some View {
-        Button {
-            showingProfileEdit = true
+        Menu {
+            Button("プロフィールを編集") {
+                showingProfileEdit = true
+            }
+            Button("設定") {
+                showSettingsView = true
+            }
         } label: {
             HStack(spacing: 10) {
                 AvatarView(
@@ -220,8 +225,9 @@ struct BudgetyMacContentView: View {
             .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .help("プロフィールを編集")
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("プロフィールを編集 / 設定")
         .background(.bar)
     }
 

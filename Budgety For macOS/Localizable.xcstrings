@@ -2536,6 +2536,16 @@
         }
       }
     },
+    "設定": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
     "ヘッダ": {
       "localizations": {
         "en": {
