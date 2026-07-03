@@ -22,10 +22,8 @@ struct AddSheetView: View {
     @State private var showingPaywall: Bool = false
     @State private var showingMoreIcons: Bool = false
 
-    private let palette: [String] = [
-        "#5B8DEF", "#34C759", "#FF9500", "#FF3B30",
-        "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00"
-    ]
+    /// カラーパレットは iOS / macOS 共通 (`Color.sheetColorPalette`) を参照する。
+    private let palette: [String] = Color.sheetColorPalette
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
