@@ -1109,6 +1109,7 @@ struct AddExpenseView: View {
                             showingDeleteConfirm = true
                         } label: {
                             Label("この支出を削除", systemImage: "trash")
+                                .foregroundStyle(.red)
                                 .frame(maxWidth: .infinity)
                         }
                     }
