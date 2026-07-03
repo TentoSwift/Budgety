@@ -1121,7 +1121,10 @@ struct AddExpenseView: View {
                         Button(role: .destructive) {
                             showingDeleteConfirm = true
                         } label: {
-                            Label("この支出を削除", systemImage: "trash")
+                            // trash アイコンを外しテキストのみ。親 Form の .tint(sheetTint)
+                            // が Label のシンボル/テキスト色を上書きしてしまい赤くならない
+                            // ため、明示的に .foregroundStyle(.red) で赤を確定させる。
+                            Text("この支出を削除")
                                 .foregroundStyle(.red)
                                 .frame(maxWidth: .infinity)
                         }
