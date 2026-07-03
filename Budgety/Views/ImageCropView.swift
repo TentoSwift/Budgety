@@ -99,10 +99,18 @@ struct ImageCropView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { onCancel() }
+                    Button {
+                        onCancel()
+                    } label: {
+                        Label("閉じる", systemImage: "xmark")
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("決定") { confirm() }
+                    Button {
+                        confirm()
+                    } label: {
+                        Label("完了", systemImage: "checkmark")
+                    }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
