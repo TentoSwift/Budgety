@@ -1798,6 +1798,26 @@
         }
       }
     },
+    "アーカイブ済みセクションを展開": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand the Archived section"
+          }
+        }
+      }
+    },
+    "アーカイブ済みセクションを折りたたむ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse the Archived section"
+          }
+        }
+      }
+    },
     "イスラエルシェケル": {
       "localizations": {
         "en": {
@@ -4920,6 +4940,16 @@
         }
       }
     },
+    "展開中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expanded"
+          }
+        }
+      }
+    },
     "工具・DIY": {
       "localizations": {
         "en": {
@@ -4996,6 +5026,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Investment"
+          }
+        }
+      }
+    },
+    "折りたたみ中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapsed"
           }
         }
       }

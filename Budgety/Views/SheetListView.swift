@@ -95,6 +95,9 @@ struct SheetListView: View {
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
     @ObservedObject private var lockManager = SheetLockManager.shared
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
+    /// アーカイブ済みセクションの開閉状態。折りたたみ可能・端末に永続化 (macOS と同じ流儀)。
+    /// iOS では既定を閉じた状態にする。
+    @AppStorage("iosArchivedSectionExpanded") private var archivedExpanded = false
 
     /// topBarLeading に置く設定ボタン。歯車ではなく自分のプロフィール
     /// アバターを表示し、タップで SettingsView を開く。
@@ -173,14 +176,43 @@ struct SheetListView: View {
                             }
                         }
                         if !archivedSheets.isEmpty {
+                            // 折りたたみ可能なセクション (macOS と同じ流儀)。
+                            // .listStyle(.plain) では Section(isExpanded:) の
+                            // 開閉トライアングルが描画されないため、見出し自体を
+                            // タップ可能にして開閉する。開閉状態は @AppStorage で永続化。
                             Section {
-                                ForEach(archivedSheets) { sheet in
-                                    sheetListRow(sheet)
+                                if archivedExpanded {
+                                    ForEach(archivedSheets) { sheet in
+                                        sheetListRow(sheet)
+                                    }
                                 }
                             } header: {
-                                Label("アーカイブ済み", systemImage: "archivebox")
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        archivedExpanded.toggle()
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Label("アーカイブ済み", systemImage: "archivebox")
+                                        Text("\(archivedSheets.count)")
+                                            .monospacedDigit()
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .rotationEffect(.degrees(archivedExpanded ? 90 : 0))
+                                    }
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(Text("アーカイブ済み"))
+                                .accessibilityValue(Text(archivedExpanded
+                                    ? String(localized: "展開中")
+                                    : String(localized: "折りたたみ中")))
+                                .accessibilityHint(Text(archivedExpanded
+                                    ? String(localized: "アーカイブ済みセクションを折りたたむ")
+                                    : String(localized: "アーカイブ済みセクションを展開")))
                             }
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
@@ -215,11 +247,14 @@ struct SheetListView: View {
                 }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .confirm) {
+                    // 他のツールバーボタンと同様の控えめな見た目にするため、
+                    // prominent な role(.confirm) を外し tint を clear にする。
+                    Button {
                         tryShowAddSheet()
                     } label: {
                         Label("シートを追加", systemImage: "plus")
                     }
+                    .tint(.clear)
                     .popoverTip(addSheetTip)
                 }
             }
@@ -1097,9 +1132,13 @@ private struct SheetRowView: View {
 
     var body: some View {
         HStack(spacing: 14) {
+            // アーカイブ済みは一覧で控えめに見せる (macOS と同じ: アイコンを
+            // 減光・名前を secondary)。
             SheetIconView(record: record, size: 44)
+                .opacity(record.archived ? 0.5 : 1)
             Text(record.displayName)
                 .font(.headline)
+                .foregroundStyle(record.archived ? .secondary : .primary)
             Spacer()
             if lockManager.hasPassword(for: record) {
                 Image(systemName: lockManager.isUnlocked(record) ? "lock.open.fill" : "lock.fill")
