@@ -481,12 +481,14 @@ struct SheetDetailView: View {
                 Button {
                     showingShare = true
                 } label: {
-                    // メンバーが居れば「参加済み」を表すチェック付き、居なければ招待を促す + 付き。
-                    Image(systemName: hasAcceptedOtherMembers
+                    // 実際に共有中 (CKShare の受諾済み実参加者が居る) なら「参加済み」を表す
+                    // チェック付き、そうでなければ招待を促す + 付き。
+                    // バーチャルメンバーだけの場合は「共有中」ではないので + のまま。
+                    Image(systemName: hasAcceptedSharedParticipants
                           ? "person.crop.circle.badge.checkmark"
                           : "person.crop.circle.badge.plus")
                 }
-                .accessibilityLabel(hasAcceptedOtherMembers ? String(localized: "共有メンバー") : String(localized: "シートを共有"))
+                .accessibilityLabel(hasAcceptedSharedParticipants ? String(localized: "共有メンバー") : String(localized: "シートを共有"))
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -952,6 +954,21 @@ struct SheetDetailView: View {
         return profilesAll.contains { p in
             let rn = p.recordName ?? ""
             return !rn.isEmpty && rn != myRN
+        }
+    }
+
+    /// 実際に共有中か = CKShare の受諾済み (acceptanceStatus == .accepted) の
+    /// 自分以外の実参加者が居るか。バーチャルメンバー (アプリを使わない仮想メンバー) や
+    /// 招待中 (pending) の相手は「共有中」に数えない。共有ボタンの記号 (チェック付き) の
+    /// 判定に使う。
+    private var hasAcceptedSharedParticipants: Bool {
+        guard let share = ShareCoordinator.shared.existingShare(for: record) else { return false }
+        let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
+        return share.participants.contains { p in
+            guard p.acceptanceStatus == .accepted else { return false }
+            let rn = p.userIdentity.userRecordID?.recordName ?? ""
+            guard !rn.isEmpty, !UserProfileStore.isSelfPlaceholderRecordName(rn) else { return false }
+            return !selfIDs.contains(rn)
         }
     }
 

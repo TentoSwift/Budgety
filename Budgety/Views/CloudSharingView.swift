@@ -112,6 +112,9 @@ struct CloudSharingView: View {
                 }
             }
         }
+        // シート全体のアクセント (トグル・リンク・ボタン色等) をシートの色に合わせる。
+        // role: .destructive のボタンは赤のまま残る。
+        .tint(record.tint)
     }
 
     private var premiumForm: some View {
@@ -339,7 +342,7 @@ struct CloudSharingView: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .foregroundStyle(isValidEmail ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isValidEmail ? record.tint : Color.secondary)
             }
             .disabled(isProcessing || !isValidEmail)
         } header: {
