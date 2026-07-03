@@ -6560,6 +6560,16 @@
         }
       }
     },
+    "通貨を選択": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a currency"
+          }
+        }
+      }
+    },
     "過去の支出で使われている場合、履歴を保つためアーカイブされ、新規の割り勘候補から外れます。使われていなければ完全に削除されます。": {
       "localizations": {
         "en": {

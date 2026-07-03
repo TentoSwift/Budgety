@@ -1020,12 +1020,25 @@ struct AddExpenseView: View {
                     .onChange(of: title) { _, _ in
                         recomputeTitleSuggestion()
                     }
-                    Picker("通貨", selection: $currencyCode) {
-                        ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
-                            Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
+                    // 通貨選択は標準の Picker(.navigationLink) ではなく自作の
+                    // NavigationLink + DiscardGuardedBack にする。標準 Picker の
+                    // push 先には確認ダイアログ (DiscardConfirmModifier) のアンカーを
+                    // 差し込めず、通貨画面を開いたままシートをスワイプで閉じると
+                    // 「変更を破棄しますか?」が出ずにそのまま閉じてしまうため。
+                    NavigationLink {
+                        DiscardGuardedBack(modifier: discardDialogModifier) {
+                            CurrencyPickerView(selectedCode: $currencyCode)
+                                // push 先は Form の .tint(sheetTint) を継承しないため明示適用
+                                // (カテゴリ/支払い者ピッカーと同じ扱い)。
+                                .tint(sheetTint)
+                        }
+                    } label: {
+                        LabeledContent("通貨") {
+                            let opt = CurrencyCatalog.option(for: currencyCode)
+                            Text("\(opt.symbol)  \(opt.code)")
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .pickerStyle(.navigationLink)
                 }
 
                 aiCategorySuggestionSection
