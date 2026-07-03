@@ -13,6 +13,33 @@
 //
 //  ルートビューに `.appUpdateGate()` を付けるだけで有効になる。
 //
+//  --- version.json スキーマ (運用者向け) ---
+//
+//  minimum / latest はプラットフォーム別に指定できる。判定は「自プラットフォーム
+//  専用キーがあればそれを最優先、無ければ共通キーにフォールバック」する。
+//  message / appStoreURL は共通のみ (プラットフォーム別の出し分けはしない)。
+//
+//  対応キー:
+//    共通         : minimumVersion,      latestVersion
+//    iOS 専用     : minimumVersionIOS,   latestVersionIOS
+//    macOS 専用   : minimumVersionMacOS, latestVersionMacOS
+//    (このチェッカーは iOS / macOS ターゲットにのみコンパイルされる)
+//
+//  例 1) 全 OS 共通で運用 (従来どおり):
+//    { "minimumVersion": "1.0.4", "latestVersion": "1.0.5",
+//      "appStoreURL": "https://apps.apple.com/app/id6768543053" }
+//
+//  例 2) iOS だけ 1.0.5 を強制、macOS はストア審査待ちで据え置きたい:
+//    {
+//      "minimumVersionIOS":   "1.0.5",   // iOS < 1.0.5 → 強制
+//      "minimumVersionMacOS": "1.0.4",   // macOS < 1.0.4 → 強制 (1.0.4 はブロックされない)
+//      "latestVersion":       "1.0.5",   // 任意案内は共通
+//      "appStoreURL": "https://apps.apple.com/app/id6768543053"
+//    }
+//  → iOS 1.0.4 ユーザーだけがブロックされ、macOS 1.0.4 ユーザーは影響を受けない。
+//
+//  専用キーを省略したプラットフォームは自動的に共通キーで判定される。
+//
 
 import SwiftUI
 import Combine
@@ -70,10 +97,36 @@ final class AppUpdateChecker: ObservableObject {
     private var lastChecked: Date?
 
     private struct Config: Decodable {
+        // 共通キー (従来からの互換キー)。専用キーが無いときのフォールバック。
         let minimumVersion: String?
         let latestVersion: String?
+        // プラットフォーム別キー (optional)。あれば自プラットフォームで最優先。
+        let minimumVersionIOS: String?
+        let latestVersionIOS: String?
+        let minimumVersionMacOS: String?
+        let latestVersionMacOS: String?
         let message: String?
         let appStoreURL: String?
+
+        /// 現在のプラットフォームに対する minimumVersion。
+        /// 専用キーがあれば優先し、無ければ共通キーへフォールバックする。
+        var resolvedMinimumVersion: String? {
+            #if os(macOS)
+            minimumVersionMacOS ?? minimumVersion
+            #else
+            // iOS / iPadOS / Mac Catalyst など (このチェッカーは watch/vision に非搭載)
+            minimumVersionIOS ?? minimumVersion
+            #endif
+        }
+
+        /// 現在のプラットフォームに対する latestVersion。
+        var resolvedLatestVersion: String? {
+            #if os(macOS)
+            latestVersionMacOS ?? latestVersion
+            #else
+            latestVersionIOS ?? latestVersion
+            #endif
+        }
     }
 
     /// 現在インストールされているアプリの短縮バージョン (CFBundleShortVersionString)。
@@ -103,8 +156,9 @@ final class AppUpdateChecker: ObservableObject {
     private func apply(_ cfg: Config) {
         let current = Self.currentVersion
         let storeURL = cfg.appStoreURL.flatMap(URL.init(string:)) ?? fallbackStoreURL
-        let minimum = cfg.minimumVersion ?? "0"
-        let latest = cfg.latestVersion ?? minimum
+        // プラットフォーム別キーを優先し、無ければ共通キーにフォールバック。
+        let minimum = cfg.resolvedMinimumVersion ?? "0"
+        let latest = cfg.resolvedLatestVersion ?? minimum
 
         if isVersion(current, lessThan: minimum) {
             status = .forced(message: cfg.message, url: storeURL)
