@@ -213,11 +213,11 @@ struct MacShareSheetView: View {
     @ViewBuilder
     private var inviteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("メールアドレスで招待")
+            Text("Apple Account のメールアドレスで招待")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack {
-                TextField("name@example.com", text: $inviteEmail)
+                TextField("name@icloud.com", text: $inviteEmail)
                     .textFieldStyle(.roundedBorder)
                     .disabled(inviting)
                 Button {
@@ -226,7 +226,7 @@ struct MacShareSheetView: View {
                     if inviting {
                         ProgressView().controlSize(.small)
                     } else {
-                        Text("招待")
+                        Label("招待する", systemImage: "plus")
                     }
                 }
                 .disabled(inviteEmail.trimmingCharacters(in: .whitespaces).isEmpty || inviting)
@@ -235,7 +235,7 @@ struct MacShareSheetView: View {
             if let msg = inviteSucceedMessage {
                 Text(msg).font(.caption).foregroundStyle(.secondary)
             }
-            Text("相手は iCloud にサインインしている必要があります。招待は CKShare 経由で送られます。")
+            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をクリックすると「招待中」として登録されます。続いて下の「リンクを送る」からリンクをコピーして、メールやメッセージなどで相手に送ってください。招待した相手はリンクを開くことで参加できます。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
@@ -243,7 +243,7 @@ struct MacShareSheetView: View {
     @ViewBuilder
     private var shareLinkSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("共有リンク")
+            Text("リンクを送る")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             HStack {
@@ -254,7 +254,7 @@ struct MacShareSheetView: View {
                         .truncationMode(.middle)
                         .textSelection(.enabled)
                     Spacer()
-                    Button("コピー") {
+                    Button("リンクをコピー") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(url.absoluteString, forType: .string)
                     }
@@ -265,14 +265,14 @@ struct MacShareSheetView: View {
                         if preparingURL {
                             ProgressView().controlSize(.small)
                         } else {
-                            Text("リンクを取得")
+                            Text("共有リンクを準備")
                         }
                     }
                     .disabled(preparingURL)
                     Spacer()
                 }
             }
-            Text("このリンクを知っている人が iCloud アカウントで参加できます (招待者は事前に追加が必要)。")
+            Text("「招待する」で登録した相手に、メールやメッセージなどでこのリンクを送ることもできます。相手はリンクを開いて参加できます。")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
