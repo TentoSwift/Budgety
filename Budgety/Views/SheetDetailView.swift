@@ -43,7 +43,7 @@ struct SheetDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
 
     enum Period: String, CaseIterable, Identifiable {
-        case thisMonth, lastMonth, thisYear, all
+        case thisMonth, lastMonth, thisYear, all, custom
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -51,13 +51,27 @@ struct SheetDetailView: View {
             case .lastMonth: String(localized: "先月")
             case .thisYear:  String(localized: "今年")
             case .all:       String(localized: "全期間")
+            case .custom:    String(localized: "period.custom", defaultValue: "カスタム")
             }
         }
         /// 期間フィルタが有効か (全期間以外なら絞り込み中)。
         var isFiltering: Bool { self != .all }
 
-        /// サマリカードのヘッダー表示 ("2026年11月" / "先月の年月" / "2026年" / "全期間")。
+        /// カスタム範囲を「開始〜終了」で整形する。locale 追従。
+        /// start > end の場合は入れ替えて表示する (防御的)。
+        static func customRangeLabel(start: Date, end: Date) -> String {
+            let df = DateFormatter()
+            df.locale = .autoupdatingCurrent
+            df.setLocalizedDateFormatFromTemplate("yMd")
+            let lo = min(start, end)
+            let hi = max(start, end)
+            let sep = String(localized: "period.custom.rangeSeparator", defaultValue: "〜")
+            return df.string(from: lo) + sep + df.string(from: hi)
+        }
+
+        /// サマリカードのヘッダー表示 ("2026年11月" / "先月の年月" / "2026年" / "全期間" / "カスタム")。
         /// SummaryCard / 検索結果カードの期間ピッカーで共通利用する。
+        /// `.custom` の具体的な範囲表示は `headerLabel(customStart:customEnd:)` を使う。
         var headerLabel: String {
             let df = DateFormatter()
             df.locale = .autoupdatingCurrent
@@ -75,11 +89,25 @@ struct SheetDetailView: View {
                 return yf.string(from: .now)
             case .all:
                 return String(localized: "全期間")
+            case .custom:
+                return String(localized: "period.custom", defaultValue: "カスタム")
             }
         }
 
+        /// カスタム範囲を含めたヘッダー表示。`.custom` のときは「開始〜終了」を返し、
+        /// それ以外は `headerLabel` と同じ。
+        func headerLabel(customStart: Date, customEnd: Date) -> String {
+            if self == .custom {
+                return Self.customRangeLabel(start: customStart, end: customEnd)
+            }
+            return headerLabel
+        }
+
         /// 指定日がこの期間に含まれるか。`.all` は常に true。
-        func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        /// `.custom` は `customStart`/`customEnd` の閉区間 (日単位) で判定する。
+        /// custom 範囲が未指定 (nil) のときは全件通す。
+        func contains(_ date: Date?, now: Date = .now, calendar: Calendar = .current,
+                      customStart: Date? = nil, customEnd: Date? = nil) -> Bool {
             guard self != .all else { return true }
             guard let d = date else { return false }
             switch self {
@@ -92,6 +120,15 @@ struct SheetDetailView: View {
                 return calendar.isDate(d, equalTo: now, toGranularity: .year)
             case .all:
                 return true
+            case .custom:
+                guard let s = customStart, let e = customEnd else { return true }
+                // 日単位の閉区間 [開始日の 0:00, 終了日の翌日 0:00) で判定する。
+                let lo = calendar.startOfDay(for: min(s, e))
+                let hiDay = calendar.startOfDay(for: max(s, e))
+                guard let hiExclusive = calendar.date(byAdding: .day, value: 1, to: hiDay) else {
+                    return d >= lo
+                }
+                return d >= lo && d < hiExclusive
             }
         }
     }
@@ -127,6 +164,12 @@ struct SheetDetailView: View {
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     // 検索専用の searchPeriod は永続化せず従来どおり (検索開始で .all にリセット)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
+    /// カスタム期間の開始/終了。Date は AppStorage に直接置けないので参照日からの
+    /// 秒数 (timeIntervalSinceReferenceDate) で永続化する。既定は「今日」。
+    @AppStorage("sheetDetailCustomStart") private var customStartRaw: Double = Date.now.timeIntervalSinceReferenceDate
+    @AppStorage("sheetDetailCustomEnd") private var customEndRaw: Double = Date.now.timeIntervalSinceReferenceDate
+    /// カスタム期間シートの表示。
+    @State private var showingCustomPeriod = false
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHeight: CGFloat = 30
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
@@ -225,6 +268,11 @@ struct SheetDetailView: View {
             set: { self.sortFieldRaw = $0.rawValue }
         )
     }
+
+    /// カスタム期間の開始日 (永続化した秒数から復元)。
+    private var customStart: Date { Date(timeIntervalSinceReferenceDate: customStartRaw) }
+    /// カスタム期間の終了日。
+    private var customEnd: Date { Date(timeIntervalSinceReferenceDate: customEndRaw) }
 
     // MARK: - Filtering
 
@@ -344,6 +392,9 @@ struct SheetDetailView: View {
                 SummaryCard(
                     record: record,
                     period: effectivePeriodBinding,
+                    customStart: $customStartRaw,
+                    customEnd: $customEndRaw,
+                    onEditCustomPeriod: { showingCustomPeriod = true },
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
                     selectedPayerID: selectedPayerID,
@@ -436,6 +487,7 @@ struct SheetDetailView: View {
                     } label: {
                         Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
                     }
+                    .tint(record.tint)
                     .popoverTip(filterTip)
                 }
             }
@@ -623,6 +675,16 @@ struct SheetDetailView: View {
         }
         .sheet(isPresented: $showingCSVImport) {
             CSVImportView(sheet: record)
+        }
+        .sheet(isPresented: $showingCustomPeriod) {
+            CustomPeriodSheet(
+                startRaw: $customStartRaw,
+                endRaw: $customEndRaw,
+                tint: record.tint,
+                onApply: { period = .custom }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $exportPaywall) {
             PaywallView()
@@ -815,7 +877,7 @@ struct SheetDetailView: View {
                     splitFilter = .all
                     searchPeriod = .all
                 }
-                .buttonStyle(.plain)
+                .tint(record.tint)
             }
             .listSectionSeparator(.hidden)
             .listRowSeparator(.hidden)
@@ -1283,6 +1345,11 @@ struct SheetDetailView: View {
 private struct SummaryCard: View {
     @ObservedObject var record: ExpenseSheet
     @Binding var period: SheetDetailView.Period
+    /// カスタム期間の開始/終了 (参照日からの秒数)。カスタム選択時のみ意味を持つ。
+    @Binding var customStartRaw: Double
+    @Binding var customEndRaw: Double
+    /// 「カスタム…」を選んだときに親へ範囲編集シートを開かせるコールバック。
+    let onEditCustomPeriod: () -> Void
     /// 検索バーがアクティブ (フォーカス中 or 入力済み) か。
     /// アクティブ かつ クエリ未入力なら合計は 0 (= 行リストの「0 件」と一致させる)。
     let searchActive: Bool
@@ -1306,6 +1373,9 @@ private struct SummaryCard: View {
     init(
         record: ExpenseSheet,
         period: Binding<SheetDetailView.Period>,
+        customStart: Binding<Double>,
+        customEnd: Binding<Double>,
+        onEditCustomPeriod: @escaping () -> Void,
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
         selectedPayerID: String? = nil,
@@ -1315,6 +1385,9 @@ private struct SummaryCard: View {
     ) {
         self.record = record
         self._period = period
+        self._customStartRaw = customStart
+        self._customEndRaw = customEnd
+        self.onEditCustomPeriod = onEditCustomPeriod
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
         self.selectedPayerID = selectedPayerID
@@ -1331,6 +1404,10 @@ private struct SummaryCard: View {
         )
     }
 
+    /// カスタム期間の開始/終了 (秒数 → Date)。
+    private var customStart: Date { Date(timeIntervalSinceReferenceDate: customStartRaw) }
+    private var customEnd: Date { Date(timeIntervalSinceReferenceDate: customEndRaw) }
+
     /// 集計を検索ヒットに絞っているか (= 件数表示やメトリクス非表示の判定)。
     private var isSearching: Bool { searchActive }
 
@@ -1343,7 +1420,8 @@ private struct SummaryCard: View {
     /// 不変) ではロールが残る。
     private var filterSig: String {
         let cat = selectedCategory?.objectID.uriRepresentation().absoluteString ?? "-"
-        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(searchQuery)"
+        let custom = period == .custom ? "\(customStartRaw)-\(customEndRaw)" : "-"
+        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(custom)|\(searchQuery)"
     }
 
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
@@ -1361,7 +1439,7 @@ private struct SummaryCard: View {
         var incomeSum: Decimal = 0
         var missing: Set<String> = []
         var hitCount = 0
-        for e in expenses where period.contains(e.date) {
+        for e in expenses where period.contains(e.date, customStart: customStart, customEnd: customEnd) {
             if let categoryID, e.category?.objectID != categoryID { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
             if let benID = selectedBeneficiaryID, !beneficiaryMatches(e.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) { continue }
@@ -1385,7 +1463,7 @@ private struct SummaryCard: View {
         }
         // 仮想 occurrence (完全仮想化 ON 時のみ非空) も同条件で合計に反映する。
         for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
-            where period.contains(occ.date) {
+            where period.contains(occ.date, customStart: customStart, customEnd: customEnd) {
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
@@ -1516,7 +1594,8 @@ private struct SummaryCard: View {
         #if os(iOS)
         PeriodMenuControl(
             period: $period,
-            periodLabel: periodHeaderLabel
+            periodLabel: periodHeaderLabel,
+            onCustomSelected: onEditCustomPeriod
         )
         .fixedSize()
         #else
@@ -1527,7 +1606,7 @@ private struct SummaryCard: View {
     /// iOS 以外向け (= 旧 SwiftUI Menu 版)。
     private var legacyPeriodMenuLabel: some View {
         Menu {
-            ForEach(SheetDetailView.Period.allCases) { p in
+            ForEach(SheetDetailView.Period.allCases.filter { $0 != .custom }) { p in
                 Button {
                     period = p
                 } label: {
@@ -1535,6 +1614,14 @@ private struct SummaryCard: View {
                         Text(p.label)
                         if p == period { Image(systemName: "checkmark") }
                     }
+                }
+            }
+            Button {
+                onEditCustomPeriod()
+            } label: {
+                HStack {
+                    Text(SheetDetailView.Period.custom.label + "…")
+                    if period == .custom { Image(systemName: "checkmark") }
                 }
             }
         } label: {
@@ -1549,8 +1636,10 @@ private struct SummaryCard: View {
         }
     }
 
-    /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "カスタム")
-    private var periodHeaderLabel: String { period.headerLabel }
+    /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "2020/12/09〜2026/07/03")
+    private var periodHeaderLabel: String {
+        period.headerLabel(customStart: customStart, customEnd: customEnd)
+    }
 
     /// 期間に応じた支出キャプション
     private var expenseCaption: String {
@@ -1559,6 +1648,7 @@ private struct SummaryCard: View {
         case .lastMonth: String(localized: "先月の支出")
         case .thisYear:  String(localized: "今年の支出")
         case .all:       String(localized: "全期間の支出")
+        case .custom:    String(localized: "period.custom.expenseCaption", defaultValue: "この期間の支出")
         }
     }
 
@@ -1708,7 +1798,7 @@ private struct SummaryCard: View {
 
     private var periodPill: some View {
         Menu {
-            ForEach(SheetDetailView.Period.allCases) { p in
+            ForEach(SheetDetailView.Period.allCases.filter { $0 != .custom }) { p in
                 Button {
                     period = p
                 } label: {
@@ -1716,6 +1806,14 @@ private struct SummaryCard: View {
                         Text(p.label)
                         if p == period { Image(systemName: "checkmark") }
                     }
+                }
+            }
+            Button {
+                onEditCustomPeriod()
+            } label: {
+                HStack {
+                    Text(SheetDetailView.Period.custom.label + "…")
+                    if period == .custom { Image(systemName: "checkmark") }
                 }
             }
         } label: {
@@ -1811,6 +1909,83 @@ private struct SummaryCard: View {
             }
         }
         .padding(.top, 4)
+    }
+}
+
+// MARK: - Custom Period Sheet
+
+/// カスタム期間 (開始日〜終了日) を選ぶ小さなシート。
+/// 開始/終了は参照日からの秒数 Binding で親 (AppStorage) に直結する。
+/// 終了日の既定は今日。開始 > 終了にならないよう互いの範囲を制限する。
+private struct CustomPeriodSheet: View {
+    @Binding var startRaw: Double
+    @Binding var endRaw: Double
+    let tint: Color
+    /// 「適用」で範囲を確定したときに親の period を .custom へ切り替えるコールバック。
+    let onApply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    // シート内はドラフトで編集し、「適用」で親へ書き戻す。キャンセルは破棄。
+    @State private var draftStart: Date = .now
+    @State private var draftEnd: Date = .now
+    @State private var didInit = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker(
+                        String(localized: "開始日"),
+                        selection: $draftStart,
+                        in: ...draftEnd,
+                        displayedComponents: .date
+                    )
+                    DatePicker(
+                        String(localized: "終了日"),
+                        selection: $draftEnd,
+                        in: draftStart...,
+                        displayedComponents: .date
+                    )
+                } footer: {
+                    Text(SheetDetailView.Period.customRangeLabel(start: draftStart, end: draftEnd))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(tint)
+            .navigationTitle(String(localized: "period.custom", defaultValue: "カスタム"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(role: .cancel) { dismiss() } label: {
+                        Label("キャンセル", systemImage: "xmark")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .confirm) {
+                        // 念のため開始 ≤ 終了へ正規化してから書き戻す。
+                        let lo = min(draftStart, draftEnd)
+                        let hi = max(draftStart, draftEnd)
+                        startRaw = lo.timeIntervalSinceReferenceDate
+                        endRaw = hi.timeIntervalSinceReferenceDate
+                        onApply()
+                        dismiss()
+                    } label: {
+                        Label(String(localized: "適用"), systemImage: "checkmark")
+                    }
+                    .tint(tint)
+                }
+            }
+            .onAppear {
+                guard !didInit else { return }
+                draftStart = Date(timeIntervalSinceReferenceDate: startRaw)
+                // 終了日の既定は今日 (未設定・過去のままなら now に寄せる)。
+                let storedEnd = Date(timeIntervalSinceReferenceDate: endRaw)
+                draftEnd = max(storedEnd, draftStart)
+                if draftStart > draftEnd { draftStart = draftEnd }
+                didInit = true
+            }
+        }
     }
 }
 
@@ -2290,6 +2465,9 @@ struct ExpenseFilterSheet: View {
                 }
                 categorySection
             }
+            // シート内のリセットボタン・選択チェックマーク等をシート色に統一する
+            // (FilterOptionList の checkmark は .tint を参照する)。
+            .tint(record.tint)
             .navigationTitle("フィルタ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
