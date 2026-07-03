@@ -766,10 +766,8 @@ private struct MacSheetFormDialog: View {
     }
 
     /// リマインダー準拠の 12 色パレット。
-    private let palette: [String] = [
-        "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#5AC8FA", "#5B8DEF",
-        "#5856D6", "#FF2D55", "#AF52DE", "#A2845E", "#8E8E93", "#FFB1C8"
-    ]
+    /// カラーパレットは iOS / macOS 共通 (`Color.sheetColorPalette`) を参照する。
+    private let palette: [String] = Color.sheetColorPalette
 
     /// 現在選択中のカラー (フォールバックはアクセントカラー)。
     private var selectedColor: Color {

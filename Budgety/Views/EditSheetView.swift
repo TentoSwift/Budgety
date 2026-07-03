@@ -72,10 +72,8 @@ struct EditSheetView: View {
         !["JPY", "KRW", "VND", "IDR"].contains(defaultCurrencyCode)
     }
 
-    private let palette: [String] = [
-        "#5B8DEF", "#34C759", "#FF9500", "#FF3B30",
-        "#AF52DE", "#FF2D55", "#5AC8FA", "#FFCC00"
-    ]
+    /// カラーパレットは iOS / macOS 共通 (`Color.sheetColorPalette`) を参照する。
+    private let palette: [String] = Color.sheetColorPalette
 
     var body: some View {
         NavigationStack {
