@@ -19,6 +19,9 @@ import UIKit
 struct PeriodMenuControl: UIViewRepresentable {
     @Binding var period: SheetDetailView.Period
     let periodLabel: String
+    /// 「カスタム…」を選んだときのコールバック。nil ならメニューに「カスタム」を出さない
+    /// (= カスタム範囲編集 UI を持たない呼び出し元。検索用の SheetListView 等)。
+    var onCustomSelected: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> _PeriodMenuUIControl {
         let v = _PeriodMenuUIControl()
@@ -30,6 +33,7 @@ struct PeriodMenuControl: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: _PeriodMenuUIControl, context: Context) {
+        uiView.onCustomSelected = onCustomSelected
         uiView.update(current: period, periodLabel: periodLabel)
     }
 
@@ -87,6 +91,8 @@ final class _PeriodMenuUIControl: UIControl {
     // MARK: - State
 
     var onSelect: ((SheetDetailView.Period) -> Void)?
+    /// 「カスタム…」選択時のコールバック。nil ならカスタム項目を出さない。
+    var onCustomSelected: (() -> Void)?
     private var currentPeriod: SheetDetailView.Period = .thisMonth
 
     // MARK: - Init
@@ -146,13 +152,27 @@ final class _PeriodMenuUIControl: UIControl {
         _ interaction: UIContextMenuInteraction,
         configurationForMenuAtLocation location: CGPoint
     ) -> UIContextMenuConfiguration? {
-        let actions = SheetDetailView.Period.allCases.map { p -> UIAction in
-            UIAction(
-                title: p.label,
-                state: (p == currentPeriod) ? .on : .off
-            ) { [weak self] _ in
-                self?.onSelect?(p)
+        // プリセット期間 (今月/先月/今年/全期間)。カスタムは末尾に別項目で出す。
+        var actions = SheetDetailView.Period.allCases
+            .filter { $0 != .custom }
+            .map { p -> UIAction in
+                UIAction(
+                    title: p.label,
+                    state: (p == currentPeriod) ? .on : .off
+                ) { [weak self] _ in
+                    self?.onSelect?(p)
+                }
             }
+        // カスタム範囲を扱える呼び出し元でのみ「カスタム…」を出す。
+        if let onCustomSelected {
+            let title = SheetDetailView.Period.custom.label + "…"
+            actions.append(UIAction(
+                title: title,
+                image: UIImage(systemName: "calendar"),
+                state: (currentPeriod == .custom) ? .on : .off
+            ) { _ in
+                onCustomSelected()
+            })
         }
         return UIContextMenuConfiguration(actionProvider: { _ in
             UIMenu(children: actions)

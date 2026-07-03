@@ -1040,6 +1040,57 @@
         }
       }
     },
+    "period.custom": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "カスタム"
+          }
+        }
+      }
+    },
+    "period.custom.expenseCaption": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spending in this period"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "この期間の支出"
+          }
+        }
+      }
+    },
+    "period.custom.rangeSeparator": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "–"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "new",
+            "value": "〜"
+          }
+        }
+      }
+    },
     "sortField.date.label": {
       "extractionState": "extracted_with_value",
       "localizations": {
