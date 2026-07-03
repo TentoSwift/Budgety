@@ -69,13 +69,14 @@ struct CategoryPickerView: View {
                 HStack(spacing: 12) {
                     CategoryIconView(symbol: "plus", tint: record.tint, size: 36)
                     Text("新しいカテゴリを追加")
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(record.tint)
                     Spacer()
                 }
             }
             .buttonStyle(.plain)
         }
         .listStyle(.plain)
+        .tint(record.tint)
         .navigationTitle("カテゴリを選択")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingNew) {
