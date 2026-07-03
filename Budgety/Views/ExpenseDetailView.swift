@@ -173,22 +173,50 @@ struct ExpenseDetailView: View {
                             Text("全員均等").font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(ids, id: \.self) { id in
-                                let info = sheet.memberDisplayInfo(for: id)
-                                VStack(spacing: 4) {
-                                    AvatarView(photoData: info.photoData,
-                                               displayName: info.name,
-                                               colorHex: info.colorHex, size: 36)
-                                    Text(info.name)
-                                        .font(.caption2)
-                                        .lineLimit(1)
-                                        .frame(maxWidth: 56)
-                                }
-                            }
+                    beneficiaryMembers(sheet: sheet, ids: ids)
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    /// 受益者メンバーのアバター + 名前を並べる。
+    /// - 通常サイズ: 横スクロールのチップ。名前は折り返し可 (truncate しない)。
+    /// - AX サイズ: 横スクロールだと名前が読めないので、アバター + 名前を
+    ///   1 行ずつ縦に積む (名前は複数行に折り返し)。
+    @ViewBuilder
+    private func beneficiaryMembers(sheet: ExpenseSheet, ids: [String]) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(ids, id: \.self) { id in
+                    let info = sheet.memberDisplayInfo(for: id)
+                    HStack(alignment: .center, spacing: 10) {
+                        AvatarView(photoData: info.photoData,
+                                   displayName: info.name,
+                                   colorHex: info.colorHex, size: 32)
+                        Text(info.name)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(ids, id: \.self) { id in
+                        let info = sheet.memberDisplayInfo(for: id)
+                        VStack(spacing: 4) {
+                            AvatarView(photoData: info.photoData,
+                                       displayName: info.name,
+                                       colorHex: info.colorHex, size: 36)
+                            // 長い名前は 2 行まで折り返す (以前は 1 行固定で「…」になっていた)。
+                            Text(info.name)
+                                .font(.caption2)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: 64)
                         }
-                        .padding(.vertical, 2)
                     }
                 }
                 .padding(.vertical, 2)
