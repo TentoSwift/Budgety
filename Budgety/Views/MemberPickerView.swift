@@ -94,6 +94,7 @@ struct MemberPickerView: View {
             if !legacyPayers.isEmpty { legacyPayersSection }
         }
         .listStyle(.plain)
+        .tint(record?.tint)
         .navigationTitle(kind.partySelectionTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: record?.objectID) {
