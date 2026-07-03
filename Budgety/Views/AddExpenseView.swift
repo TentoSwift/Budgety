@@ -1028,6 +1028,9 @@ struct AddExpenseView: View {
                     NavigationLink {
                         DiscardGuardedBack(modifier: discardDialogModifier) {
                             CurrencyPickerView(selectedCode: $currencyCode)
+                                // push 先は Form の .tint(sheetTint) を継承しないため明示適用
+                                // (カテゴリ/支払い者ピッカーと同じ扱い)。
+                                .tint(sheetTint)
                         }
                     } label: {
                         LabeledContent("通貨") {
