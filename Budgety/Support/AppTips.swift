@@ -66,3 +66,39 @@ struct MoreMenuTip: Tip {
         Image(systemName: "ellipsis.circle")
     }
 }
+
+// MARK: - シート追加 (シート一覧)
+
+/// シート一覧右上の「シートを追加」ボタンの紹介。
+/// 家計・旅行・イベントなど用途ごとにシートを作れることを伝える。
+struct AddSheetTip: Tip {
+    var title: Text {
+        Text("シートを作ろう")
+    }
+
+    var message: Text? {
+        Text("家計・旅行・イベントなど、用途ごとにシートを作って支出を分けて管理できます。")
+    }
+
+    var image: Image? {
+        Image(systemName: "plus")
+    }
+}
+
+// MARK: - 支出追加 (シート詳細)
+
+/// シート詳細の「項目を追加」ボタンの紹介。
+/// ここから支出・収入を記録できることを伝える。
+struct AddExpenseTip: Tip {
+    var title: Text {
+        Text("支出を記録")
+    }
+
+    var message: Text? {
+        Text("ここから支出や収入を追加して、シートに記録できます。")
+    }
+
+    var image: Image? {
+        Image(systemName: "plus")
+    }
+}

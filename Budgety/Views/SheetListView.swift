@@ -5,6 +5,7 @@
 
 import SwiftUI
 import CoreData
+import TipKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -87,6 +88,8 @@ struct SheetListView: View {
     @State private var subScreen: SheetSubScreen?
     /// コンテキストメニュー表示中のシート。その行を一時的に隠す（プレビューと二重に見せない）。
     @State private var menuActiveSheetID: NSManagedObjectID?
+    /// TipKit: シート追加ボタンの機能紹介。
+    private let addSheetTip = AddSheetTip()
     /// 検索結果のシート別合計を FX 更新時に再計算するため observe する。
     @ObservedObject private var fx = FXRatesService.shared
     /// シートの解錠状態に追従して検索結果を再計算するため observe する。
@@ -217,6 +220,7 @@ struct SheetListView: View {
                     } label: {
                         Label("シートを追加", systemImage: "plus")
                     }
+                    .popoverTip(addSheetTip)
                 }
             }
             .sheet(isPresented: $showingAddSheet) {

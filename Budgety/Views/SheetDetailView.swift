@@ -170,9 +170,10 @@ struct SheetDetailView: View {
     @State private var splitFilter: ExpenseSplitFilter = .all
     /// フィルタシートの表示。
     @State private var showingFilters = false
-    /// TipKit: フィルタボタン / もっと見るメニューの機能紹介。
+    /// TipKit: フィルタボタン / もっと見るメニュー / 項目追加ボタンの機能紹介。
     private let filterTip = FilterTip()
     private let moreMenuTip = MoreMenuTip()
+    private let addExpenseTip = AddExpenseTip()
     @State private var exportPaywall: Bool = false
     @State private var lockPaywall: Bool = false
     @State private var showingSetPassword: Bool = false
@@ -461,6 +462,7 @@ struct SheetDetailView: View {
                 .tint(record.tint)
                 .accessibilityLabel("項目を追加")
                 .accessibilityHint("支出や収入を記録する")
+                .popoverTip(addExpenseTip)
             }
             // 「今すぐロック」「共有」は ellipsis の外に独立配置する。
             if lockManager.hasPassword(for: record) {
