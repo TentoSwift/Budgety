@@ -5465,6 +5465,86 @@
           }
         }
       }
+    },
+    "Apple Account のメールアドレスで招待": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite by Apple Account email"
+          }
+        }
+      }
+    },
+    "招待する": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite"
+          }
+        }
+      }
+    },
+    "リンクを送る": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Link"
+          }
+        }
+      }
+    },
+    "リンクをコピー": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link"
+          }
+        }
+      }
+    },
+    "共有リンクを準備": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare share link"
+          }
+        }
+      }
+    },
+    "name@icloud.com": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "name@icloud.com"
+          }
+        }
+      }
+    },
+    "招待する相手の Apple Account のメールアドレスを入力し「招待する」をクリックすると「招待中」として登録されます。続いて下の「リンクを送る」からリンクをコピーして、メールやメッセージなどで相手に送ってください。招待した相手はリンクを開くことで参加できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the Apple Account email of the person you want to invite and click \"Invite\" to register them as \"Invited.\" Then copy the link from \"Send Link\" below and send it to them by email, message, or another app. The invited person can join by opening the link."
+          }
+        }
+      }
+    },
+    "「招待する」で登録した相手に、メールやメッセージなどでこのリンクを送ることもできます。相手はリンクを開いて参加できます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can also send this link by email, message, or another app to the people you registered via \"Invite.\" They can join by opening the link."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
