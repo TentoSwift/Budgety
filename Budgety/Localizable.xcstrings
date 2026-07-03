@@ -611,12 +611,32 @@
         }
       }
     },
+    "Claude / MCP との連携は macOS 版でご利用いただけます。Mac 版の設定画面からセットアップできます。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude / MCP integration is available on the macOS version. You can set it up from the settings screen on the Mac app."
+          }
+        }
+      }
+    },
     "Claude / MCP と連携": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Connect with Claude / MCP"
+          }
+        }
+      }
+    },
+    "Claude / MCP 連携": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude / MCP Integration"
           }
         }
       }
@@ -1174,6 +1194,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Just say “Coffee 350 yen” to record an expense."
+          }
+        }
+      }
+    },
+    "「コーヒー 350 円」と話しかけるだけで支出を記録できます。(macOS 版のみ)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just say “Coffee 350 yen” to record an expense. (macOS only)"
           }
         }
       }

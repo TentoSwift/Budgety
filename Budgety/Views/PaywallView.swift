@@ -89,7 +89,7 @@ struct PaywallView: View {
             featureRow("sparkles",
                        color: Color(red: 0.69, green: 0.32, blue: 0.87),
                        title: String(localized: "Claude / MCP と連携"),
-                       detail: String(localized: "「コーヒー 350 円」と話しかけるだけで支出を記録できます。"))
+                       detail: String(localized: "「コーヒー 350 円」と話しかけるだけで支出を記録できます。(macOS 版のみ)"))
             featureRow("lock.fill",
                        color: Color(red: 0.96, green: 0.26, blue: 0.33),
                        title: String(localized: "パスワードでロック"),
