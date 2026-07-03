@@ -1329,6 +1329,11 @@ struct AddExpenseView: View {
                     DiscardGuardedBack(modifier: discardDialogModifier) {
                         CategoryPickerView(selected: $selectedCategory, record: sheet, kind: kind)
                     }
+                    // push 先は Form の .tint(sheetTint) を継承せず既定色になるため、
+                    // 通貨ピッカーと同じく遷移元でシート色を明示適用する。
+                    // (CategoryPickerView 内 List の .tint だけではナビゲーションバーや
+                    //  .foregroundStyle(.tint) が既定色のままになるケースがある)
+                    .tint(sheetTint)
                 } label: {
                     LabeledContent("カテゴリ") {
                         if let cat = selectedCategory {
@@ -1394,6 +1399,11 @@ struct AddExpenseView: View {
                         fallbackProfileID: payerFallbackProfileID
                     )
                 }
+                // push 先は Form の .tint(sheetTint) を継承せず既定色になるため、
+                // 通貨ピッカーと同じく遷移元でシート色を明示適用する。
+                // (MemberPickerView 内 List の .tint(record?.tint) は record が nil の
+                //  経路や、ナビゲーションバー/.foregroundStyle(.tint) には効かないため)
+                .tint(sheetTint)
             } label: {
                 LabeledContent(kind.partyLabel) {
                     payerPreview
