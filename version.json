@@ -1,6 +1,10 @@
 {
   "minimumVersion": "1.0.2",
   "latestVersion": "1.0.2",
+  "minimumVersionIOS": "1.0.2",
+  "latestVersionIOS": "1.0.3",
+  "minimumVersionMacOS": "1.0.2",
+  "latestVersionMacOS": "1.0.2",
   "message": "最新バージョン (1.0.2) に更新してからご利用ください。",
   "appStoreURL": "https://apps.apple.com/app/id6768543053"
 }
