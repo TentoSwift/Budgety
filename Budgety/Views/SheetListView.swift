@@ -184,13 +184,12 @@ struct SheetListView: View {
                                 if archivedExpanded {
                                     ForEach(archivedSheets) { sheet in
                                         sheetListRow(sheet)
+                                            .transition(.move(edge: .top).combined(with: .opacity))
                                     }
                                 }
                             } header: {
                                 Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        archivedExpanded.toggle()
-                                    }
+                                    archivedExpanded.toggle()
                                 } label: {
                                     HStack(spacing: 6) {
                                         Label("アーカイブ済み", systemImage: "archivebox")
@@ -218,6 +217,10 @@ struct SheetListView: View {
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
                     }
                     .listStyle(.plain)
+                    // アーカイブ済みセクションの開閉 (特に閉じる時の行削除) を確実に
+                    // アニメーションさせる。@AppStorage + withAnimation では閉じる側が
+                    // 効かないことがあるため、値ベースの .animation を List に付ける。
+                    .animation(.easeInOut(duration: 0.25), value: archivedExpanded)
                 }
             }
             .navigationTitle("シート")
