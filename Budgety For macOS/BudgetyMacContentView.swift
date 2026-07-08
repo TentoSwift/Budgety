@@ -221,13 +221,11 @@ struct BudgetyMacContentView: View {
 
     /// Apple Music の sidebar footer 風プロフィール行。タップで「プロフィールを編集」/「設定」を選べるメニューを開く。
     private var profileFooter: some View {
-        Menu {
-            Button("プロフィールを編集") {
-                showingProfileEdit = true
-            }
-            Button("設定") {
-                showSettingsView = true
-            }
+        // プレーンな Button にする (Menu だと macOS がラベルの画像を
+        // 自然サイズで描画してアバターが巨大化するため)。タップで
+        // プロフィール編集を開く。設定はメニューバーの「設定… (⌘,)」から。
+        Button {
+            showingProfileEdit = true
         } label: {
             HStack(spacing: 10) {
                 AvatarView(
@@ -236,10 +234,6 @@ struct BudgetyMacContentView: View {
                     colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
                     size: 28
                 )
-                // Menu(.borderlessButton) のラベル内だと写真が大きく描画される
-                // ことがあるので、外側でも 28pt の円にハード固定する。
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
                 Text(profile.resolvedDisplayName)
                     .font(.callout)
                     .foregroundStyle(.primary)
@@ -250,9 +244,8 @@ struct BudgetyMacContentView: View {
             .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .help("プロフィールを編集 / 設定")
+        .buttonStyle(.plain)
+        .help("プロフィールを編集")
         .background(.bar)
     }
 
