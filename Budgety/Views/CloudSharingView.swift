@@ -57,6 +57,7 @@ struct CloudSharingView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる", systemImage: "xmark") { dismiss() }
+                        .foregroundStyle(.primary)
                 }
             }
             .sheet(isPresented: $showPaywall) {

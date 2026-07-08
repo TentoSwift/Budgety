@@ -487,7 +487,7 @@ struct SheetDetailView: View {
                     } label: {
                         Label("フィルタを編集", systemImage: "line.3.horizontal.decrease")
                     }
-                    .tint(record.tint)
+                    .foregroundStyle(.primary)
                     .popoverTip(filterTip)
                 }
             }
