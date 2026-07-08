@@ -74,7 +74,8 @@ struct BudgetyMacContentView: View {
             MacAddSheetView()
         }
         .sheet(isPresented: $showSettingsView) {
-            BudgetyMacSettingsView()
+            // NavigationStack + 「閉じる」ボタン付きで包む (単体だと閉じられない)。
+            MacModalSheet { BudgetyMacSettingsView() }
         }
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
@@ -235,6 +236,10 @@ struct BudgetyMacContentView: View {
                     colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
                     size: 28
                 )
+                // Menu(.borderlessButton) のラベル内だと写真が大きく描画される
+                // ことがあるので、外側でも 28pt の円にハード固定する。
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
                 Text(profile.resolvedDisplayName)
                     .font(.callout)
                     .foregroundStyle(.primary)
