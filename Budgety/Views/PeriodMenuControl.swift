@@ -39,8 +39,25 @@ struct PeriodMenuControl: UIViewRepresentable {
 
     /// Dynamic Type で拡大した実サイズを SwiftUI に伝える。
     /// これが無いと拡大時に確保枠が足りず、上の行と重なって切れる。
+    ///
+    /// まず 1 行の自然サイズを求め、提案幅に収まるならそれを返す。収まらない
+    /// (AX 拡大 + カスタム期間の長いラベル等) 場合は提案幅で折り返した高さを返し、
+    /// 幅が画面外へはみ出さないようにする。
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: _PeriodMenuUIControl, context: Context) -> CGSize? {
-        uiView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        let natural = uiView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        // 提案幅が無い (ideal) か、自然サイズが収まるならそのまま (1 行)。
+        guard let maxWidth = proposal.width, maxWidth.isFinite, natural.width > maxWidth else {
+            return natural
+        }
+        // 収まらないときは提案幅 (0 でも 1pt 以上に丸める) で折り返した高さを返す。
+        // width 0 の問い合わせでも折り返しサイズを返すことで「最小幅も巨大」に
+        // ならず、HStack 内で正しく縮んでカードが画面外へ出るのを防ぐ。
+        let target = CGSize(width: max(maxWidth, 1), height: UIView.layoutFittingCompressedSize.height)
+        return uiView.systemLayoutSizeFitting(
+            target,
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
     }
 }
 
@@ -71,6 +88,11 @@ final class _PeriodMenuUIControl: UIControl {
         l.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: base)
         l.adjustsFontForContentSizeCategory = true
         l.textColor = .secondaryLabel
+        // Dynamic Type 拡大 + カスタム期間の長いラベル ("2026年11月1日〜…") では
+        // 1 行固定だと幅が画面を超え、SummaryCard ごと画面外へはみ出す。
+        // 複数行に折り返せるようにして幅方向は親の提案に収める (高さは sizeThatFits)。
+        l.numberOfLines = 0
+        l.lineBreakMode = .byWordWrapping
         return l
     }()
 
