@@ -9,6 +9,9 @@
 
 import SwiftUI
 import CoreData
+#if canImport(CoreSpotlight)
+import CoreSpotlight
+#endif
 
 /// 実エントリポイント。コマンドライン引数で動作を分岐する:
 /// - `--mcp`         : GUI を出さず、内蔵 MCP サーバー (stdio) として動作 (戻らない)。
@@ -53,6 +56,8 @@ struct BudgetyMacApp: App {
                     }
                 }
                 .task {
+                    // シートを Spotlight に索引し、以後の変更で自動更新する。
+                    SpotlightIndexer.start(context: persistenceController.container.viewContext)
                     // 為替レートを最新化 (キャッシュが当日中なら何もしない)
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
@@ -87,6 +92,14 @@ struct BudgetyMacApp: App {
                     let msg = (note.userInfo?["message"] as? String) ?? String(localized: "共有の受諾に失敗しました")
                     showToast(msg)
                 }
+                #if canImport(CoreSpotlight)
+                // Spotlight 検索結果をタップして起動/復帰した時、対象シートを開く。
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                        DeepLinkRouter.shared.requestOpenSheet(identifier: identifier)
+                    }
+                }
+                #endif
         }
         .defaultSize(width: 1100, height: 750)
         .commands {

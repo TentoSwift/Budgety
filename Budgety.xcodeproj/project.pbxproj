@@ -91,6 +91,7 @@
 		3D18B4D92FB31696006F2C2A /* Exceptions for "Budgety" folder in "Budgety For visionOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Support/SpotlightIndexer.swift,
 				Expenso.xcdatamodeld,
 				FXRatesService.swift,
 				Models/CategorySeeds.swift,
@@ -127,6 +128,7 @@
 		4D18B4D92FB31696006F2C30 /* Exceptions for "Budgety" folder in "Budgety For macOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Support/SpotlightIndexer.swift,
 				"Budgety-Develop.icon",
 				BudgetyIcon.icon,
 				Expenso.xcdatamodeld,
