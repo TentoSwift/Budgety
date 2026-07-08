@@ -258,15 +258,13 @@ struct SheetListView: View {
                     settingsAvatarButton
                 }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                ToolbarItem(placement: .topBarTrailing) {
-                    // 他のツールバーボタンと同様の控えめな見た目にするため、
-                    // prominent な role(.confirm) を外し tint を clear にする。
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         tryShowAddSheet()
                     } label: {
                         Label("シートを追加", systemImage: "plus")
                     }
-                    .tint(.clear)
+                    .foregroundStyle(.primary)
                     .popoverTip(addSheetTip)
                 }
             }
