@@ -1614,9 +1614,7 @@ private struct SummaryCard: View {
             periodLabel: periodHeaderLabel,
             onCustomSelected: onEditCustomPeriod
         )
-        // .fixedSize() は付けない。付けると理想幅 (1 行) で固定され、AX 拡大 +
-        // カスタム期間の長いラベルで幅が画面外へはみ出す。折り返しは
-        // PeriodMenuControl.sizeThatFits が提案幅に収めて処理する。
+        .fixedSize()
         #else
         legacyPeriodMenuLabel
         #endif
@@ -1655,9 +1653,11 @@ private struct SummaryCard: View {
         }
     }
 
-    /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "2020/12/09〜2026/07/03")
+    /// 期間のヘッダー表示 ("2026年11月" / "先月" / "全期間" / "カスタム")。
+    /// カスタム時は範囲を出さず "カスタム" と表示する (長い範囲でヘッダーが
+    /// 横に伸びるのを避けるため)。
     private var periodHeaderLabel: String {
-        period.headerLabel(customStart: customStart, customEnd: customEnd)
+        period.headerLabel
     }
 
     /// 期間に応じた支出キャプション
