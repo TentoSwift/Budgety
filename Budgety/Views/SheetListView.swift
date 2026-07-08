@@ -241,6 +241,18 @@ struct SheetListView: View {
                 // 新規検索 (フォーカス取得かつ未入力) のたびに期間を全期間から始める。
                 if focused && trimmedQuery.isEmpty { searchPeriod = .all }
             }
+            // Spotlight 検索結果から「このシートを開いて」と要求されたら該当シートへ遷移。
+            .onReceive(NotificationCenter.default.publisher(for: .expensoOpenSheet)) { note in
+                if let identifier = note.userInfo?["identifier"] as? String {
+                    openSheet(spotlightIdentifier: identifier)
+                }
+            }
+            .task {
+                // cold launch 時、ビュー生成前に届いた Spotlight 遷移要求を拾う。
+                if let identifier = DeepLinkRouter.shared.consumePendingSheetIdentifier() {
+                    openSheet(spotlightIdentifier: identifier)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsAvatarButton
@@ -599,6 +611,18 @@ struct SheetListView: View {
     private func openSheet(_ sheet: ExpenseSheet) {
         guard path.isEmpty else { return }
         path.append(sheet.objectID)
+    }
+
+    /// Spotlight の一意識別子 (objectID の URI) から該当シートを開く。
+    /// 見つからない (別インストールの古い索引など) 場合は何もしない。
+    /// LockedSheetGate 経由で開くのでロック済みシートはパスワード確認される。
+    private func openSheet(spotlightIdentifier identifier: String) {
+        guard let oid = SpotlightIndexer.objectID(forIdentifier: identifier, in: viewContext),
+              (try? viewContext.existingObject(with: oid)) is ExpenseSheet else { return }
+        // 検索中なら解除してから遷移する。
+        searchText = ""
+        searchFocused = false
+        path = [oid]
     }
 
     #if canImport(UIKit) && !os(watchOS)
