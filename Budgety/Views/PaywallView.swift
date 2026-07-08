@@ -37,6 +37,7 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる", systemImage: "xmark") { dismiss() }
+                        .foregroundStyle(.primary)
                 }
             }
             .task {
