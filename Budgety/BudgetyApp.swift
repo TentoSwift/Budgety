@@ -9,6 +9,9 @@
 import SwiftUI
 import CoreData
 import TipKit
+#if canImport(CoreSpotlight)
+import CoreSpotlight
+#endif
 
 @main
 struct BudgetyApp: App {
@@ -88,6 +91,14 @@ struct BudgetyApp: App {
                     let message = (note.userInfo?["message"] as? String) ?? String(localized: "データベースをリセットしました")
                     showToast(message)
                 }
+                #if canImport(CoreSpotlight)
+                // Spotlight 検索結果をタップして起動/復帰した時、対象シートを開く。
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                        DeepLinkRouter.shared.requestOpenSheet(identifier: identifier)
+                    }
+                }
+                #endif
                 .task {
                     // TipKit: 機能紹介の Tip を初期化。
                     // displayFrequency は控えめに 1 日 1 回まで。各 Tip は初回表示後に
@@ -96,6 +107,8 @@ struct BudgetyApp: App {
                         .displayFrequency(.daily),
                         .datastoreLocation(.applicationDefault)
                     ])
+                    // シートを Spotlight に索引し、以後の変更で自動更新する。
+                    SpotlightIndexer.start(context: persistenceController.container.viewContext)
                     // オンボーディングは初回起動時のみ表示。
                     if onboardingFlow == nil, !hasShownOnboarding {
                         onboardingFlow = .welcome

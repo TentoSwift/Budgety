@@ -14,4 +14,7 @@ extension Notification.Name {
     static let expensoShareAcceptanceFailed = Notification.Name("ExpensoShareAcceptanceFailed")
     static let expensoSaveFailed = Notification.Name("ExpensoSaveFailed")
     static let expensoStoreReset = Notification.Name("ExpensoStoreReset")
+    /// Spotlight 検索結果などから「このシートを開いて」と要求された時に飛ぶ。
+    /// userInfo["identifier"] = objectID の URI 文字列。
+    static let expensoOpenSheet = Notification.Name("ExpensoOpenSheet")
 }

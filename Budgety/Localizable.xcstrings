@@ -6926,6 +6926,26 @@
           }
         }
       }
+    },
+    "支出シート": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expense sheet"
+          }
+        }
+      }
+    },
+    "家計簿": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Household budget"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
