@@ -55,9 +55,9 @@ struct CloudSharingView: View {
             .navigationTitle(isOwner ? "シートを共有" : "共有シートの情報")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("閉じる", systemImage: "xmark") { dismiss() }
-                        .foregroundStyle(.primary)
+                        .tint(Color.primary)
                 }
             }
             .sheet(isPresented: $showPaywall) {
@@ -227,7 +227,7 @@ struct CloudSharingView: View {
             Spacer()
             Image(systemName: "lock.icloud.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.tint)
+                .foregroundStyle(.primary)
             VStack(spacing: 8) {
                 Text("招待を送るには Premium が必要です")
                     .font(.title3.bold())
