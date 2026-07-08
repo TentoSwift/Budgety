@@ -1614,7 +1614,9 @@ private struct SummaryCard: View {
             periodLabel: periodHeaderLabel,
             onCustomSelected: onEditCustomPeriod
         )
-        .fixedSize()
+        // .fixedSize() は付けない。付けると理想幅 (1 行) で固定され、AX 拡大 +
+        // カスタム期間の長いラベルで幅が画面外へはみ出す。折り返しは
+        // PeriodMenuControl.sizeThatFits が提案幅に収めて処理する。
         #else
         legacyPeriodMenuLabel
         #endif
