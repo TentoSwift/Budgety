@@ -18,6 +18,8 @@ struct BudgetyVisionApp: App {
             BudgetyVisionContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .task {
+                    // シートを Spotlight に索引する。
+                    SpotlightIndexer.start(context: persistenceController.container.viewContext)
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                 }
         }

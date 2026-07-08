@@ -124,6 +124,26 @@ struct BudgetyMacContentView: View {
             // 前面化時に iCloud サインイン状態を再取得。
             if phase == .active { PersistenceController.shared.refreshAccountStatus() }
         }
+        // Spotlight 検索結果から「このシートを開いて」と要求されたら選択する。
+        .onReceive(NotificationCenter.default.publisher(for: .expensoOpenSheet)) { note in
+            if let identifier = note.userInfo?["identifier"] as? String {
+                openSheet(spotlightIdentifier: identifier)
+            }
+        }
+        .task {
+            // cold launch 時、ビュー生成前に届いた Spotlight 遷移要求を拾う。
+            if let identifier = DeepLinkRouter.shared.consumePendingSheetIdentifier() {
+                openSheet(spotlightIdentifier: identifier)
+            }
+        }
+    }
+
+    /// Spotlight の一意識別子 (objectID の URI) から該当シートを選択する。
+    private func openSheet(spotlightIdentifier identifier: String) {
+        guard let oid = SpotlightIndexer.objectID(forIdentifier: identifier, in: viewContext),
+              let sheet = (try? viewContext.existingObject(with: oid)) as? ExpenseSheet else { return }
+        if !trimmedQuery.isEmpty { searchText = "" }
+        selectedSheet = sheet
     }
 
     private var sidebar: some View {

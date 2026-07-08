@@ -91,10 +91,25 @@ enum SpotlightIndexer {
         let items: [CSSearchableItem] = sheets.compactMap { sheet in
             sheet.objectID.isTemporaryID ? nil : makeItem(for: sheet)
         }
+        #if DEBUG
+        NSLog("[Spotlight] reindex: %d sheets fetched, %d indexable (indexingAvailable=%@)",
+              sheets.count, items.count, CSSearchableIndex.isIndexingAvailable() ? "YES" : "NO")
+        #endif
         let index = CSSearchableIndex.default()
-        index.deleteSearchableItems(withDomainIdentifiers: [sheetDomain]) { _ in
+        index.deleteSearchableItems(withDomainIdentifiers: [sheetDomain]) { deleteError in
+            #if DEBUG
+            if let deleteError { NSLog("[Spotlight] delete error: %@", deleteError.localizedDescription) }
+            #endif
             guard !items.isEmpty else { return }
-            index.indexSearchableItems(items, completionHandler: nil)
+            index.indexSearchableItems(items) { indexError in
+                #if DEBUG
+                if let indexError {
+                    NSLog("[Spotlight] index error: %@", indexError.localizedDescription)
+                } else {
+                    NSLog("[Spotlight] indexed %d items OK", items.count)
+                }
+                #endif
+            }
         }
     }
 
