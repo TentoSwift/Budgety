@@ -49,7 +49,9 @@ enum CSVImporter {
         guard !lines.isEmpty else {
             return PreviewResult(rows: [], skipped: [], header: [])
         }
-        let header = splitCSVRow(lines[0]).map { normalizeHeader($0) }
+        // 区切り文字をヘッダ行から推定 (`,` / `;` / タブ)。以降の行分割も同じ区切りで。
+        let delimiter = detectDelimiter(lines[0])
+        let header = splitCSVRow(lines[0], delimiter: delimiter).map { normalizeHeader($0) }
         let indices = ColumnIndices(header: header)
         // 金額列が 1 つも見つからない場合、全行が「解析不能」になるだけだと原因が
         // 分かりにくいので、ヘッダレベルの問題として明示的に 1 件だけ報告する。
@@ -66,7 +68,7 @@ enum CSVImporter {
         for i in 1..<lines.count {
             let raw = lines[i]
             if raw.trimmingCharacters(in: .whitespaces).isEmpty { continue }
-            let cols = splitCSVRow(raw)
+            let cols = splitCSVRow(raw, delimiter: delimiter)
             switch makeRow(cols: cols, indices: indices, defaultCurrency: defaultCurrency, defaultDate: defaultDate) {
             case .success(let row):
                 rows.append(row)
@@ -161,31 +163,60 @@ enum CSVImporter {
     }
 
     /// RFC 4180 風: ダブルクォート内の改行を 1 セルとして扱う。
+    /// 改行は LF (\n) / CRLF (\r\n) / CR のみ (\r、旧 Mac・一部エクスポート) の
+    /// いずれにも対応する。CR 単独でも行が分割されるようにする。
     private static func splitCSVLines(_ text: String) -> [String] {
         var lines: [String] = []
         var current = ""
         var inQuotes = false
+        var prevWasCR = false
         for ch in text {
             switch ch {
             case "\"":
                 inQuotes.toggle()
                 current.append(ch)
+                prevWasCR = false
             case "\r":
                 if inQuotes { current.append(ch) }
+                else { lines.append(current); current = "" }
+                prevWasCR = true
             case "\n":
                 if inQuotes { current.append(ch) }
+                else if prevWasCR { /* CRLF: CR で既に改行済みなのでスキップ */ }
                 else { lines.append(current); current = "" }
+                prevWasCR = false
             default:
                 current.append(ch)
+                prevWasCR = false
             }
         }
         if !current.isEmpty { lines.append(current) }
         return lines
     }
 
-    /// 1 行を `,` 区切りでフィールドに分割。クォート (`"`) でエスケープ。
-    /// 内部の `""` は `"` 1 文字に戻す。
-    private static func splitCSVRow(_ line: String) -> [String] {
+    /// ヘッダ行から区切り文字を推定する (`,` / `;` / タブ)。
+    /// 欧州の Excel 等は `;` 区切りで書き出すため、`,` 固定だと全列が 1 セルに
+    /// なって「金額列なし = 0 行」になる。クォート内の区切りは数えない。
+    private static func detectDelimiter(_ headerLine: String) -> Character {
+        let candidates: [Character] = [",", ";", "\t"]
+        var counts: [Character: Int] = [:]
+        var inQuotes = false
+        for ch in headerLine {
+            if ch == "\"" { inQuotes.toggle() }
+            else if !inQuotes, candidates.contains(ch) { counts[ch, default: 0] += 1 }
+        }
+        var best: Character = ","
+        var bestCount = -1
+        for c in candidates where (counts[c] ?? 0) > bestCount {
+            bestCount = counts[c] ?? 0
+            best = c
+        }
+        return best
+    }
+
+    /// 1 行を指定の区切り文字 (既定 `,`) でフィールドに分割。クォート (`"`) で
+    /// エスケープ。内部の `""` は `"` 1 文字に戻す。
+    private static func splitCSVRow(_ line: String, delimiter: Character = ",") -> [String] {
         var fields: [String] = []
         var current = ""
         var inQuotes = false
@@ -208,7 +239,7 @@ enum CSVImporter {
             } else {
                 if ch == "\"" {
                     inQuotes = true
-                } else if ch == "," {
+                } else if ch == delimiter {
                     fields.append(current)
                     current = ""
                 } else {
