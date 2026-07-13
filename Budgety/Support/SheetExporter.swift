@@ -72,7 +72,7 @@ enum SheetExporter {
         let safe = sheet.displayName
             .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
             .joined()
-        let url = dir.appendingPathComponent("Expenso-\(safe).csv")
+        let url = dir.appendingPathComponent("Budgety-\(safe).csv")
         do {
             try data.write(to: url, options: .atomic)
             return url
