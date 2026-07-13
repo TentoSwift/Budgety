@@ -164,33 +164,43 @@ enum CSVImporter {
 
     /// RFC 4180 風: ダブルクォート内の改行を 1 セルとして扱う。
     /// 改行は LF (\n) / CRLF (\r\n) / CR のみ (\r、旧 Mac・一部エクスポート) の
-    /// いずれにも対応する。CR 単独でも行が分割されるようにする。
+    /// いずれにも対応する。
+    ///
+    /// 重要: `for ch in text` (Character 走査) は使わない。Swift の Character は
+    /// 書記素クラスタ単位で、CRLF (\r\n) が「1 つの Character」になるため
+    /// `case "\r"` にも `case "\n"` にも一致せず、CRLF 区切りのファイルが
+    /// 一切行分割されない (= 自アプリの書き出し CSV が全行 1 行扱いになり
+    /// 「解析 0 件」になる)。Unicode スカラ単位で走査して CR / LF を個別に見る。
     private static func splitCSVLines(_ text: String) -> [String] {
         var lines: [String] = []
-        var current = ""
+        var current = String.UnicodeScalarView()
         var inQuotes = false
         var prevWasCR = false
-        for ch in text {
-            switch ch {
+        func flush() {
+            lines.append(String(current))
+            current = String.UnicodeScalarView()
+        }
+        for scalar in text.unicodeScalars {
+            switch scalar {
             case "\"":
                 inQuotes.toggle()
-                current.append(ch)
+                current.append(scalar)
                 prevWasCR = false
             case "\r":
-                if inQuotes { current.append(ch) }
-                else { lines.append(current); current = "" }
+                if inQuotes { current.append(scalar) }
+                else { flush() }
                 prevWasCR = true
             case "\n":
-                if inQuotes { current.append(ch) }
+                if inQuotes { current.append(scalar) }
                 else if prevWasCR { /* CRLF: CR で既に改行済みなのでスキップ */ }
-                else { lines.append(current); current = "" }
+                else { flush() }
                 prevWasCR = false
             default:
-                current.append(ch)
+                current.append(scalar)
                 prevWasCR = false
             }
         }
-        if !current.isEmpty { lines.append(current) }
+        if !current.isEmpty { lines.append(String(current)) }
         return lines
     }
 
