@@ -57,6 +57,8 @@ struct DynamicTextView: UIViewRepresentable {
         textView.textContainerInset = .zero
 
         // 「次へ」アクセサリ (数字キーボードには Return が無いため、これで次のフィールドへ)。
+        // inputAccessoryView (キーボードツールバー) は visionOS 非対応。
+        #if !os(visionOS)
         if let title = accessoryNextTitle {
             let bar = UIToolbar()
             bar.sizeToFit()
@@ -67,6 +69,7 @@ struct DynamicTextView: UIViewRepresentable {
             bar.items = [flex, next]
             textView.inputAccessoryView = bar
         }
+        #endif
 
         return textView
     }

@@ -43,7 +43,7 @@ struct VirtualMemberEditView: View {
     @State private var showPhotoPicker: Bool = false
     #endif
 
-    #if canImport(MemojiView)
+    #if canImport(MemojiView) && !os(visionOS)
     @State private var showingMemojiEditor: Bool = false
     #endif
 
@@ -78,7 +78,7 @@ struct VirtualMemberEditView: View {
             .photosPicker(isPresented: $showPhotoPicker, selection: $pickerItem, matching: .images)
             .onChange(of: pickerItem) { _, _ in loadPhotoFromPicker() }
             #endif
-            #if canImport(MemojiView)
+            #if canImport(MemojiView) && !os(visionOS)
             .sheet(isPresented: $showingMemojiEditor) {
                 MemojiEditorView { data, hex in
                     draftPhoto = data
@@ -150,7 +150,7 @@ struct VirtualMemberEditView: View {
             Label("写真を選択", systemImage: "photo")
         }
         #endif
-        #if canImport(MemojiView)
+        #if canImport(MemojiView) && !os(visionOS)
         Button {
             showingMemojiEditor = true
         } label: {

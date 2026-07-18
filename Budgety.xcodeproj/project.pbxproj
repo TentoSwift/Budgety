@@ -16,6 +16,8 @@
 		4D8484612FADB766001AB1B7 /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 4D8484602FADB766001AB1B7 /* CustomPicker */; };
 		A0010000A0010000A0010000 /* MemojiView in Frameworks */ = {isa = PBXBuildFile; productRef = A0030000A0030000A0030000 /* MemojiView */; };
 		B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */ = {isa = PBXBuildFile; productRef = B0030000B0030000B0030000 /* CustomNavigationTitle */; };
+		3D18B4E12FB31605006F2C2A /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
+		3D18B4E32FB31605006F2C2A /* LicenseList in Frameworks */ = {isa = PBXBuildFile; productRef = 2D31C3692FC452E10011566C /* LicenseList */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,30 +93,110 @@
 		3D18B4D92FB31696006F2C2A /* Exceptions for "Budgety" folder in "Budgety For visionOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Support/SpotlightIndexer.swift,
 				Expenso.xcdatamodeld,
+				ContentView.swift,
 				FXRatesService.swift,
+				Intents/AddExpenseIntent.swift,
+				Intents/ExpenseCategoryEntity.swift,
+				Intents/ExpenseSheetEntity.swift,
+				Intents/ExpensoShortcuts.swift,
+				Intents/QuickBudgetIntent.swift,
+				"Intents/QuickIntentLogic+Recurring.swift",
+				Intents/QuickIntentLogic.swift,
 				Models/CategorySeeds.swift,
 				"Models/Expense+Extensions.swift",
 				"Models/ExpenseCategory+Extensions.swift",
 				"Models/ExpenseSheet+Extensions.swift",
+				"Models/ExpenseTemplate+Extensions.swift",
 				"Models/Member+Extensions.swift",
 				"Models/ParticipantProfile+Extensions.swift",
 				"Models/RecurringRule+Extensions.swift",
 				"Models/SettlementRecord+Extensions.swift",
+				Models/SheetSymbols.swift,
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
+				PurchaseManager.swift,
 				ShareCoordinator.swift,
+				Support/AppTips.swift,
+				Support/AppUpdateChecker.swift,
 				Support/BuildInfo.swift,
+				Support/CSVImporter.swift,
+				"Support/Calendar+Month.swift",
+				Support/CategoryAISuggestor.swift,
+				Support/CategoryHistorySuggestor.swift,
 				"Support/Color+Hex.swift",
 				Support/Currency.swift,
+				Support/Haptics.swift,
+				Support/LinkDetection.swift,
+				Support/MarkdownHelper.swift,
+				Support/NetworkMonitor.swift,
 				Support/Notifications.swift,
+				Support/OnAttemptToDismiss.swift,
+				Support/PDFReportView.swift,
 				Support/PublicProfileSync.swift,
+				Support/ReceiptAIParser.swift,
+				Support/ReceiptParser.swift,
+				Support/ReceiptScanner.swift,
+				Support/RecurringExpenseGenerator.swift,
 				Support/RecurringOccurrenceService.swift,
+				Support/SampleDataGenerator.swift,
 				Support/SettlementCalculator.swift,
 				Support/ShareParticipantCanonical.swift,
 				Support/ShareParticipantDiagnostics.swift,
+				Support/SheetAIChat.swift,
+				Support/SheetExporter.swift,
+				Support/SheetLockManager.swift,
+				Support/SplitNotificationManager.swift,
+				Support/SpotlightIndexer.swift,
+				Support/StatsInsightsGenerator.swift,
+				"Support/View+PlatformShims.swift",
 				UserProfileStore.swift,
+				Views/AddExpenseView.swift,
+				Views/AddSheetView.swift,
+				Views/AvatarView.swift,
+				Views/BeneficiaryPickerView.swift,
+				Views/CSVImportView.swift,
+				Views/CategoryIconPickerView.swift,
+				Views/CategoryIconView.swift,
+				Views/CategoryListView.swift,
+				Views/CategoryPickerView.swift,
+				Views/CloudSharingView.swift,
+				Views/CurrencyPickerView.swift,
+				Views/DismissConfirmDemoView.swift,
+				Views/DynamicTextView.swift,
+				Views/EditCategoryView.swift,
+				Views/EditRecurringRuleView.swift,
+				Views/EditSheetView.swift,
+				Views/EraseAllDataView.swift,
+				Views/ExpenseDetailView.swift,
+				Views/ImageCropView.swift,
+				Views/LicenseListScreen.swift,
+				Views/LogSettlementView.swift,
+				Views/MemberPickerView.swift,
+				Views/OnboardingView.swift,
+				Views/PaywallView.swift,
+				Views/PeriodMenuControl.swift,
+				Views/ProfileEditView.swift,
+				Views/RecurringDiagnosticsView.swift,
+				Views/RecurringListView.swift,
+				Views/RecurringSettingsView.swift,
+				Views/SetSheetPasswordView.swift,
+				Views/SettingsView.swift,
+				Views/SettlementView.swift,
+				Views/ShareSheet.swift,
+				Views/ShareStatusBadge.swift,
+				Views/SheetAIChatView.swift,
+				Views/SheetDetailView.swift,
+				Views/SheetIconPickerView.swift,
+				Views/SheetIconView.swift,
+				Views/SheetListView.swift,
+				Views/SheetLockCover.swift,
+				Views/SheetLockView.swift,
+				Views/SheetRowInteraction.swift,
+				Views/StatsView.swift,
+				Views/VirtualMemberEditView.swift,
+				Views/VirtualMemberListView.swift,
+				Views/iCloudStatusBanner.swift,
 			);
 			target = 3D18B4C12FB31605006F2C2A /* Budgety For visionOS */;
 		};
@@ -280,6 +362,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3D18B4E12FB31605006F2C2A /* CustomPicker in Frameworks */,
+				3D18B4E32FB31605006F2C2A /* LicenseList in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,6 +471,8 @@
 			);
 			name = "Budgety For visionOS";
 			packageProductDependencies = (
+				2D84845F2FADB766001AB1B6 /* CustomPicker */,
+				2D31C3692FC452E10011566C /* LicenseList */,
 			);
 			productName = "Budgety For visionOS";
 			productReference = 3D18B4C22FB31605006F2C2A /* Budgety.app */;
@@ -880,7 +966,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
-				XROS_DEPLOYMENT_TARGET = 2.0;
+				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
@@ -922,7 +1008,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
-				XROS_DEPLOYMENT_TARGET = 2.0;
+				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};

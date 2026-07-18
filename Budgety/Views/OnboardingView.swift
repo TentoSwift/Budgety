@@ -112,7 +112,9 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .contentShape(Rectangle())
                 }
+                #if !os(visionOS)
                 .glassEffect(.regular.interactive().tint(.accentColor))
+                #endif
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 8)

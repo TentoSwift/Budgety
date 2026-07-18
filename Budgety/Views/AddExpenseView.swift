@@ -205,7 +205,9 @@ struct AddExpenseView: View {
                     .truncationMode(.head)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
+                    #if !os(visionOS)
                     .glassEffect()
+                    #endif
             }
             HStack {
                 Spacer()
@@ -220,7 +222,9 @@ struct AddExpenseView: View {
                 .disabled(calcPendingOp == nil)
                 Spacer()
             }
+            #if !os(visionOS)
             .glassEffect()
+            #endif
         }
         .padding(.horizontal)
         .padding(.vertical)
@@ -1133,7 +1137,9 @@ struct AddExpenseView: View {
             }
             .tint(sheetTint)
             .listStyle(.plain)
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             // 金額フォーカス中だけキーボード上 (safeArea) に簡易電卓を出す。
             .safeAreaInset(edge: .bottom) {
                 if amountFocused {
@@ -1197,7 +1203,9 @@ struct AddExpenseView: View {
                         }
                         .popoverTip(receiptScanTip)
                     }
+                    #if !os(visionOS)
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    #endif
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存", systemImage: "checkmark") {
@@ -1889,7 +1897,9 @@ private struct DiscardGuardedBack<Content: View>: View {
                         .allowsHitTesting(false)
                         .modifier(modifier)
                 }
+                #if !os(visionOS)
                 .sharedBackgroundVisibility(.hidden)
+                #endif
             }
     }
 }

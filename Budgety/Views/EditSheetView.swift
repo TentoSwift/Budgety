@@ -179,7 +179,9 @@ struct EditSheetView: View {
             .scrollIndicators(.hidden)
             .navigationTitle("シートを編集")
             .navigationBarTitleDisplayMode(.inline)
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") { dismiss() }

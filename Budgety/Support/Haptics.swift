@@ -5,7 +5,7 @@
 //  iOS/visionOS では UIFeedbackGenerator、macOS では NSHapticFeedbackManager。
 //
 
-#if canImport(UIKit)
+#if canImport(UIKit) && !os(visionOS)
 import UIKit
 #endif
 #if canImport(AppKit)
@@ -14,7 +14,7 @@ import AppKit
 
 enum Haptics {
     static func success() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UINotificationFeedbackGenerator()
         g.prepare()
         g.notificationOccurred(.success)
@@ -24,7 +24,7 @@ enum Haptics {
     }
 
     static func warning() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UINotificationFeedbackGenerator()
         g.prepare()
         g.notificationOccurred(.warning)
@@ -34,7 +34,7 @@ enum Haptics {
     }
 
     static func error() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UINotificationFeedbackGenerator()
         g.prepare()
         g.notificationOccurred(.error)
@@ -44,7 +44,7 @@ enum Haptics {
     }
 
     static func light() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UIImpactFeedbackGenerator(style: .light)
         g.prepare()
         g.impactOccurred()
@@ -54,7 +54,7 @@ enum Haptics {
     }
 
     static func medium() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UIImpactFeedbackGenerator(style: .medium)
         g.prepare()
         g.impactOccurred()
@@ -64,7 +64,7 @@ enum Haptics {
     }
 
     static func selection() {
-        #if canImport(UIKit)
+        #if canImport(UIKit) && !os(visionOS)
         let g = UISelectionFeedbackGenerator()
         g.prepare()
         g.selectionChanged()

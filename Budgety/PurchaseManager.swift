@@ -8,6 +8,9 @@ import StoreKit
 import Combine
 import CoreData
 import os
+#if os(visionOS)
+import UIKit
+#endif
 
 @MainActor
 final class PurchaseManager: ObservableObject {
@@ -99,6 +102,15 @@ final class PurchaseManager: ObservableObject {
         }
     }
 
+    #if os(visionOS)
+    /// visionOS の purchase(confirmIn:) に渡す前面のウインドウシーン。
+    @MainActor
+    private func activeWindowScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+    }
+    #endif
+
     @discardableResult
     func purchase(_ product: Product) async -> Bool {
         // 防御的ガード: 既に Premium を所有しているなら二重購入させない。
@@ -108,7 +120,17 @@ final class PurchaseManager: ObservableObject {
         isProcessing = true
         defer { isProcessing = false }
         do {
+            // visionOS は product.purchase() が使えず、購入 UI を出すシーンを
+            // 明示する purchase(confirmIn:) が必要。
+            #if os(visionOS)
+            guard let scene = await activeWindowScene() else {
+                lastError = String(localized: "購入 UI を表示できませんでした。")
+                return false
+            }
+            let result = try await product.purchase(confirmIn: scene)
+            #else
             let result = try await product.purchase()
+            #endif
             switch result {
             case .success(let verification):
                 switch verification {

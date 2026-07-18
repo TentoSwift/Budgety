@@ -15,7 +15,7 @@ struct BudgetyVisionApp: App {
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            BudgetyVisionContentView()
+            ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .task {
                     // シートを Spotlight に索引する。
