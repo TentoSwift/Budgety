@@ -10,7 +10,9 @@ import UIKit
 import TipKit
 import CustomPicker
 #if os(iOS)
+#if canImport(CustomNavigationTitle)
 import CustomNavigationTitle
+#endif
 #endif
 
 /// 支出の支払い者が指定 profileID と一致するか。
@@ -491,20 +493,24 @@ struct SheetDetailView: View {
                     .popoverTip(filterTip)
                 }
             }
+            #if !os(visionOS)
             if UIDevice.current.userInterfaceIdiom == .pad {
                 ToolbarSpacer(.flexible, placement: .bottomBar)
             } else {
                 ToolbarSpacer(.fixed, placement: .bottomBar)
             }
+            #endif
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             // iPad は幅に関係なく (Slide Over 等の compact 幅でも) 検索バーが上部へ移動し、
             // bottomBar に `+` だけが残って中央寄せになるため、flexible スペーサーで右端へ寄せる。
             // iPhone は検索バーが bottomBar に残り `+` を右へ押すので fixed のまま。
+            #if !os(visionOS)
             if UIDevice.current.userInterfaceIdiom == .pad {
                 ToolbarSpacer(.flexible, placement: .bottomBar)
             } else {
                 ToolbarSpacer(.fixed, placement: .bottomBar)
             }
+            #endif
             ToolbarItem(placement: .bottomBar) {
                 Button(role: .confirm) {
                     showingAddExpense = true

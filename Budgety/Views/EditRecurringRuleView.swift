@@ -429,7 +429,9 @@ struct EditRecurringRuleView: View {
             }
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
+            #if !os(visionOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") { dismiss() }

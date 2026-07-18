@@ -205,7 +205,9 @@ struct SheetAIChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        #if !os(visionOS)
         .glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: 18))
+        #endif
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }

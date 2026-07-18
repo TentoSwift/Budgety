@@ -154,7 +154,9 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+        #if !os(visionOS)
         .glassEffect(.regular.tint(.green.opacity(0.20)), in: .rect(cornerRadius: 14))
+        #endif
     }
 
     @ViewBuilder
@@ -208,12 +210,14 @@ struct PaywallView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             // 全体をヒットテスト対象に (= 余白部分をタップしても選択できる)
             .contentShape(RoundedRectangle(cornerRadius: 14))
+            #if !os(visionOS)
             .glassEffect(
                 isSelected
                     ? .regular.interactive().tint(Color.accentColor)
                     : .regular.interactive(),
                 in: .rect(cornerRadius: 14)
             )
+            #endif
         }
         .buttonStyle(.plain)
     }
