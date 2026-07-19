@@ -81,8 +81,10 @@ struct WatchAddExpenseView: View {
     private var currencyDecimals: Int {
         CurrencyCatalog.fractionDigits(for: sheet.resolvedDefaultCurrencyCode)
     }
-    /// Digital Crown の刻み。小数なし通貨は 100、小数あり通貨は 1。
-    private var amountStep: Double { currencyDecimals == 0 ? 100 : 1 }
+    /// Digital Crown の基本刻み (= ゆっくり回した時の最小単位)。
+    /// 通貨によらず 1 (JPY なら 1 円)。速く回すと速度倍率 (×10/×100/×1000) で
+    /// 10・100・1000 単位に切り替わる。
+    private var amountStep: Double { 1 }
     /// クイック加算ボタンの刻み (通貨の桁数に合わせる)。
     private var quickSteps: [Int] { currencyDecimals == 0 ? [100, 500, 1000] : [1, 10, 100] }
     /// 金額を通貨フォーマットしたテキスト (¥5,000 / $5.00 など)。
