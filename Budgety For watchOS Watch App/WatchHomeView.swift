@@ -203,10 +203,43 @@ struct WatchHomeView: View {
 
 // MARK: - Single Sheet Page (= TabView の 1 ページ)
 
+/// サマリーの収支に適用する期間 (iOS の Period の watch 版・カスタムなし)。
+private enum WatchPeriod: String, CaseIterable, Identifiable {
+    case thisMonth, lastMonth, thisYear, all
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .thisMonth: String(localized: "今月")
+        case .lastMonth: String(localized: "先月")
+        case .thisYear:  String(localized: "今年")
+        case .all:       String(localized: "全期間")
+        }
+    }
+
+    func contains(_ date: Date) -> Bool {
+        let cal = Calendar.current
+        switch self {
+        case .all:
+            return true
+        case .thisMonth:
+            return cal.isDate(date, equalTo: .now, toGranularity: .month)
+        case .lastMonth:
+            guard let last = cal.date(byAdding: .month, value: -1, to: .now) else { return false }
+            return cal.isDate(date, equalTo: last, toGranularity: .month)
+        case .thisYear:
+            return cal.isDate(date, equalTo: .now, toGranularity: .year)
+        }
+    }
+}
+
 private struct WatchSheetPage: View {
     let sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var ctx
     @State private var showingAdd: Bool = false
+    /// 収支サマリーの期間 (端末に永続化・全シート共通)。
+    @AppStorage("watchSummaryPeriod") private var periodRaw: String = WatchPeriod.thisMonth.rawValue
+    private var period: WatchPeriod { WatchPeriod(rawValue: periodRaw) ?? .thisMonth }
     @State private var pendingDeleteExpense: Expense?
     /// 他メンバーのプロフィール写真が Public DB からロードされたら行を再描画する。
     @ObservedObject private var pub = PublicProfileSync.shared
@@ -260,6 +293,23 @@ private struct WatchSheetPage: View {
         return e + v
     }
 
+    /// 選択期間の収支 (収入 − 支出)。仮想 occurrence も合算する。
+    private var periodNet: Decimal {
+        let real = expenses
+            .filter { period.contains($0.date ?? .distantPast) }
+            .reduce(Decimal(0)) { $0 + ($1.kind == .income ? $1.amountDecimal : -$1.amountDecimal) }
+        let virtual = virtualOccurrences
+            .filter { period.contains($0.date) }
+            .reduce(Decimal(0)) { $0 + ($1.kind == .income ? $1.amount : -$1.amount) }
+        return real + virtual
+    }
+
+    /// 収支の符号付き表示 ("+¥1,200" / "-¥3,150" / "¥0")。
+    private var periodNetFormatted: String {
+        if periodNet > 0 { return "+" + formatYen(periodNet) }
+        return formatYen(periodNet)
+    }
+
     private var budgetProgress: Double? {
         guard let budget = sheet.monthlyBudgetDecimal, budget > 0 else { return nil }
         let used = NSDecimalNumber(decimal: monthTotal).doubleValue
@@ -286,6 +336,16 @@ private struct WatchSheetPage: View {
                 .foregroundStyle(sheet.tint)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // 支出の追加はツールバーの + から (サマリー内のボタンは廃止)。
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
         .sheet(isPresented: $showingAdd) {
             NavigationStack {
                 WatchAddExpenseView(sheet: sheet)
@@ -319,13 +379,12 @@ private struct WatchSheetPage: View {
 
     // MARK: - Tabs
 
-    /// 1 ページ目: 今月合計 + 追加ボタン。
+    /// 1 ページ目: 収支サマリー (期間ピッカー付き)。追加はツールバーの + から。
     @ViewBuilder
     private var summaryTab: some View {
         ScrollView {
             VStack(spacing: 12) {
                 heroCard
-                addButton
             }
             .padding(.horizontal, 4)
             .padding(.top, 4)
@@ -343,7 +402,7 @@ private struct WatchSheetPage: View {
                 ContentUnavailableView(
                     "まだ記録がありません",
                     systemImage: "tray",
-                    description: Text("サマリー画面の「追加」から記録できます。")
+                    description: Text("右上の + から記録できます。")
                 )
             } else {
                 List {
@@ -387,22 +446,38 @@ private struct WatchSheetPage: View {
 
     private var heroCard: some View {
         VStack(spacing: 6) {
+            // 見出し: 収支
             HStack(spacing: 6) {
                 Image(systemName: sheet.displaySymbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text("今月")
+                Text("収支")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            Text(formatYen(monthTotal))
+            // 期間ピッカー (収支ラベルと金額の間)
+            Picker("期間", selection: Binding(
+                get: { period },
+                set: { periodRaw = $0.rawValue }
+            )) {
+                ForEach(WatchPeriod.allCases) { p in
+                    Text(p.label).tag(p)
+                }
+            }
+            .pickerStyle(.navigationLink)
+            .labelsHidden()
+            .frame(height: 36)
+            .tint(.white)
+            // 収支 (収入 − 支出)
+            Text(periodNetFormatted)
                 .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .animation(.snappy, value: monthTotal)
+                .animation(.snappy, value: periodNet)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            if let p = budgetProgress {
+            // 月予算バーは「今月」表示のときだけ (予算は月単位のため)
+            if period == .thisMonth, let p = budgetProgress {
                 budgetBar(progress: p)
                     .padding(.top, 4)
             }
@@ -436,29 +511,6 @@ private struct WatchSheetPage: View {
             }
         }
         .padding(.horizontal, 4)
-    }
-
-    private var addButton: some View {
-        Button {
-            showingAdd = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                Text("支出を追加")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(.white.opacity(0.20))
-            )
-            .foregroundStyle(.white)
-        }
-        .buttonStyle(.plain)
     }
 
     private func recentRow(_ e: Expense) -> some View {
