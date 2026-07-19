@@ -255,6 +255,22 @@ private struct WatchSummaryOptionsView: View {
     let tint: Color
     @Environment(\.dismiss) private var dismiss
 
+    // 下書き (draft) モデル。行の編集はいったんここに溜め、✓ で確定・✗ で破棄する。
+    // 直接 binding に書き込む即時反映をやめ、キャンセルできるようにするため。
+    @State private var draftPeriodRaw: String = ""
+    @State private var draftStart: Double = 0
+    @State private var draftEnd: Double = 0
+    /// onAppear の初期化を一度だけ走らせるためのガード。
+    @State private var didLoad = false
+
+    /// 下書きが元の値から変わっているか (✓ の活性判定)。
+    /// 日付は DatePicker 経由でしか変わらないため Double の直接比較で十分。
+    private var hasChanges: Bool {
+        draftPeriodRaw != periodRaw
+            || draftStart != customStart
+            || draftEnd != customEnd
+    }
+
     /// Double(参照日時からの秒) の Binding を DatePicker 用の Binding<Date> に変換。
     private func dateBinding(_ raw: Binding<Double>) -> Binding<Date> {
         Binding(
@@ -270,20 +286,20 @@ private struct WatchSummaryOptionsView: View {
                 // (タイトルが「期間」を兼ねる)。
                 Section {
                     ForEach(WatchPeriod.allCases) { p in
-                        optionRow(p.label, isOn: periodRaw == p.rawValue) {
-                            periodRaw = p.rawValue
+                        optionRow(p.label, isOn: draftPeriodRaw == p.rawValue) {
+                            draftPeriodRaw = p.rawValue
                         }
                     }
                     // カスタム選択時のみ開始日・終了日を編集する DatePicker を出す。
-                    if periodRaw == WatchPeriod.custom.rawValue {
+                    if draftPeriodRaw == WatchPeriod.custom.rawValue {
                         DatePicker(
                             "開始日",
-                            selection: dateBinding($customStart),
+                            selection: dateBinding($draftStart),
                             displayedComponents: [.date]
                         )
                         DatePicker(
                             "終了日",
-                            selection: dateBinding($customEnd),
+                            selection: dateBinding($draftEnd),
                             displayedComponents: [.date]
                         )
                     }
@@ -294,14 +310,34 @@ private struct WatchSummaryOptionsView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
+                        // ✓: 下書きを実際の binding に書き戻してから閉じる。
+                        periodRaw = draftPeriodRaw
+                        customStart = draftStart
+                        customEnd = draftEnd
                         dismiss()
                     } label: {
                         Image(systemName: "checkmark")
                     }
-                    .tint(tint)
+                    .tint(hasChanges ? tint : .clear)
+                    .disabled(!hasChanges)
                 }
+            }
+            .onAppear {
+                // binding の現在値を下書きへ (初回のみ)。
+                guard !didLoad else { return }
+                draftPeriodRaw = periodRaw
+                draftStart = customStart
+                draftEnd = customEnd
+                didLoad = true
             }
         }
     }
