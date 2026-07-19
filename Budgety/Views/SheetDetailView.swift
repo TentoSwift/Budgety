@@ -767,7 +767,8 @@ struct SheetDetailView: View {
             })
         }
         .sheet(item: $editingRule) { rule in
-            EditRecurringRuleView(mode: .edit(rule: rule))
+            // 支出追加と同じ UI (AddExpenseView) でルールを編集する。
+            AddExpenseView(rule: rule)
         }
         // 仮想 occurrence をタップ → materialize した Expense の詳細へ push (実支出と同じ画面)。
         .navigationDestination(item: $detailExpense) { exp in

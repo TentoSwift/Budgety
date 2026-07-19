@@ -14,6 +14,9 @@ struct AddExpenseView: View {
     enum Mode {
         case create(record: ExpenseSheet)
         case edit(expense: Expense)
+        /// 定期項目 (RecurringRule) そのものを編集する。支出追加と同じ UI で
+        /// タイトル・金額・カテゴリ・支払者・割り勘・頻度などを直接ルールに書き戻す。
+        case editRule(rule: RecurringRule)
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -21,12 +24,21 @@ struct AddExpenseView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let mode: Mode
+    /// 新規作成時に「繰り返し」を ON で開始するか (定期項目一覧の + 用)。
+    private var presetRecurring: Bool = false
 
     private var contextSheet: ExpenseSheet? {
         switch mode {
         case .create(let g): return g
         case .edit(let e): return e.sheet
+        case .editRule(let r): return r.sheet
         }
+    }
+
+    /// 定期項目 (ルール) 編集モードか。写真添付など Expense 固有 UI の出し分けに使う。
+    private var isEditingRule: Bool {
+        if case .editRule = mode { return true }
+        return false
     }
 
     /// 現在のシートに対する CKShare (= 支払者の canonical ID 解決に使う)。
@@ -351,6 +363,8 @@ struct AddExpenseView: View {
     /// (定期項目から外したい時は「定期項目」一覧から rule を直接削除する運用)
     private var isRecurringLocked: Bool {
         if case .edit(let expense) = mode, expense.generatedFromRuleID != nil { return true }
+        // ルール編集モード: 繰り返し OFF への変換はここではさせない (削除で対応)。
+        if case .editRule = mode { return true }
         return false
     }
 
@@ -370,8 +384,11 @@ struct AddExpenseView: View {
     /// 編集する経路で、キャンセル (未 commit) なら親側で未保存行を破棄するために使う。
     let onCommit: (() -> Void)?
 
-    init(record: ExpenseSheet) {
+    /// - Parameter presetRecurring: true なら「繰り返し ON」の初期状態で開く
+    ///   (定期項目一覧の「+」から新規作成する時に使う)。
+    init(record: ExpenseSheet, presetRecurring: Bool = false) {
         self.mode = .create(record: record)
+        self.presetRecurring = presetRecurring
         self.onEditRule = nil
         self.onCommit = nil
     }
@@ -379,6 +396,13 @@ struct AddExpenseView: View {
     init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil, onCommit: (() -> Void)? = nil) {
         self.mode = .edit(expense: expense)
         self.onEditRule = onEditRule
+        self.onCommit = onCommit
+    }
+
+    /// 定期項目 (RecurringRule) を直接編集する。
+    init(rule: RecurringRule, onCommit: (() -> Void)? = nil) {
+        self.mode = .editRule(rule: rule)
+        self.onEditRule = nil
         self.onCommit = onCommit
     }
 
@@ -396,8 +420,9 @@ struct AddExpenseView: View {
         // kind を切り替えたらタイトルも追従する (支出 ↔ 収入)。
         let noun = kind == .income ? String(localized: "収入") : String(localized: "支出")
         switch mode {
-        case .create: return String(localized: "\(noun)を追加")
-        case .edit:   return String(localized: "\(noun)を編集")
+        case .create:   return String(localized: "\(noun)を追加")
+        case .edit:     return String(localized: "\(noun)を編集")
+        case .editRule: return String(localized: "定期項目を編集")
         }
     }
 
@@ -414,19 +439,29 @@ struct AddExpenseView: View {
     /// 編集モードで Member 解決ができなかった場合に表示する名前 (保存済みの paidBy)。
     /// 新規作成時は nil で fallback としてプロフィール表示にする。
     private var payerFallbackName: String? {
-        if case .edit(let expense) = mode {
+        switch mode {
+        case .edit(let expense):
             let n = expense.paidBy ?? ""
             return n.isEmpty ? nil : n
+        case .editRule(let rule):
+            let n = rule.paidBy ?? ""
+            return n.isEmpty ? nil : n
+        case .create:
+            return nil
         }
-        return nil
     }
 
     private var payerFallbackProfileID: String? {
-        if case .edit(let expense) = mode {
+        switch mode {
+        case .edit(let expense):
             let p = expense.payerProfileID ?? ""
             return p.isEmpty ? nil : p
+        case .editRule(let rule):
+            let p = rule.payerProfileID ?? ""
+            return p.isEmpty ? nil : p
+        case .create:
+            return nil
         }
-        return nil
     }
 
     // MARK: - AI category suggestion
@@ -854,6 +889,15 @@ struct AddExpenseView: View {
         dismiss()
     }
 
+    /// 定期項目 (ルール) を削除する。過去に実体化済みの支出/収入は残る。
+    private func deleteRule(_ rule: RecurringRule) {
+        viewContext.delete(rule)
+        PersistenceController.shared.save()
+        onCommit?()
+        Haptics.success()
+        dismiss()
+    }
+
     @ViewBuilder
     private var payerPreview: some View {
         // アイコンと名前は HStack で横並び固定 (ListRow / LabeledContent 内では
@@ -1050,7 +1094,12 @@ struct AddExpenseView: View {
                 categorySection
 
                 Section {
-                    DatePicker("日付", selection: $date, displayedComponents: [.date])
+                    if isEditingRule {
+                        // ルール編集ではこの日付が繰り返しの起点になる。
+                        DatePicker("開始日", selection: $date, displayedComponents: [.date])
+                    } else {
+                        DatePicker("日付", selection: $date, displayedComponents: [.date])
+                    }
                 }
 
                 payerSection
@@ -1118,7 +1167,10 @@ struct AddExpenseView: View {
                         .lineLimit(2...4)
                 }
 
-                photoSection
+                if !isEditingRule {
+                    // ルールには写真 (レシート) は無いので非表示。
+                    photoSection
+                }
 
                 if case .edit = mode {
                     Section {
@@ -1132,6 +1184,18 @@ struct AddExpenseView: View {
                                 .foregroundStyle(.red)
                                 .frame(maxWidth: .infinity)
                         }
+                    }
+                } else if isEditingRule {
+                    Section {
+                        Button(role: .destructive) {
+                            showingDeleteConfirm = true
+                        } label: {
+                            Text("この定期項目を削除")
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity)
+                        }
+                    } footer: {
+                        Text("削除しても、過去に自動生成された支出/収入は残ります。")
                     }
                 }
             }
@@ -1229,14 +1293,21 @@ struct AddExpenseView: View {
                 Text("この支出は定期項目から生成されています。この項目だけ変更するか、定期項目全体を変更するか選んでください。")
             }
             .confirmationDialog(
-                "この支出を削除しますか？",
+                isEditingRule
+                    ? String(localized: "この定期項目を削除しますか？")
+                    : String(localized: "この支出を削除しますか？"),
                 isPresented: $showingDeleteConfirm,
                 titleVisibility: .visible
             ) {
-                Button("削除", role: .destructive) { deleteExpense() }
+                Button("削除", role: .destructive) {
+                    if case .editRule(let rule) = mode { deleteRule(rule) }
+                    else { deleteExpense() }
+                }
                 Button("キャンセル", role: .cancel) {}
             } message: {
-                Text("元に戻せません。")
+                Text(isEditingRule
+                     ? String(localized: "削除しても、過去に自動生成された支出/収入は残ります。")
+                     : String(localized: "元に戻せません。"))
             }
             .onAppear {
                 let isFirstAppear = !didLoad
@@ -1644,6 +1715,7 @@ struct AddExpenseView: View {
         profile.ensureSelfMemberExists(in: viewContext)
         switch mode {
         case .create(let record):
+            if presetRecurring { isRecurring = true }
             currencyCode = record.resolvedDefaultCurrencyCode
             // カテゴリは未分類 (nil) スタート。AI / 過去履歴 / 手動の提案で埋める。
             selectedCategory = nil
@@ -1719,6 +1791,37 @@ struct AddExpenseView: View {
             origFrequencyRaw = frequency.rawValue
             origRecurringInterval = Int32(recurringInterval)
             origEndDate = hasEndDate ? endDate : nil
+        case .editRule(let rule):
+            // 定期項目 (ルール) そのものを編集: EditRecurringRuleView と同じ復元。
+            title = rule.displayTitle
+            amountText = NSDecimalNumber(decimal: rule.amountDecimal).stringValue
+            kind = rule.kind
+            currencyCode = rule.resolvedCurrencyCode
+            date = rule.startDate ?? .now
+            note = rule.note ?? ""
+            if let sheet = rule.sheet,
+               let raw = rule.categoryRaw,
+               let cats = sheet.categories as? Set<ExpenseCategory> {
+                selectedCategory = cats.first(where: { $0.name == raw })
+            }
+            selectedPayer = rule.resolvedPayer
+            // 割り勘 state 復元 (Expense 編集と同じ規則)。
+            selectedBeneficiaries = Set(rule.beneficiaryIDList)
+            let rulePayerID = rule.payerProfileID ?? ""
+            let rulePayerOnly = selectedBeneficiaries.isEmpty
+                || (!rulePayerID.isEmpty && selectedBeneficiaries == Set([rulePayerID]))
+            splitEnabled = !rulePayerOnly
+            if !splitEnabled, !rulePayerID.isEmpty {
+                selectedBeneficiaries = Set([rulePayerID])
+            }
+            // 繰り返し設定 (常に ON・OFF へは変換不可)
+            isRecurring = true
+            frequency = rule.resolvedFrequency
+            recurringInterval = Int(rule.resolvedInterval)
+            if let end = rule.endDate {
+                hasEndDate = true
+                endDate = end
+            }
         }
         // ロード時の State 代入が反映されたあと (= 次の runloop) に
         // スナップショットを撮ることで、「ロード直後 = まだ汚れていない」
@@ -1799,6 +1902,21 @@ struct AddExpenseView: View {
 
             // 繰り返し関連の差分を反映 (Rule の作成 / 更新)
             applyRecurringChanges(for: expense)
+        case .editRule(let rule):
+            // 定期項目 (ルール) の直接編集: フォーム値を丸ごと書き戻す。
+            rule.title = title.trimmingCharacters(in: .whitespaces)
+            rule.amount = NSDecimalNumber(decimal: amountDecimal)
+            rule.kindRaw = kind.rawValue
+            rule.currencyCode = currencyCode
+            rule.categoryRaw = selectedCategory?.name
+            rule.paidBy = effectivePaidByFallback
+            rule.payerProfileID = effectivePayerProfileID
+            rule.beneficiaryProfileIDs = effectiveBeneficiaryCSV
+            rule.note = note
+            rule.frequency = frequency.rawValue
+            rule.interval = Int32(recurringInterval)
+            rule.startDate = Calendar.current.startOfDay(for: date)
+            rule.endDate = hasEndDate ? Calendar.current.startOfDay(for: endDate) : nil
         }
         pc.save()
         // 繰り返しが付いた可能性があるので generator を回して未生成分を作る

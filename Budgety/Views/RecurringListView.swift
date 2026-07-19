@@ -71,10 +71,20 @@ struct RecurringListView: View {
             }
         }
         .sheet(item: $editingRule) { rule in
+            // iOS / visionOS は支出追加と同じ UI (AddExpenseView) でルールを編集する。
+            // macOS は AddExpenseView が未収録のため従来のフォームを使う。
+            #if os(macOS)
             EditRecurringRuleView(mode: .edit(rule: rule))
+            #else
+            AddExpenseView(rule: rule)
+            #endif
         }
         .sheet(isPresented: $showingNew) {
+            #if os(macOS)
             EditRecurringRuleView(mode: .create(record: record))
+            #else
+            AddExpenseView(record: record, presetRecurring: true)
+            #endif
         }
         .onAppear {
             // AddExpenseView から飛んできた直後など、開いた瞬間に
