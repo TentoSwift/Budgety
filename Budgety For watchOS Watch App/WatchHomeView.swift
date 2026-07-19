@@ -252,6 +252,7 @@ private struct WatchSummaryOptionsView: View {
     /// カスタム期間の開始日・終了日 (timeIntervalSinceReferenceDate)。
     @Binding var customStart: Double
     @Binding var customEnd: Double
+    let tint: Color
     @Environment(\.dismiss) private var dismiss
 
     /// Double(参照日時からの秒) の Binding を DatePicker 用の Binding<Date> に変換。
@@ -288,7 +289,9 @@ private struct WatchSummaryOptionsView: View {
                     }
                 }
             }
-            .navigationTitle("期間")
+            .navigationTitle {
+                Text("期間").foregroundStyle(tint)
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -297,6 +300,7 @@ private struct WatchSummaryOptionsView: View {
                     } label: {
                         Image(systemName: "checkmark")
                     }
+                    .tint(tint)
                 }
             }
         }
@@ -310,7 +314,7 @@ private struct WatchSummaryOptionsView: View {
                 if isOn {
                     Image(systemName: "checkmark")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(tint)
                 }
             }
         }
@@ -476,7 +480,8 @@ private struct WatchSheetPage: View {
             WatchSummaryOptionsView(
                 periodRaw: $periodRaw,
                 customStart: $customStart,
-                customEnd: $customEnd
+                customEnd: $customEnd,
+                tint: sheet.tint
             )
         }
         .alert(
