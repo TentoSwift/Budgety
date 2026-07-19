@@ -244,24 +244,10 @@ private enum WatchPeriod: String, CaseIterable, Identifiable {
     }
 }
 
-/// サマリーに表示する金額の種類。
-private enum WatchMetric: String, CaseIterable, Identifiable {
-    case expense, net, income
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .expense: String(localized: "支出")
-        case .net:     String(localized: "収支")
-        case .income:  String(localized: "収入")
-        }
-    }
-}
-
-/// サマリーの「種類 (支出/収支/収入)」と「期間」を選ぶシート。
+/// サマリーの「期間」を選ぶシート。
 /// Picker ではなくボタン行 + チェックマークで即時反映する。
+/// 種類 (支出/収支/収入) は選ばせず、常に収支 + 内訳を表示する (iOS と同じ)。
 private struct WatchSummaryOptionsView: View {
-    @Binding var metricRaw: String
     @Binding var periodRaw: String
     /// カスタム期間の開始日・終了日 (timeIntervalSinceReferenceDate)。
     @Binding var customStart: Double
@@ -279,14 +265,9 @@ private struct WatchSummaryOptionsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("種類") {
-                    ForEach(WatchMetric.allCases) { m in
-                        optionRow(m.label, isOn: metricRaw == m.rawValue) {
-                            metricRaw = m.rawValue
-                        }
-                    }
-                }
-                Section("期間") {
+                // シートは期間選択専用になったのでセクション見出しは出さない
+                // (タイトルが「期間」を兼ねる)。
+                Section {
                     ForEach(WatchPeriod.allCases) { p in
                         optionRow(p.label, isOn: periodRaw == p.rawValue) {
                             periodRaw = p.rawValue
@@ -307,7 +288,7 @@ private struct WatchSummaryOptionsView: View {
                     }
                 }
             }
-            .navigationTitle("表示")
+            .navigationTitle("期間")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -343,9 +324,6 @@ private struct WatchSheetPage: View {
     /// 収支サマリーの期間 (端末に永続化・全シート共通)。
     @AppStorage("watchSummaryPeriod") private var periodRaw: String = WatchPeriod.thisMonth.rawValue
     private var period: WatchPeriod { WatchPeriod(rawValue: periodRaw) ?? .thisMonth }
-    /// サマリーに表示する種類 (支出/収支/収入)。端末に永続化・全シート共通。
-    @AppStorage("watchSummaryMetric") private var metricRaw: String = WatchMetric.net.rawValue
-    private var metric: WatchMetric { WatchMetric(rawValue: metricRaw) ?? .net }
     /// カスタム期間の開始日・終了日 (timeIntervalSinceReferenceDate)。既定は今日。全シート共通。
     @AppStorage("watchSummaryCustomStart") private var customStart: Double = Date().timeIntervalSinceReferenceDate
     @AppStorage("watchSummaryCustomEnd") private var customEnd: Double = Date().timeIntervalSinceReferenceDate
@@ -432,25 +410,25 @@ private struct WatchSheetPage: View {
         }
     }
 
-    /// 選択期間 × 選択種類の金額。仮想 occurrence も合算する。
-    private var periodAmount: Decimal {
+    /// 選択期間内の種類別合計。実データ + 仮想 occurrence を合算する。
+    private func periodTotal(_ kind: TransactionKind) -> Decimal {
         let inPeriod = expenses.filter { period.contains($0.date ?? .distantPast, customStart: customStartDate, customEnd: customEndDate) }
         let inPeriodVirtual = virtualOccurrences.filter { period.contains($0.date, customStart: customStartDate, customEnd: customEndDate) }
-        func total(_ kind: TransactionKind) -> Decimal {
-            inPeriod.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
-                + inPeriodVirtual.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amount }
-        }
-        switch metric {
-        case .expense: return total(.expense)
-        case .income:  return total(.income)
-        case .net:     return total(.income) - total(.expense)
-        }
+        return inPeriod.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
+            + inPeriodVirtual.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amount }
     }
 
-    /// 金額表示。収支のときだけ符号付き ("+¥1,200" / "-¥3,150")。
-    private var periodAmountFormatted: String {
-        if metric == .net, periodAmount > 0 { return "+" + formatYen(periodAmount) }
-        return formatYen(periodAmount)
+    /// 選択期間の収入合計。
+    private var periodIncome: Decimal { periodTotal(.income) }
+    /// 選択期間の支出合計。
+    private var periodExpense: Decimal { periodTotal(.expense) }
+    /// 選択期間の収支 (収入 - 支出)。ヒーローカードの大きな数字。
+    private var periodNet: Decimal { periodIncome - periodExpense }
+
+    /// 収支の表示。正なら符号付き ("+¥1,200")、負・0 はそのまま ("-¥3,150" / "¥0")。
+    private var periodNetFormatted: String {
+        if periodNet > 0 { return "+" + formatYen(periodNet) }
+        return formatYen(periodNet)
     }
 
     private var budgetProgress: Double? {
@@ -496,7 +474,6 @@ private struct WatchSheetPage: View {
         }
         .sheet(isPresented: $showingSummaryOptions) {
             WatchSummaryOptionsView(
-                metricRaw: $metricRaw,
                 periodRaw: $periodRaw,
                 customStart: $customStart,
                 customEnd: $customEnd
@@ -612,16 +589,16 @@ private struct WatchSheetPage: View {
 
     private var heroCard: some View {
         VStack(spacing: 6) {
-            // 見出し: 表示中の種類 (支出/収支/収入)
+            // 見出し: 常に「収支」(iOS の SummaryCard と同じく種類は選ばせない)
             HStack(spacing: 6) {
                 Image(systemName: sheet.displaySymbol)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text(metric.label)
+                Text("収支")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            // 期間ボタン (タップで種類・期間の選択シートを開く)。ラベルは出さず
+            // 期間ボタン (タップで期間の選択シートを開く)。ラベルは出さず
             // 現在の期間だけをコンパクトなカプセルで表示する。
             Button {
                 showingSummaryOptions = true
@@ -639,16 +616,28 @@ private struct WatchSheetPage: View {
                 .background(Capsule().fill(.white.opacity(0.20)))
             }
             .buttonStyle(.plain)
-            // 選択中の種類 × 期間の金額 (収支のみ符号付き)
-            Text(periodAmountFormatted)
+            // 選択期間の収支 (大きな数字・正なら符号付き)
+            Text(periodNetFormatted)
                 .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .animation(.snappy, value: periodAmount)
+                .animation(.snappy, value: periodNet)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            // 月予算バーは支出かつ単月 (今月/先月) のときだけ (予算は月の支出に対するもの)
-            if metric == .expense, period == .thisMonth || period == .lastMonth, let p = budgetProgress {
+            // 内訳: "+ 収入" | "- 支出" (iOS の incomeExpenseSummaryRow と同じ形)。
+            // 背景がグラデーションなので .secondary ではなく白の半透明で出す。
+            HStack(spacing: 8) {
+                Text("+ \(formatYen(periodIncome))")
+                Text("|")
+                    .foregroundStyle(.white.opacity(0.5))
+                Text("- \(formatYen(periodExpense))")
+            }
+            .font(.caption.weight(.medium).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.85))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // 月予算バーは単月 (今月/先月) のときだけ (予算は月の支出に対するもの)
+            if period == .thisMonth || period == .lastMonth, let p = budgetProgress {
                 budgetBar(progress: p)
                     .padding(.top, 4)
             }
