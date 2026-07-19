@@ -680,7 +680,7 @@ private struct WatchSheetPage: View {
                                 Text(dayNetFormatted(section.dayNet))
                             }
                             .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.white.opacity(0.75))
+                            .foregroundStyle(sheet.tint)
                         }
                     }
                 }
@@ -692,15 +692,6 @@ private struct WatchSheetPage: View {
 
     private var heroCard: some View {
         VStack(spacing: 6) {
-            // 見出し: 常に「収支」(iOS の SummaryCard と同じく種類は選ばせない)
-            HStack(spacing: 6) {
-                Image(systemName: sheet.displaySymbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                Text("収支")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-            }
             // 期間ボタン (タップで期間の選択シートを開く)。ラベルは出さず
             // 現在の期間だけをコンパクトなカプセルで表示する。
             Button {
@@ -752,13 +743,15 @@ private struct WatchSheetPage: View {
     private func budgetBar(progress: Double) -> some View {
         let displayProgress = min(1.0, progress)
         let exceeded = progress > 1.0
+        // iOS の budgetProgress と同じ 3 段階の色分け。
+        let color: Color = exceeded ? .red : (progress >= 0.8 ? .orange : sheet.tint)
         return VStack(spacing: 3) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(.white.opacity(0.25))
                     Capsule()
-                        .fill(exceeded ? Color.red : Color.white)
+                        .fill(color)
                         .frame(width: geo.size.width * CGFloat(displayProgress))
                 }
             }
@@ -770,7 +763,7 @@ private struct WatchSheetPage: View {
                 Spacer()
                 Text("\(Int(progress * 100))%")
                     .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(exceeded ? Color.red : Color.white)
+                    .foregroundStyle(color)
             }
         }
         .padding(.horizontal, 4)
