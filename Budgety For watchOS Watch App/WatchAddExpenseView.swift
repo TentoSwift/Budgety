@@ -103,11 +103,6 @@ struct WatchAddExpenseView: View {
             }
         }
         .containerBackground(sheet.tint.gradient, for: .navigation)
-        .navigationTitle {
-            Text("追加")
-                .foregroundStyle(sheet.tint)
-        }
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
@@ -245,8 +240,15 @@ struct WatchAddExpenseView: View {
                 showingCategoryPicker = true
             } label: {
                 HStack(spacing: 6) {
+                    // カテゴリ色の小さな円にシンボルを白抜き (SheetDetailView /
+                    // WatchCategoryPicker 行と同じ construction を一回り小さく)。
                     Image(systemName: cat.symbol ?? "tag.fill")
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: 18)
+                        .background(
+                            Circle().fill(cat.tint.gradient)
+                        )
                     Text(cat.name ?? "")
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
@@ -257,7 +259,7 @@ struct WatchAddExpenseView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(cat.tint.gradient))
+                .background(Capsule().fill(.white.opacity(0.20)))
             }
             .buttonStyle(.plain)
         }
@@ -308,8 +310,8 @@ struct WatchAddExpenseView: View {
         // detentsPerStep (生 detent) 回るごとに 1 刻み進める方式にする。
         crownResidual += rawDelta
         // 1 刻みに必要な生回転量。大きいほど感度が緩くなる (= less sensitive)。
-        // 実機フィードバックで段階調整中。現状は従来比 30% の感度 (2.5 / 0.3)。
-        let detentsPerStep = 8.3
+        // 実機フィードバックで段階調整中。現状は前回比 30% の感度 (8.3 / 0.3)。
+        let detentsPerStep = 27.7
         let steps = (crownResidual / detentsPerStep).rounded(.towardZero)
         guard steps != 0 else { return }
         crownResidual -= steps * detentsPerStep
@@ -515,6 +517,8 @@ struct WatchCategoryPicker: View {
                                     .foregroundStyle(tint)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
