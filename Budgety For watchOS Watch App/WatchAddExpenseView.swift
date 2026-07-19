@@ -103,11 +103,6 @@ struct WatchAddExpenseView: View {
             }
         }
         .containerBackground(sheet.tint.gradient, for: .navigation)
-        .navigationTitle {
-            Text("追加")
-                .foregroundStyle(sheet.tint)
-        }
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {

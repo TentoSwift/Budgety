@@ -560,14 +560,64 @@ private struct WatchSheetPage: View {
         }
     }
 
-    /// 2 ページ目: 全取引 (支出 + 収入)。セクションヘッダーは無し。
-    @ViewBuilder
-    private var transactionsTab: some View {
+    /// 取引リストの 1 日分 (日付見出し + その日の収支 + 明細)。
+    /// iOS の SheetDetailView.DaySection の watch 版。
+    private struct WatchDaySection: Identifiable {
+        let key: String        // startOfDay の ISO8601 (新しい日ほど降順で先頭)
+        let dayLabel: String
+        let dayNet: Decimal
+        let items: [LedgerItem]
+        var id: String { key }
+    }
+
+    /// 実 Expense + 仮想 occurrence を日別にグループ化する (iOS の groupedByDay と同じ規則)。
+    private func groupedByDay() -> [WatchDaySection] {
+        let cal = Calendar.current
         let items: [LedgerItem] = Array(expenses).map { LedgerItem.expense($0) }
             + virtualOccurrences.map { LedgerItem.occurrence($0) }
-        let sorted = items.sorted { $0.date > $1.date }
+        let dict = Dictionary(grouping: items) { item -> Date in
+            cal.startOfDay(for: item.date)
+        }
+        // 今年の日付は「M月d日 (E)」、それ以外は年付き (iOS と同じテンプレート)。
+        let currentYear = cal.component(.year, from: .now)
+        let shortFormatter = DateFormatter()
+        shortFormatter.locale = .autoupdatingCurrent
+        shortFormatter.setLocalizedDateFormatFromTemplate("MMMdEEE")
+        let longFormatter = DateFormatter()
+        longFormatter.locale = .autoupdatingCurrent
+        longFormatter.setLocalizedDateFormatFromTemplate("yMMMdEEE")
+
+        let target = sheet.resolvedDefaultCurrencyCode
+        let fx = FXRatesService.shared
+
+        let sections = dict.map { (day, dayItems) -> WatchDaySection in
+            let year = cal.component(.year, from: day)
+            let label = (year == currentYear ? shortFormatter : longFormatter).string(from: day)
+            var net: Decimal = 0
+            for it in dayItems {
+                let amt = fx.convert(it.amountDecimal, from: it.currencyCode, to: target) ?? it.amountDecimal
+                net += (it.kind == .income) ? amt : -amt
+            }
+            // 日内は日付の新しい順 (実支出は時刻あり、仮想は 0:00)。
+            let sorted = dayItems.sorted { $0.date > $1.date }
+            let key = ISO8601DateFormatter().string(from: day)
+            return WatchDaySection(key: key, dayLabel: label, dayNet: net, items: sorted)
+        }
+        return sections.sorted { $0.key > $1.key }
+    }
+
+    /// 日別収支の表示。正なら符号付き ("+¥1,200")、負・0 はそのまま (periodNetFormatted と同じ規則)。
+    private func dayNetFormatted(_ net: Decimal) -> String {
+        if net > 0 { return "+" + formatYen(net) }
+        return formatYen(net)
+    }
+
+    /// 2 ページ目: 全取引 (支出 + 収入)。iOS と同じく日別セクションで表示。
+    @ViewBuilder
+    private var transactionsTab: some View {
+        let sections = groupedByDay()
         return Group {
-            if sorted.isEmpty {
+            if sections.isEmpty {
                 // 空状態: 右上のツールバー + を指す矢印を上下にアニメーションして
                 // 「ここから追加できる」ことを視覚的に示す (説明文は出さない)。
                 ZStack(alignment: .topTrailing) {
@@ -590,35 +640,47 @@ private struct WatchSheetPage: View {
                 }
             } else {
                 List {
-                    ForEach(sorted) { item in
-                        switch item {
-                        case .expense(let expense):
-                            NavigationLink {
-                                WatchExpenseDetailView(expense: expense, sheet: sheet)
-                            } label: {
-                                recentRow(expense)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowBackground(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(.white.opacity(0.12))
-                            )
-                            .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    pendingDeleteExpense = expense
-                                } label: {
-                                    Label("削除", systemImage: "trash")
+                    ForEach(sections) { section in
+                        Section {
+                            ForEach(section.items) { item in
+                                switch item {
+                                case .expense(let expense):
+                                    NavigationLink {
+                                        WatchExpenseDetailView(expense: expense, sheet: sheet)
+                                    } label: {
+                                        recentRow(expense)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .listRowBackground(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(.white.opacity(0.12))
+                                    )
+                                    .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button(role: .destructive) {
+                                            pendingDeleteExpense = expense
+                                        } label: {
+                                            Label("削除", systemImage: "trash")
+                                        }
+                                    }
+                                case .occurrence(let occ):
+                                    // 仮想 occurrence (未実体化の定期分)。watch は表示のみ。
+                                    virtualRow(occ)
+                                        .listRowBackground(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(.white.opacity(0.08))
+                                        )
+                                        .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
                                 }
                             }
-                        case .occurrence(let occ):
-                            // 仮想 occurrence (未実体化の定期分)。watch は表示のみ。
-                            virtualRow(occ)
-                                .listRowBackground(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(.white.opacity(0.08))
-                                )
-                                .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
+                        } header: {
+                            HStack {
+                                Text(section.dayLabel)
+                                Spacer()
+                                Text(dayNetFormatted(section.dayNet))
+                            }
+                            .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.75))
                         }
                     }
                 }
@@ -673,7 +735,7 @@ private struct WatchSheetPage: View {
                     .foregroundStyle(.white.opacity(0.5))
                 Text("- \(formatYen(periodExpense))")
             }
-            .font(.caption.weight(.medium).monospacedDigit())
+            .font(.system(.caption, design: .rounded).weight(.medium).monospacedDigit())
             .foregroundStyle(.white.opacity(0.85))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
