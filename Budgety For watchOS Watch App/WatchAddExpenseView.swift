@@ -79,16 +79,12 @@ struct WatchAddExpenseView: View {
         CurrencyCatalog.option(for: sheet.resolvedDefaultCurrencyCode).symbol
     }
 
-    /// シート既定通貨の小数桁数 (0 = JPY/KRW 等 / 2 = USD/EUR 等)。
-    private var currencyDecimals: Int {
-        CurrencyCatalog.fractionDigits(for: sheet.resolvedDefaultCurrencyCode)
-    }
     /// Digital Crown の基本刻み (= ゆっくり回した時の最小単位)。
     /// 通貨によらず 1 (JPY なら 1 円)。速く回すと速度倍率 (×10/×100/×1000) で
     /// 10・100・1000 単位に切り替わる。
     private var amountStep: Double { 1 }
-    /// クイック加算ボタンの刻み (通貨の桁数に合わせる)。
-    private var quickSteps: [Int] { currencyDecimals == 0 ? [100, 500, 1000] : [1, 10, 100] }
+    /// クイック加算ボタンの刻み。Crown と同じく細かい調整用に統一 (1/10/100)。
+    private var quickSteps: [Int] { [1, 10, 100] }
     /// 金額を通貨フォーマットしたテキスト (¥5,000 / $5.00 など)。
     private var amountText: String {
         CurrencyCatalog.format(Decimal(amount), code: sheet.resolvedDefaultCurrencyCode)
