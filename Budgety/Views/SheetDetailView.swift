@@ -1515,7 +1515,9 @@ private struct SummaryCard: View {
         let t = totals()
         let net = t.income - t.expense
         let budget = record.monthlyBudgetDecimal
-        let showBudgetMetrics = !isSearching && period == .thisMonth
+        // 予算は月単位なので、月単位の期間 (今月/先月) のときだけ予算バーを出す。
+        // 先月表示時は先月の支出に対する進捗になる。
+        let showBudgetMetrics = !isSearching && (period == .thisMonth || period == .lastMonth)
             && selectedCategory == nil && selectedPayerID == nil && budget != nil
         VStack(alignment: .leading, spacing: 12) {
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)

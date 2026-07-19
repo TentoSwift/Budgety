@@ -203,9 +203,9 @@ struct WatchHomeView: View {
 
 // MARK: - Single Sheet Page (= TabView の 1 ページ)
 
-/// サマリーの収支に適用する期間 (iOS の Period の watch 版・カスタムなし)。
+/// サマリーの収支に適用する期間 (iOS の Period の watch 版)。
 private enum WatchPeriod: String, CaseIterable, Identifiable {
-    case thisMonth, lastMonth, thisYear, all
+    case thisMonth, lastMonth, thisYear, all, custom
     var id: String { rawValue }
 
     var label: String {
@@ -214,10 +214,13 @@ private enum WatchPeriod: String, CaseIterable, Identifiable {
         case .lastMonth: String(localized: "先月")
         case .thisYear:  String(localized: "今年")
         case .all:       String(localized: "全期間")
+        case .custom:    String(localized: "カスタム")
         }
     }
 
-    func contains(_ date: Date) -> Bool {
+    /// カスタム期間は AppStorage に保存されるため enum からは読めない。
+    /// 呼び出し側が保存済みの開始日・終了日を渡す。
+    func contains(_ date: Date, customStart: Date, customEnd: Date) -> Bool {
         let cal = Calendar.current
         switch self {
         case .all:
@@ -229,6 +232,14 @@ private enum WatchPeriod: String, CaseIterable, Identifiable {
             return cal.isDate(date, equalTo: last, toGranularity: .month)
         case .thisYear:
             return cal.isDate(date, equalTo: .now, toGranularity: .year)
+        case .custom:
+            // 日付単位の閉区間 (開始日の 0:00 〜 終了日の 23:59:59)。
+            let lower = cal.startOfDay(for: customStart)
+            let endDay = cal.startOfDay(for: customEnd)
+            guard let upper = cal.date(byAdding: DateComponents(day: 1, second: -1), to: endDay) else {
+                return date >= lower
+            }
+            return date >= lower && date <= upper
         }
     }
 }
@@ -252,7 +263,18 @@ private enum WatchMetric: String, CaseIterable, Identifiable {
 private struct WatchSummaryOptionsView: View {
     @Binding var metricRaw: String
     @Binding var periodRaw: String
+    /// カスタム期間の開始日・終了日 (timeIntervalSinceReferenceDate)。
+    @Binding var customStart: Double
+    @Binding var customEnd: Double
     @Environment(\.dismiss) private var dismiss
+
+    /// Double(参照日時からの秒) の Binding を DatePicker 用の Binding<Date> に変換。
+    private func dateBinding(_ raw: Binding<Double>) -> Binding<Date> {
+        Binding(
+            get: { Date(timeIntervalSinceReferenceDate: raw.wrappedValue) },
+            set: { raw.wrappedValue = $0.timeIntervalSinceReferenceDate }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -269,6 +291,19 @@ private struct WatchSummaryOptionsView: View {
                         optionRow(p.label, isOn: periodRaw == p.rawValue) {
                             periodRaw = p.rawValue
                         }
+                    }
+                    // カスタム選択時のみ開始日・終了日を編集する DatePicker を出す。
+                    if periodRaw == WatchPeriod.custom.rawValue {
+                        DatePicker(
+                            "開始日",
+                            selection: dateBinding($customStart),
+                            displayedComponents: [.date]
+                        )
+                        DatePicker(
+                            "終了日",
+                            selection: dateBinding($customEnd),
+                            displayedComponents: [.date]
+                        )
                     }
                 }
             }
@@ -311,6 +346,11 @@ private struct WatchSheetPage: View {
     /// サマリーに表示する種類 (支出/収支/収入)。端末に永続化・全シート共通。
     @AppStorage("watchSummaryMetric") private var metricRaw: String = WatchMetric.net.rawValue
     private var metric: WatchMetric { WatchMetric(rawValue: metricRaw) ?? .net }
+    /// カスタム期間の開始日・終了日 (timeIntervalSinceReferenceDate)。既定は今日。全シート共通。
+    @AppStorage("watchSummaryCustomStart") private var customStart: Double = Date().timeIntervalSinceReferenceDate
+    @AppStorage("watchSummaryCustomEnd") private var customEnd: Double = Date().timeIntervalSinceReferenceDate
+    private var customStartDate: Date { Date(timeIntervalSinceReferenceDate: customStart) }
+    private var customEndDate: Date { Date(timeIntervalSinceReferenceDate: customEnd) }
     /// 種類・期間を選ぶシートの表示。
     @State private var showingSummaryOptions = false
     /// 空状態でツールバー + を指す矢印の上下アニメーション用。
@@ -368,10 +408,34 @@ private struct WatchSheetPage: View {
         return e + v
     }
 
+    /// 先月の支出合計 (実データ + 先月内の仮想 occurrence)。
+    private var lastMonthTotal: Decimal {
+        let cal = Calendar.current
+        guard let last = cal.date(byAdding: .month, value: -1, to: Date()) else { return 0 }
+        let e = expenses
+            .filter { e in
+                guard let d = e.date, e.kind == .expense else { return false }
+                return cal.isDate(d, equalTo: last, toGranularity: .month)
+            }
+            .reduce(Decimal(0)) { $0 + $1.amountDecimal }
+        let v = virtualOccurrences
+            .filter { $0.kind == .expense && cal.isDate($0.date, equalTo: last, toGranularity: .month) }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return e + v
+    }
+
+    /// 予算バーが対象とする月の支出合計 (今月/先月で切り替え)。
+    private var selectedMonthExpenseTotal: Decimal {
+        switch period {
+        case .lastMonth: return lastMonthTotal
+        default:         return monthTotal
+        }
+    }
+
     /// 選択期間 × 選択種類の金額。仮想 occurrence も合算する。
     private var periodAmount: Decimal {
-        let inPeriod = expenses.filter { period.contains($0.date ?? .distantPast) }
-        let inPeriodVirtual = virtualOccurrences.filter { period.contains($0.date) }
+        let inPeriod = expenses.filter { period.contains($0.date ?? .distantPast, customStart: customStartDate, customEnd: customEndDate) }
+        let inPeriodVirtual = virtualOccurrences.filter { period.contains($0.date, customStart: customStartDate, customEnd: customEndDate) }
         func total(_ kind: TransactionKind) -> Decimal {
             inPeriod.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amountDecimal }
                 + inPeriodVirtual.filter { $0.kind == kind }.reduce(Decimal(0)) { $0 + $1.amount }
@@ -391,7 +455,7 @@ private struct WatchSheetPage: View {
 
     private var budgetProgress: Double? {
         guard let budget = sheet.monthlyBudgetDecimal, budget > 0 else { return nil }
-        let used = NSDecimalNumber(decimal: monthTotal).doubleValue
+        let used = NSDecimalNumber(decimal: selectedMonthExpenseTotal).doubleValue
         let total = NSDecimalNumber(decimal: budget).doubleValue
         return used / total
     }
@@ -431,7 +495,12 @@ private struct WatchSheetPage: View {
             }
         }
         .sheet(isPresented: $showingSummaryOptions) {
-            WatchSummaryOptionsView(metricRaw: $metricRaw, periodRaw: $periodRaw)
+            WatchSummaryOptionsView(
+                metricRaw: $metricRaw,
+                periodRaw: $periodRaw,
+                customStart: $customStart,
+                customEnd: $customEnd
+            )
         }
         .alert(
             "削除しますか?",
@@ -578,8 +647,8 @@ private struct WatchSheetPage: View {
                 .animation(.snappy, value: periodAmount)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            // 月予算バーは「今月」かつ支出/収支のときだけ (予算は月の支出に対するもの)
-            if period == .thisMonth, metric != .income, let p = budgetProgress {
+            // 月予算バーは支出かつ単月 (今月/先月) のときだけ (予算は月の支出に対するもの)
+            if metric == .expense, period == .thisMonth || period == .lastMonth, let p = budgetProgress {
                 budgetBar(progress: p)
                     .padding(.top, 4)
             }
@@ -603,7 +672,7 @@ private struct WatchSheetPage: View {
             }
             .frame(height: 5)
             HStack {
-                Text("今月")
+                Text(period.label)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.85))
                 Spacer()
