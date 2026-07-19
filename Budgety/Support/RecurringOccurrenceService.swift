@@ -73,12 +73,12 @@ enum LedgerItem: Identifiable {
 enum RecurringOccurrenceService {
 
     /// 定期項目 (繰り返し / RecurringRule) 機能のマスタースイッチ。
-    /// 2026-06 に「仮想 occurrence の実体化が端末ごとに食い違い CloudKit で重複する」問題で
-    /// 一旦オフにしていたが、完全仮想化 (`virtualizationEnabled`、既定 ON) により
-    /// 自動実体化そのものが走らなくなった (= 重複の経路が構造的に消えた) ため再有効化 (2026-07)。
-    /// 仮想化 OFF (デバッグ) に戻すと旧ハイブリッド生成が復活する点に注意。
+    /// 2026-07 に一度再有効化したが、プロダクト判断で定期項目は当面提供しない
+    /// ことになったため再びオフ。コードとデータは温存し、true に戻せば復活する。
+    /// (技術的には完全仮想化 `virtualizationEnabled` 既定 ON で CloudKit 重複の
+    /// 経路は塞がっており、オフの理由は同期問題ではなくプロダクト判断。)
     /// 全ターゲット (iOS/macOS/visionOS/watchOS) 共通で参照するためここに置く (BuildInfo は watch 等に未収録のため)。
-    static let featureEnabled: Bool = true
+    static let featureEnabled: Bool = false
 
     /// 完全仮想化のフィーチャーフラグ (既定 OFF)。
     /// ON で「定期 occurrence を保存せず表示時に算出」へ切替: generator は実体化を止め、
