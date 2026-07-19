@@ -27,6 +27,8 @@ struct WatchAddExpenseView: View {
     /// Digital Crown の生の回転値 (detent アキュムレータ)。速度推定に使う。
     /// amount とは別に細かい粒度で回し、その変化量と時間差から刻みを決める。
     @State private var crownRaw: Double = 0
+    /// 刻みに満たない回転量の残差 (端数を持ち越して回転量に比例した加算にする)。
+    @State private var crownResidual: Double = 0
     /// 回転速度 → 刻み量を決めるロジック (ヒステリシス付き)。
     @State private var crownStepper = CrownSpeedStepper()
     @FocusState private var crownFocused: Bool
@@ -79,8 +81,10 @@ struct WatchAddExpenseView: View {
     private var currencyDecimals: Int {
         CurrencyCatalog.fractionDigits(for: sheet.resolvedDefaultCurrencyCode)
     }
-    /// Digital Crown の刻み。小数なし通貨は 100、小数あり通貨は 1。
-    private var amountStep: Double { currencyDecimals == 0 ? 100 : 1 }
+    /// Digital Crown の基本刻み (= ゆっくり回した時の最小単位)。
+    /// 通貨によらず 1 (JPY なら 1 円)。速く回すと速度倍率 (×10/×100/×1000) で
+    /// 10・100・1000 単位に切り替わる。
+    private var amountStep: Double { 1 }
     /// クイック加算ボタンの刻み (通貨の桁数に合わせる)。
     private var quickSteps: [Int] { currencyDecimals == 0 ? [100, 500, 1000] : [1, 10, 100] }
     /// 金額を通貨フォーマットしたテキスト (¥5,000 / $5.00 など)。
@@ -268,9 +272,19 @@ struct WatchAddExpenseView: View {
         guard rawDelta != 0 else { return }
         // 速度に応じた刻み倍率 (1 / 10 / 100 / 1000)。
         let multiplier = crownStepper.step(forRawDelta: rawDelta, now: Date())
+
+        // 「イベント 1 回 = 1 刻み」ではなく、回転量に比例して進める。
+        // Crown はわずかな回転でも大量のイベントを発火するため、イベント数で
+        // 加算するとひと撫でで振り切れてしまう。生の回転量を残差に積み、
+        // detentsPerStep (生 detent) 回るごとに 1 刻み進める方式にする。
+        crownResidual += rawDelta
+        let detentsPerStep = 1.0
+        let steps = (crownResidual / detentsPerStep).rounded(.towardZero)
+        guard steps != 0 else { return }
+        crownResidual -= steps * detentsPerStep
+
         let step = amountStep * Double(multiplier)
-        let direction: Double = rawDelta > 0 ? 1 : -1
-        var next = amount + direction * step
+        var next = amount + steps * step
         // 大きい刻みで動いた時はその刻み単位へ丸めると気持ちよい。
         if multiplier > 1 {
             next = (next / step).rounded() * step
@@ -368,24 +382,27 @@ struct CrownSpeedStepper {
     /// 倍率を上げるしきい値 (raw detents / 秒)。速い順に判定。
     /// 下げるしきい値はこれより低くしてヒステリシスにする。
     private let upThresholds: [(speed: Double, multiplier: Int)] = [
-        (28, 1000),
-        (16, 100),
-        (7,  10),
+        (90, 1000),
+        (45, 100),
+        (20, 10),
     ]
     /// 倍率を下げる時のしきい値 (= up の 0.6 倍相当)。
     private let downThresholds: [(speed: Double, multiplier: Int)] = [
-        (18, 1000),
-        (10, 100),
-        (4,  10),
+        (54, 1000),
+        (27, 100),
+        (12, 10),
     ]
 
     /// 生の回転差分と現在時刻から、この 1 ステップに使う刻み倍率を返す。
     mutating func step(forRawDelta rawDelta: Double, now: Date) -> Int {
         let magnitude = abs(rawDelta)
         // 経過時間 (秒)。初回や長い空白は idleReset で頭打ちにして速度を薄める。
+        // 下限 0.02 秒: Crown のイベントはフレームでまとめて届くことがあり、
+        // dt が極小 (0.001 等) だと瞬間速度が数百/秒に見えて一撫でで最大倍率に
+        // 飛んでしまう。50Hz 相当を上限イベントレートとみなして頭打ちにする。
         let dt: TimeInterval
         if let last = lastEventTime {
-            dt = min(max(now.timeIntervalSince(last), 0.001), idleReset)
+            dt = min(max(now.timeIntervalSince(last), 0.02), idleReset)
         } else {
             dt = idleReset
         }
@@ -413,8 +430,10 @@ struct CrownSpeedStepper {
             target = t.multiplier
             break
         }
-        // 現在より上げる時は up 判定をそのまま採用。
-        if target > current { return target }
+        // 現在より上げる時も一気に飛ばず 1 段 (×10) ずつ昇格させる。
+        // 速度スパイク 1 回で 1x → 1000x に振り切れるのを防ぎ、
+        // 「速く回し続けたときだけ」大きい刻みに到達するようにする。
+        if target > current { return min(target, max(current, 1) * 10) }
         // 現在を維持 or 下げる時は down しきい値で判定 (ヒステリシス)。
         // 速度が down しきい値を割った段階のみ倍率を下げる。
         var held = 1
