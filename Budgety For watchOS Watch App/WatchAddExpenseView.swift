@@ -278,7 +278,8 @@ struct WatchAddExpenseView: View {
         // 加算するとひと撫でで振り切れてしまう。生の回転量を残差に積み、
         // detentsPerStep (生 detent) 回るごとに 1 刻み進める方式にする。
         crownResidual += rawDelta
-        let detentsPerStep = 1.0
+        // 1 刻みに必要な生回転量。大きいほど感度が緩くなる (実機の感触で調整)。
+        let detentsPerStep = 2.5
         let steps = (crownResidual / detentsPerStep).rounded(.towardZero)
         guard steps != 0 else { return }
         crownResidual -= steps * detentsPerStep
