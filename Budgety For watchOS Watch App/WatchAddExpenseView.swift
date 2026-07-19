@@ -80,9 +80,10 @@ struct WatchAddExpenseView: View {
     }
 
     /// Digital Crown の基本刻み (= ゆっくり回した時の最小単位)。
-    /// 通貨によらず 1 (JPY なら 1 円)。速く回すと速度倍率 (×10/×100/×1000) で
-    /// 10・100・1000 単位に切り替わる。
-    private var amountStep: Double { 1 }
+    /// 100 (JPY なら 100 円)。1 円単位の細かい調整はクイックボタン (+1/+10/+100)
+    /// で行える前提。速く回すと速度倍率 (×10/×100/×1000) で 1,000・10,000・
+    /// 100,000 単位に切り替わる。
+    private var amountStep: Double { 100 }
     /// クイック加算ボタンの刻み。Crown と同じく細かい調整用に統一 (1/10/100)。
     private var quickSteps: [Int] { [1, 10, 100] }
     /// 金額を通貨フォーマットしたテキスト (¥5,000 / $5.00 など)。
@@ -306,8 +307,9 @@ struct WatchAddExpenseView: View {
         // detentsPerStep (生 detent) 回るごとに 1 刻み進める方式にする。
         crownResidual += rawDelta
         // 1 刻みに必要な生回転量。大きいほど感度が緩くなる (= less sensitive)。
-        // 実機フィードバックで段階調整中。現状は前回比 30% の感度 (8.3 / 0.3)。
-        let detentsPerStep = 27.7
+        // 基本刻みが 100 円になった (細かい調整はボタン担当) ため、1 円時代の
+        // 減衰 (2.5 → 8.3 → 27.7) を撤回して元の 1.0 に戻した。
+        let detentsPerStep = 1.0
         let steps = (crownResidual / detentsPerStep).rounded(.towardZero)
         guard steps != 0 else { return }
         crownResidual -= steps * detentsPerStep
