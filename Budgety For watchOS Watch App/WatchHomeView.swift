@@ -240,6 +240,8 @@ private struct WatchSheetPage: View {
     /// 収支サマリーの期間 (端末に永続化・全シート共通)。
     @AppStorage("watchSummaryPeriod") private var periodRaw: String = WatchPeriod.thisMonth.rawValue
     private var period: WatchPeriod { WatchPeriod(rawValue: periodRaw) ?? .thisMonth }
+    /// 空状態でツールバー + を指す矢印の上下アニメーション用。
+    @State private var emptyArrowUp = false
     @State private var pendingDeleteExpense: Expense?
     /// 他メンバーのプロフィール写真が Public DB からロードされたら行を再描画する。
     @ObservedObject private var pub = PublicProfileSync.shared
@@ -399,11 +401,26 @@ private struct WatchSheetPage: View {
         let sorted = items.sorted { $0.date > $1.date }
         return Group {
             if sorted.isEmpty {
-                ContentUnavailableView(
-                    "まだ記録がありません",
-                    systemImage: "tray",
-                    description: Text("右上の + から記録できます。")
-                )
+                // 空状態: 右上のツールバー + を指す矢印を上下にアニメーションして
+                // 「ここから追加できる」ことを視覚的に示す (説明文は出さない)。
+                ZStack(alignment: .topTrailing) {
+                    ContentUnavailableView(
+                        "まだ記録がありません",
+                        systemImage: "tray"
+                    )
+                    Image(systemName: "arrow.up")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.white)
+                        .offset(y: emptyArrowUp ? -6 : 2)
+                        .animation(
+                            .easeInOut(duration: 0.7).repeatForever(autoreverses: true),
+                            value: emptyArrowUp
+                        )
+                        .padding(.trailing, 10)
+                        .onAppear { emptyArrowUp = true }
+                        .onDisappear { emptyArrowUp = false }
+                        .accessibilityLabel(Text("右上の + から記録できます。"))
+                }
             } else {
                 List {
                     ForEach(sorted) { item in
