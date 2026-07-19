@@ -36,6 +36,8 @@ struct WatchAddExpenseView: View {
     @State private var saveBounce: Int = 0
     @State private var showingCategoryPicker: Bool = false
     @State private var manuallySelectedCategory: ExpenseCategory?
+    /// 支出 / 収入 の種別トグル。カテゴリ一覧は種別ごとに異なる。
+    @State private var kind: TransactionKind = .expense
 
     /// 割り勘トグル。オフ = 自分の負担のみ。オン = `selectedBeneficiaries` で割る相手を選ぶ
     /// (空 = 全員均等)。共有シート (他メンバーあり) でのみ UI を出す。
@@ -47,7 +49,7 @@ struct WatchAddExpenseView: View {
     private var availableCategories: [ExpenseCategory] {
         guard let cats = sheet.categories as? Set<ExpenseCategory> else { return [] }
         return cats
-            .filter { $0.kind == .expense }
+            .filter { $0.kind == kind }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
@@ -128,7 +130,8 @@ struct WatchAddExpenseView: View {
         .sheet(isPresented: $showingCategoryPicker) {
             WatchCategoryPicker(
                 categories: availableCategories,
-                selected: effectiveCategory
+                selected: effectiveCategory,
+                tint: sheet.tint
             ) { picked in
                 manuallySelectedCategory = picked
             }
@@ -142,10 +145,35 @@ struct WatchAddExpenseView: View {
         }
     }
 
-    /// 割り勘の状態を表すボタン (共有シートのみ)。タップで相手選択シートを開く。
+    /// 支出 / 収入 を切り替えるトグル。タップで種別を反転し、カテゴリ選択をリセットする。
+    private var kindToggle: some View {
+        Button {
+            kind = (kind == .expense) ? .income : .expense
+            WKInterfaceDevice.current().play(.click)
+            // カテゴリ一覧は種別ごとに異なるため手動選択をリセット。
+            manuallySelectedCategory = nil
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: kind == .expense ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                // 三項演算子は String になり LocalizedStringKey 扱いされないため
+                // String(localized:) で明示的にローカライズする。
+                Text(kind == .expense ? String(localized: "支出") : String(localized: "収入"))
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(.white.opacity(0.20)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 割り勘の状態を表すボタン (共有シート & 支出のみ)。タップで相手選択シートを開く。
     @ViewBuilder
     private var splitPreview: some View {
-        if isShared {
+        if isShared && kind == .expense {
             Button {
                 showingSplitPicker = true
             } label: {
@@ -172,6 +200,7 @@ struct WatchAddExpenseView: View {
     private var content: some View {
         VStack(spacing: 6) {
             VStack(spacing: 4) {
+                kindToggle
                 categoryPreview
                 splitPreview
             }
@@ -228,7 +257,7 @@ struct WatchAddExpenseView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(.white.opacity(0.20)))
+                .background(Capsule().fill(cat.tint.gradient))
             }
             .buttonStyle(.plain)
         }
@@ -278,8 +307,9 @@ struct WatchAddExpenseView: View {
         // 加算するとひと撫でで振り切れてしまう。生の回転量を残差に積み、
         // detentsPerStep (生 detent) 回るごとに 1 刻み進める方式にする。
         crownResidual += rawDelta
-        // 1 刻みに必要な生回転量。大きいほど感度が緩くなる (実機の感触で調整)。
-        let detentsPerStep = 2.5
+        // 1 刻みに必要な生回転量。大きいほど感度が緩くなる (= less sensitive)。
+        // 実機フィードバックで段階調整中。現状は従来比 30% の感度 (2.5 / 0.3)。
+        let detentsPerStep = 8.3
         let steps = (crownResidual / detentsPerStep).rounded(.towardZero)
         guard steps != 0 else { return }
         crownResidual -= steps * detentsPerStep
@@ -307,7 +337,7 @@ struct WatchAddExpenseView: View {
         }
         expense.amount = NSDecimalNumber(decimal: dec)
         expense.currencyCode = sheet.resolvedDefaultCurrencyCode
-        expense.kindRaw = TransactionKind.expense.rawValue
+        expense.kindRaw = kind.rawValue
         expense.date = Date()
         expense.title = ""
         expense.note = ""
@@ -331,7 +361,8 @@ struct WatchAddExpenseView: View {
         //   (= resolvedBeneficiaryIDs() で「割り勘オフ = 支払者単独負担」扱い)
         // 空 = 全員均等にすると、あとで追加したメンバーが過去の支出に遡って
         // 含まれてしまうため、オン時のみ必ず明示的な ID リストを保存する。
-        if isShared, splitEnabled {
+        // 割り勘は支出のみ。収入行には受益者を付けない。
+        if kind == .expense, isShared, splitEnabled {
             let ids = selectedBeneficiaries.isEmpty
                 ? Set(sheet.acceptedMemberProfileIDs())
                 : selectedBeneficiaries
@@ -451,6 +482,7 @@ struct CrownSpeedStepper {
 struct WatchCategoryPicker: View {
     let categories: [ExpenseCategory]
     let selected: ExpenseCategory?
+    let tint: Color
     let onPick: (ExpenseCategory) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -480,14 +512,16 @@ struct WatchCategoryPicker: View {
                             if cat.objectID == selected?.objectID {
                                 Image(systemName: "checkmark")
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(.tint)
+                                    .foregroundStyle(tint)
                             }
                         }
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .navigationTitle("カテゴリ")
+            .navigationTitle {
+                Text("カテゴリ").foregroundStyle(tint)
+            }
             .navigationBarTitleDisplayMode(.inline)
         }
     }
