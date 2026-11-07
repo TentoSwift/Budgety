@@ -7,13 +7,11 @@ import SwiftUI
 import SwiftData
 
 struct SettingsView: View {
-    @StateObject private var pm = PurchaseManager.shared
     @StateObject private var fx = FXRatesService.shared
     @StateObject private var profile = UserProfileStore.shared
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var showPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
     /// 既定通貨の override。空文字 = 自動 (システムの地域)。
     @AppStorage(CurrencyCatalog.preferredCurrencyKey) private var preferredCurrency: String = ""
@@ -23,38 +21,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    if pm.isPremium {
-                        Label {
-                            Text("Budgety Premium").bold()
-                        } icon: {
-                            Image(systemName: "checkmark.seal.fill")
-                                .foregroundStyle(.green)
-                        }
-                    } else {
-                        Button {
-                            showPaywall = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "sparkles")
-                                    .foregroundStyle(.yellow)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Premium にアップグレード")
-                                        .foregroundStyle(.primary)
-                                        .fontWeight(.semibold)
-                                    Text("シートを他のユーザーと共有")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
-                }
-
                 Section("プロフィール") {
                     Button {
                         showingProfileEdit = true
@@ -80,26 +46,6 @@ struct SettingsView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                }
-
-                if pm.isPremium {
-                    Section {
-                        Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
-                            Label("サブスクリプションを管理", systemImage: "arrow.up.forward.app")
-                        }
-                    } footer: {
-                        Text("サブスクリプションのプラン変更や解約は App Store の設定から行えます。")
-                            .font(.caption)
-                    }
-                } else {
-                    Section {
-                        Button {
-                            Task { await pm.restore() }
-                        } label: {
-                            Label(pm.isProcessing ? "復元中..." : "購入を復元", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(pm.isProcessing)
-                    }
                 }
 
                 Section {
@@ -241,19 +187,11 @@ struct SettingsView: View {
                     Button("閉じる", systemImage: "xmark") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
-            }
             .sheet(isPresented: $showingProfileEdit) {
                 ProfileEditView()
             }
             .task {
                 UserProfileStore.shared.ensureSelfMemberExists(in: viewContext)
-            }
-            .onAppear {
-                if ProcessInfo.processInfo.environment["EXPENSO_DEMO"] == "paywall" {
-                    showPaywall = true
-                }
             }
         }
     }

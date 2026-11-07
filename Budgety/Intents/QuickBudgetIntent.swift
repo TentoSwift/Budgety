@@ -30,11 +30,6 @@ struct QuickBudgetIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        // Intent 実行前に Premium entitlements を最新化。
-        // refreshEntitlements は UserDefaults を即時更新するので、以後
-        // isPremiumCached が正しい値を返す。
-        await PurchaseManager.shared.refreshEntitlements()
-
         let parsed = QuickIntentLogic.parseJSON(payload)
         let op = ((parsed["op"] as? String) ?? "add").lowercased()
 

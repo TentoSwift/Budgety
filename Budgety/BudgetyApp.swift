@@ -123,12 +123,6 @@ struct BudgetyApp: App {
                         persistenceController.initializeCloudKitSchemaForDeploy()
                     }
                     #endif
-                    await PurchaseManager.shared.refreshEntitlements()
-                    #if DEBUG
-                    if ProcessInfo.processInfo.environment["EXPENSO_DEBUG_REVOKE"] == "1" {
-                        await PurchaseManager.runExpiryRevokeForDebug()
-                    }
-                    #endif
                     await FXRatesService.shared.refreshIfStale()
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()
                     // Apple ID 名を取得して自分の displayName に反映 (初回は許可ダイアログ)。
@@ -192,7 +186,6 @@ struct BudgetyApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {
                     case .active:
-                        Task { await PurchaseManager.shared.refreshEntitlements() }
                         // iCloud サインイン状態を再取得 (設定でサインインして戻った場合に追従)
                         persistenceController.refreshAccountStatus()
                         let ctx = persistenceController.container.viewContext

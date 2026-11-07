@@ -370,7 +370,10 @@ struct AddExpenseView: View {
     /// 編集する経路で、キャンセル (未 commit) なら親側で未保存行を破棄するために使う。
     let onCommit: (() -> Void)?
 
-    init(record: ExpenseSheet) {
+    private var coverEntry = false
+
+    init(record: ExpenseSheet, coverEntry: Bool = false) {
+        self.coverEntry = coverEntry
         self.mode = .create(record: record)
         self.onEditRule = nil
         self.onCommit = nil
@@ -1001,6 +1004,11 @@ struct AddExpenseView: View {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
+                        if coverEntry {
+                            Button("支出を保存") { trySave() }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!canSave)
+                        }
                         // UIKit (UITextView) ベース。詳細は amountField 参照。
                         amountField
                         .onChange(of: amountText) { _, new in

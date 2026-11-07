@@ -1107,47 +1107,6 @@ struct BudgetyMacSettingsView: View {
                 .buttonStyle(.plain)
             }
 
-            Section("Premium") {
-                HStack(spacing: 12) {
-                    Image(systemName: pm.isPremium ? "crown.fill" : "crown")
-                        .foregroundStyle(pm.isPremium ? .yellow : .secondary)
-                        .font(.title2)
-                    VStack(alignment: .leading) {
-                        Text(pm.isPremium ? String(localized: "Premium 加入中") : String(localized: "無料プラン"))
-                            .font(.body.weight(.medium))
-                        Text(pm.isPremium
-                             ? "すべての機能をご利用いただけます。"
-                             : "Premium にすると共有招待やカテゴリ追加など追加機能が解放されます。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                if pm.isPremium {
-                    Link("サブスクリプションを管理",
-                         destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
-                } else {
-                    Button {
-                        showingPaywall = true
-                    } label: {
-                        Label("Premium にアップグレード", systemImage: "crown.fill")
-                    }
-                    Button {
-                        Task { await pm.restore() }
-                    } label: {
-                        if pm.isProcessing {
-                            HStack {
-                                ProgressView().controlSize(.small)
-                                Text("復元中…")
-                            }
-                        } else {
-                            Label("購入を復元", systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(pm.isProcessing)
-                }
-            }
-
             // Claude / MCP 連携。macOS は外部 npm ではなく「アプリ本体を MCP サーバーとして登録」
             // する方式 (App Store 2.4.5(ii) 準拠: 追加コードを共有場所にインストールしない)。
             Section {
