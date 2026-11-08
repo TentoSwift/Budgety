@@ -47,6 +47,9 @@ private enum SheetSubScreen: Identifiable {
 }
 
 struct SheetListView: View {
+    var showsQuickExpense = false
+    @State private var quickExpenseSheet: ExpenseSheet?
+
     @Environment(\.managedObjectContext) private var viewContext
 
     @FetchRequest(
@@ -260,6 +263,17 @@ struct SheetListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsAvatarButton
                 }
+                if showsQuickExpense && !sheets.isEmpty {
+                    ToolbarItem(placement: .bottomBar) {
+                        Menu {
+                            ForEach(sheets) { sheet in
+                                Button(sheet.displayName) { quickExpenseSheet = sheet }
+                            }
+                        } label: {
+                            Label("支出を追加", systemImage: "yensign.circle")
+                        }
+                    }
+                }
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -270,6 +284,9 @@ struct SheetListView: View {
                     .foregroundStyle(.primary)
                     .popoverTip(addSheetTip)
                 }
+            }
+            .sheet(item: $quickExpenseSheet) { sheet in
+                AddExpenseView(record: sheet, coverEntry: true)
             }
             .sheet(isPresented: $showingAddSheet) {
                 AddSheetView()

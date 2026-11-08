@@ -35,7 +35,6 @@ private struct DuoSheetsView: View {
     private var sheets: FetchedResults<ExpenseSheet>
     @State private var selectedID: NSManagedObjectID?
     @State private var showingLibrary = false
-    @State private var addingExpense = false
 
     private var selected: ExpenseSheet? {
         sheets.first { $0.objectID == selectedID } ?? sheets.first
@@ -45,18 +44,7 @@ private struct DuoSheetsView: View {
         if sheets.isEmpty {
             SheetListView()
         } else if coverActive {
-            NavigationStack {
-                List(sheets) { sheet in
-                    Button(sheet.displayName) {
-                        selectedID = sheet.objectID
-                        addingExpense = true
-                    }
-                }
-                .navigationTitle("支出を追加")
-                .sheet(isPresented: $addingExpense) {
-                    if let selected { AddExpenseView(record: selected, coverEntry: true) }
-                }
-            }
+            SheetListView(showsQuickExpense: true)
         } else {
             NavigationSplitView {
                 List(sheets, selection: $selectedID) { sheet in
