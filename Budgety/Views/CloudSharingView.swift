@@ -9,6 +9,8 @@ struct CloudSharingView: View {
     @State private var failure: String?
     @State private var attempt = 0
 
+    private var sharingTitle: String { "\(record.displayName)\nBudgety" }
+
     var body: some View {
         Group {
             if let failure {
@@ -21,11 +23,8 @@ struct CloudSharingView: View {
                     Button("閉じる") { dismiss() }
                 }
             } else if let share {
-                VStack(spacing: 0) {
-                    SharingHeader(sheetName: record.displayName)
-                    SystemSharingSheet(share: share, title: record.displayName) {
-                        failure = $0.localizedDescription
-                    }
+                SystemSharingSheet(share: share, title: sharingTitle) {
+                    failure = $0.localizedDescription
                 }
             } else {
                 ProgressView("共有情報を読み込み中")
@@ -36,9 +35,9 @@ struct CloudSharingView: View {
                 let coordinator = ShareCoordinator.shared
                 let thumbnail = SharingAppIcon.pngData
                 if let existing = coordinator.existingShare(for: record) {
-                    share = await coordinator.shareForPresentation(existing, title: record.displayName, thumbnail: thumbnail)
+                    share = await coordinator.shareForPresentation(existing, title: sharingTitle, thumbnail: thumbnail)
                 } else if record.isOwnedByCurrentUser {
-                    share = try await coordinator.prepareShareLink(for: record, thumbnail: thumbnail).share
+                    share = try await coordinator.prepareShareLink(for: record, title: sharingTitle, thumbnail: thumbnail).share
                 } else {
                     throw ShareError.storeNotReady
                 }
@@ -49,44 +48,13 @@ struct CloudSharingView: View {
     }
 }
 
-private struct SharingHeader: View {
-    let sheetName: String
-
-    var body: some View {
-        VStack(spacing: 3) {
-            if let icon = SharingAppIcon.image {
-                Image(uiImage: icon)
-                    .resizable()
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .accessibilityHidden(true)
-            }
-            Text(verbatim: sheetName)
-                .font(.headline)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            Text(verbatim: "Budgety")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 @MainActor
 private enum SharingAppIcon {
-    static let image: UIImage? = {
+    static let pngData: Data? = {
         guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
               let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-              let name = (primary["CFBundleIconFiles"] as? [String])?.last else { return nil }
-        return UIImage(named: name)
-    }()
-
-    static let pngData: Data? = {
-        guard let image else { return nil }
+              let name = (primary["CFBundleIconFiles"] as? [String])?.last,
+              let image = UIImage(named: name) else { return nil }
 
         let bounds = CGRect(x: 0, y: 0, width: 120, height: 120)
         let format = UIGraphicsImageRendererFormat()

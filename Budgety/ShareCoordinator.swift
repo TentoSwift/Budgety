@@ -89,8 +89,9 @@ final class ShareCoordinator {
     /// `addParticipant` で明示的に招待された Apple ID のみ。
     /// 既存の share が誤って `.readWrite` 等になっていた場合もここで下げる。
     @MainActor
-    func prepareShareLink(for sheet: ExpenseSheet, thumbnail: Data? = nil) async throws -> (share: CKShare, url: URL) {
+    func prepareShareLink(for sheet: ExpenseSheet, title: String? = nil, thumbnail: Data? = nil) async throws -> (share: CKShare, url: URL) {
         let share = try await getOrCreateShare(for: sheet)
+        if let title { share[CKShare.SystemFieldKey.title] = title as CKRecordValue }
         if let thumbnail { share[CKShare.SystemFieldKey.thumbnailImageData] = thumbnail as CKRecordValue }
         if share.publicPermission != .none {
             share.publicPermission = .none
