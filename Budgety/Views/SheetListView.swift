@@ -46,6 +46,31 @@ private enum SheetSubScreen: Identifiable {
     }
 }
 
+struct SettingsAvatarButton: View {
+    @ObservedObject private var profile = UserProfileStore.shared
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            AvatarView(
+                photoData: profile.photoData,
+                displayName: profile.resolvedDisplayName,
+                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
+                size: 28
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("設定")
+        // 長押し時の Large Content Viewer に「設定」を表示する。
+        // (アバターだけだと何のボタンか分かりづらいので、AX 拡大表示で
+        //  ラベルが大きく出るようにする)
+        .accessibilityShowsLargeContentViewer {
+            Label("設定", systemImage: "gearshape")
+        }
+    }
+
+}
+
 struct SheetListView: View {
     var showsQuickExpense = false
     var sharedPath: Binding<[NSManagedObjectID]>? = nil
@@ -58,7 +83,6 @@ struct SheetListView: View {
         animation: .default
     ) private var sheets: FetchedResults<ExpenseSheet>
 
-    @StateObject private var profile = UserProfileStore.shared
     @State private var showingAddSheet = false
     @State private var showingSettings = false
     @State private var showingPaywall = false
@@ -107,32 +131,6 @@ struct SheetListView: View {
     /// アーカイブ済みセクションの開閉状態。折りたたみ可能・端末に永続化 (macOS と同じ流儀)。
     /// iOS では既定を閉じた状態にする。
     @AppStorage("iosArchivedSectionExpanded") private var archivedExpanded = false
-
-    /// topBarLeading に置く設定ボタン。歯車ではなく自分のプロフィール
-    /// アバターを表示し、タップで SettingsView を開く。
-    /// (SettingsView 自身が NavigationStack を持つため sheet 提示にする —
-    /// NavigationLink で push すると nested NavigationStack になり即 pop される)
-    @ViewBuilder
-    private var settingsAvatarButton: some View {
-        Button {
-            showingSettings = true
-        } label: {
-            AvatarView(
-                photoData: profile.photoData,
-                displayName: profile.resolvedDisplayName,
-                colorHex: profile.avatarBgColorHex ?? "#5B8DEF",
-                size: 28
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("設定")
-        // 長押し時の Large Content Viewer に「設定」を表示する。
-        // (アバターだけだと何のボタンか分かりづらいので、AX 拡大表示で
-        //  ラベルが大きく出るようにする)
-        .accessibilityShowsLargeContentViewer {
-            Label("設定", systemImage: "gearshape")
-        }
-    }
 
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespaces)
@@ -244,7 +242,7 @@ struct SheetListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    settingsAvatarButton
+                    SettingsAvatarButton { showingSettings = true }
                 }
                 if showsQuickExpense && !sheets.isEmpty {
                     ToolbarItem(placement: .bottomBar) {

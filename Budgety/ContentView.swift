@@ -94,7 +94,7 @@ private struct DuoSheetsView: View {
                 .navigationTitle("シート")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("設定", systemImage: "gearshape") { showingSettings = true }
+                        SettingsAvatarButton { showingSettings = true }
                     }
                 }
             } detail: {
