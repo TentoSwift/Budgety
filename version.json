@@ -1,10 +1,10 @@
 {
   "minimumVersion": "1.0.4",
   "latestVersion": "1.0.4",
-  "minimumVersionIOS": "1.0.4",
-  "latestVersionIOS": "1.0.4",
+  "minimumVersionIOS": "1.0.5",
+  "latestVersionIOS": "1.0.5",
   "minimumVersionMacOS": "1.0.4",
   "latestVersionMacOS": "1.0.4",
-  "message": "最新バージョン (1.0.4) に更新してからご利用ください。",
+  "message": "アップデートしてください。iOS版1.0.5から、シートの共有やデータの書き出しを含むすべての機能が、課金せずに使えるようになりました。",
   "appStoreURL": "https://apps.apple.com/app/id6768543053"
 }
