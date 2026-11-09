@@ -1,0 +1,39 @@
+name: Publish Budgety 1.0.5 update notice
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: write
+  actions: write
+  pages: write
+concurrency: budgety-free-release-notice
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - name: Check public availability and publish the iOS notice
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if jq -e '.minimumVersionIOS == "1.0.4" and .latestVersionIOS == "1.0.4"' version.json >/dev/null; then
+            for country in jp us; do
+              curl --fail --silent --show-error --retry 2 "https://itunes.apple.com/lookup?id=6768543053&country=$country" > "$RUNNER_TEMP/listing.json"
+              jq -e '.results | any(.trackId == 6768543053 and .bundleId == "com.tento.budgety" and .version == "1.0.5")' "$RUNNER_TEMP/listing.json" >/dev/null || exit 0
+            done
+            jq '.minimumVersionIOS = "1.0.5" | .latestVersionIOS = "1.0.5" | .message = "アップデートしてください。iOS版1.0.5から、シートの共有やデータの書き出しを含むすべての機能が、課金せずに使えるようになりました。"' version.json > "$RUNNER_TEMP/version.json"
+            mv "$RUNNER_TEMP/version.json" version.json
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add version.json
+            git commit -m 'Announce free features after iOS 1.0.5 release'
+            git push origin HEAD:gh-pages
+          fi
+          if jq -e '.minimumVersionIOS == "1.0.5"' version.json >/dev/null; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" >/dev/null
+          fi
+          gh workflow disable free-release-notice.yml
