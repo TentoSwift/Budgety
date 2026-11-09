@@ -267,7 +267,7 @@ enum CSVImporter {
     private static func normalizeHeader(_ s: String) -> String {
         var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         t = t.replacingOccurrences(of: "　", with: "")
-        t = t.precomposedStringWithCompatibilityMapping
+        t = t.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? t
         t = t.lowercased()
         for suffix in ["(円)", "(jpy)", "(税込)", "[円]"] where t.hasSuffix(suffix) {
             t = String(t.dropLast(suffix.count))
@@ -284,10 +284,6 @@ enum CSVImporter {
         /// 「入金額」「お預入れ」のような収入専用の金額列。
         let incomeAmount: Int?
         let kind: Int?
-        let isMoneyForward: Bool
-        let included: Int?
-        let transfer: Int?
-        let subcategory: Int?
         let currency: Int?
         let category: Int?
         let payer: Int?
@@ -304,11 +300,6 @@ enum CSVImporter {
                 return nil
             }
             // 自エクスポート + マネーフォワード / 銀行 / カード明細のよくある表記を受け入れる
-            included = find(["計算対象"])
-            transfer = find(["振替"])
-            isMoneyForward = included != nil && transfer != nil && header.contains("金額")
-                && header.contains("日付") && header.contains("大項目")
-            subcategory = find(["中項目"])
             self.date     = find(["date", "日付", "取引日", "利用日", "ご利用日", "お取引日", "年月日", "利用年月日", "日時", "取引日時"])
             self.title    = find(["title", "内容", "品目", "memo", "description", "店名",
                                   "名称", "摘要", "利用店名", "ご利用店名", "利用先", "取引内容", "お取引内容"])
@@ -330,7 +321,7 @@ enum CSVImporter {
             self.incomeAmount  = incomeIdx
             self.kind     = find(["kind", "区分", "type", "種別", "収支区分"])
             self.currency = find(["currency", "通貨"])
-            self.category = isMoneyForward ? find(["大項目"]) : find(["category", "カテゴリ", "カテゴリー", "大項目", "中項目", "費目"])
+            self.category = find(["category", "カテゴリ", "カテゴリー", "大項目", "中項目", "費目"])
             self.payer    = find(["payer", "支払者", "paidby", "payment_user"])
             self.note     = find(["note", "メモ", "備考"])
         }
@@ -352,10 +343,6 @@ enum CSVImporter {
             let s = cols[i].trimmingCharacters(in: .whitespaces)
             return s.isEmpty ? nil : s
         }
-        if indices.isMoneyForward {
-            if col(indices.transfer) == "1" { return .failure(String(localized: "振替のため対象外")) }
-            if col(indices.included) == "0" { return .failure(String(localized: "計算対象外の明細")) }
-        }
         // 金額 (必須): 単一の金額列 → 出金列 → 入金列 の順で拾う。
         // 出金/入金 分離型 (銀行明細) は埋まっている側から kind も確定する。
         var parsedAmount: Decimal?
@@ -375,14 +362,10 @@ enum CSVImporter {
             return .failure(String(localized: "金額列が空または解析不能"))
         }
         let title = col(indices.title) ?? String(localized: "(無題)")
-        let parsedDate = col(indices.date).flatMap(parseDate(_:))
-        if indices.isMoneyForward && parsedDate == nil { return .failure(String(localized: "日付を読み取れません")) }
-        let date = parsedDate ?? defaultDate
+        let date = col(indices.date).flatMap(parseDate(_:)) ?? defaultDate
         // kind: 分離列で確定 > kind 列 > 既定は支出。
         let kind: TransactionKind
-        if indices.isMoneyForward {
-            kind = amount > 0 ? .income : .expense
-        } else if let splitKind {
+        if let splitKind {
             kind = splitKind
         } else {
             let kindStr = col(indices.kind)?.lowercased() ?? "expense"
@@ -400,8 +383,8 @@ enum CSVImporter {
             title: title,
             amount: amount,
             kind: kind,
-            currencyCode: indices.isMoneyForward ? "JPY" : currency,
-            categoryName: indices.isMoneyForward ? (col(indices.subcategory) ?? col(indices.category)) : col(indices.category),
+            currencyCode: currency,
+            categoryName: col(indices.category),
             payerName: col(indices.payer),
             note: col(indices.note)
         ))

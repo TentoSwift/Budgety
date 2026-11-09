@@ -107,7 +107,6 @@ struct CSVImportView: View {
                 Label("CSV ファイルを選択", systemImage: "doc.text.fill")
             }
         } footer: {
-            Text("マネーフォワード ME の家計簿CSVに対応しています。収入・支出を円で取り込み、振替と計算対象外の明細はスキップします。")
             Text("UTF-8 / Shift_JIS の CSV に対応。ヘッダ行は date, title, amount, kind, currency, category, payer, note を認識します (日本語ヘッダもOK)。amount 列は必須、それ以外は省略可。")
                 .font(.caption2)
         }
