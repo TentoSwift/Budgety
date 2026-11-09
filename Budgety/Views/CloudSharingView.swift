@@ -72,6 +72,14 @@ private struct SystemSharingSheet: UIViewControllerRepresentable {
 
         func itemTitle(for csc: UICloudSharingController) -> String? { title }
 
+        func itemThumbnailData(for csc: UICloudSharingController) -> Data? {
+            guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+                  let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+                  let files = primary["CFBundleIconFiles"] as? [String],
+                  let name = files.last else { return nil }
+            return UIImage(named: name)?.pngData()
+        }
+
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
             onFailure(error)
         }

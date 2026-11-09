@@ -51,11 +51,7 @@ private struct DuoSheetsView: View {
     private var sheets: FetchedResults<ExpenseSheet>
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI = ""
     @AppStorage("iosArchivedSectionExpanded") private var archivedExpanded = false
-    private enum SidebarSheet: String, Identifiable {
-        case settings, library
-        var id: Self { self }
-    }
-    @State private var sidebarSheet: SidebarSheet?
+    @State private var showingSettings = false
 
     private var selected: ExpenseSheet? {
         sheets.first { $0.objectID == sheetPath.last }
@@ -98,10 +94,7 @@ private struct DuoSheetsView: View {
                 .navigationTitle("シート")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("設定", systemImage: "gearshape") { sidebarSheet = .settings }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("シートを管理", systemImage: "folder") { sidebarSheet = .library }
+                        Button("設定", systemImage: "gearshape") { showingSettings = true }
                     }
                 }
             } detail: {
@@ -113,12 +106,7 @@ private struct DuoSheetsView: View {
             .navigationSplitViewStyle(.balanced)
         }
         }
-        .sheet(item: $sidebarSheet) { destination in
-            switch destination {
-            case .settings: SettingsView()
-            case .library: SheetListView(remembersNavigation: false)
-            }
-        }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
         .animation(nil, value: compact)
         .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
             guard !ids.isEmpty else { return }

@@ -19,10 +19,15 @@ import QuickLook
 /// 「AirDrop」「印刷」等が選べる。
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
+    @Environment(\.dismiss) private var dismiss
 
     func makeUIViewController(context: Context) -> UINavigationController {
         let preview = QLPreviewController()
         preview.dataSource = context.coordinator
+        preview.navigationItem.leftBarButtonItem = UIBarButtonItem(
+            systemItem: .close,
+            primaryAction: UIAction { _ in dismiss() }
+        )
         return UINavigationController(rootViewController: preview)
     }
 
