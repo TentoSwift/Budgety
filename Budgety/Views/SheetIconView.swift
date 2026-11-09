@@ -57,7 +57,6 @@ struct SheetIconView: View {
                 .font(.system(size: badgeSize * 0.55, weight: .bold))
         }
         .frame(width: badgeSize, height: badgeSize)
-        .overlay(Circle().strokeBorder(.white, lineWidth: 1))
         .compositingGroup()
     }
 
