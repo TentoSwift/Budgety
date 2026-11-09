@@ -33,7 +33,7 @@ struct CloudSharingView: View {
                 let coordinator = ShareCoordinator.shared
                 let thumbnail = SharingAppIcon.pngData
                 if let existing = coordinator.existingShare(for: record) {
-                    share = await coordinator.shareForPresentation(existing, thumbnail: thumbnail)
+                    share = await coordinator.shareForPresentation(existing, title: record.displayName, thumbnail: thumbnail)
                 } else if record.isOwnedByCurrentUser {
                     share = try await coordinator.prepareShareLink(for: record, thumbnail: thumbnail).share
                 } else {

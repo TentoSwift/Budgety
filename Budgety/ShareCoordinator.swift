@@ -69,11 +69,13 @@ final class ShareCoordinator {
     }
 
     @MainActor
-    func shareForPresentation(_ share: CKShare, thumbnail: Data?) async -> CKShare {
+    func shareForPresentation(_ share: CKShare, title: String, thumbnail: Data?) async -> CKShare {
         let key = CKShare.SystemFieldKey.thumbnailImageData
-        guard let thumbnail, share[key] as? Data != thumbnail,
+        let needsThumbnail = thumbnail.map { share[key] as? Data != $0 } ?? false
+        guard needsThumbnail || share[CKShare.SystemFieldKey.title] as? String != title,
               let preview = share.copy() as? CKShare else { return share }
-        preview[key] = thumbnail as CKRecordValue
+        preview[CKShare.SystemFieldKey.title] = title as CKRecordValue
+        if let thumbnail { preview[key] = thumbnail as CKRecordValue }
         let pc = PersistenceController.shared
         guard share.currentUserParticipant?.role == .owner, let store = pc.privateStore else {
             return preview
@@ -288,7 +290,7 @@ final class ShareCoordinator {
         }
         let result = try await container.share([sheet], to: nil)
         let share = result.1
-        share[CKShare.SystemFieldKey.title] = "Budgety: \(sheet.displayName)" as CKRecordValue
+        share[CKShare.SystemFieldKey.title] = sheet.displayName as CKRecordValue
         share.publicPermission = .none
         return share
     }
