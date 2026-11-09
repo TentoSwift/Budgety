@@ -48,6 +48,7 @@ private enum SheetSubScreen: Identifiable {
 
 struct SheetListView: View {
     var showsQuickExpense = false
+    var sharedPath: Binding<[NSManagedObjectID]>? = nil
     @State private var quickExpenseSheet: ExpenseSheet?
 
     @Environment(\.managedObjectContext) private var viewContext
@@ -64,7 +65,12 @@ struct SheetListView: View {
     @State private var showSyncWaitingAlert = false
     @State private var showOfflineAlert = false
     @State private var showNotSignedInAlert = false
-    @State private var path: [NSManagedObjectID] = []
+    @State private var localPath: [NSManagedObjectID] = []
+    private var navigationPath: Binding<[NSManagedObjectID]> { sharedPath ?? $localPath }
+    private var path: [NSManagedObjectID] {
+        get { navigationPath.wrappedValue }
+        nonmutating set { navigationPath.wrappedValue = newValue }
+    }
     @State private var didRestorePath = false
     @State private var searchText: String = ""
     /// 検索バーがフォーカスされているか。未入力でもフォーカスで結果を出す。
@@ -139,7 +145,7 @@ struct SheetListView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: navigationPath) {
             Group {
                 if isSearchActive {
                     // フォーカス中は (未入力でも) 全シート横断の検索結果を表示する。
@@ -191,30 +197,7 @@ struct SheetListView: View {
                                     }
                                 }
                             } header: {
-                                Button {
-                                    archivedExpanded.toggle()
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Label("アーカイブ済み", systemImage: "archivebox")
-                                        Text("\(archivedSheets.count)")
-                                            .monospacedDigit()
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption.weight(.semibold))
-                                            .rotationEffect(.degrees(archivedExpanded ? 90 : 0))
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(Text("アーカイブ済み"))
-                                .accessibilityValue(Text(archivedExpanded
-                                    ? String(localized: "展開中")
-                                    : String(localized: "折りたたみ中")))
-                                .accessibilityHint(Text(archivedExpanded
-                                    ? String(localized: "アーカイブ済みセクションを折りたたむ")
-                                    : String(localized: "アーカイブ済みセクションを展開")))
+                                ArchivedSheetsHeader(count: archivedSheets.count, archivedExpanded: $archivedExpanded)
                             }
                         }
                         // 一覧からの削除は廃止。削除はシート詳細画面メニュー (オーナー限定)
@@ -888,7 +871,7 @@ struct SheetListView: View {
     /// 後から sheets が更新された時点 (`onChange(of: sheets.count)`) に再試行する。
     /// 一度成功したら以後は走らないように `didRestorePath` でガード。
     private func restoreLastOpenedSheetIfNeeded() {
-        guard !didRestorePath else { return }
+        guard sharedPath == nil, !didRestorePath else { return }
         guard !lastOpenedSheetURI.isEmpty, sheets.first != nil else { return }
         guard let coord = viewContext.persistentStoreCoordinator,
               let url = URL(string: lastOpenedSheetURI),
@@ -1165,7 +1148,7 @@ private struct SearchResultRow: View {
     }
 }
 
-private struct SheetRowView: View {
+struct SheetRowView: View {
     @ObservedObject var record: ExpenseSheet
     /// UIKit ブリッジ経由の行は NavigationLink が無いので、自前で
     /// ディスクロージャ (>) を表示してタップ可能なことを示す。
@@ -1209,5 +1192,37 @@ private struct LockedSheetGate<Content: View>: View {
 
     var body: some View {
         content().sheetLockCover(record)
+    }
+}
+
+struct ArchivedSheetsHeader: View {
+    let count: Int
+    @Binding var archivedExpanded: Bool
+
+    var body: some View {
+        Button {
+            archivedExpanded.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Label("アーカイブ済み", systemImage: "archivebox")
+                Text("\(count)")
+                    .monospacedDigit()
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .rotationEffect(.degrees(archivedExpanded ? 90 : 0))
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("アーカイブ済み"))
+        .accessibilityValue(Text(archivedExpanded
+            ? String(localized: "展開中")
+            : String(localized: "折りたたみ中")))
+        .accessibilityHint(Text(archivedExpanded
+            ? String(localized: "アーカイブ済みセクションを折りたたむ")
+            : String(localized: "アーカイブ済みセクションを展開")))
     }
 }
