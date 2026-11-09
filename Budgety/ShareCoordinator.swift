@@ -68,13 +68,28 @@ final class ShareCoordinator {
         return (try? container.fetchShares(matching: [sheet.objectID]))?[sheet.objectID]
     }
 
+    @MainActor
+    func shareForPresentation(_ share: CKShare, thumbnail: Data?) async -> CKShare {
+        let key = CKShare.SystemFieldKey.thumbnailImageData
+        guard let thumbnail, share[key] as? Data != thumbnail,
+              let preview = share.copy() as? CKShare else { return share }
+        preview[key] = thumbnail as CKRecordValue
+        let pc = PersistenceController.shared
+        guard share.currentUserParticipant?.role == .owner, let store = pc.privateStore else {
+            return preview
+        }
+        // Keep management available offline. Retry the metadata update on the next presentation.
+        return (try? await pc.container.persistUpdatedShare(preview, in: store)) ?? preview
+    }
+
     /// CKShare を作成 (or 取得) して URL を返す。
     /// `publicPermission` は **必ず `.none`** にしてあり、参加できるのは
     /// `addParticipant` で明示的に招待された Apple ID のみ。
     /// 既存の share が誤って `.readWrite` 等になっていた場合もここで下げる。
     @MainActor
-    func prepareShareLink(for sheet: ExpenseSheet) async throws -> (share: CKShare, url: URL) {
+    func prepareShareLink(for sheet: ExpenseSheet, thumbnail: Data? = nil) async throws -> (share: CKShare, url: URL) {
         let share = try await getOrCreateShare(for: sheet)
+        if let thumbnail { share[CKShare.SystemFieldKey.thumbnailImageData] = thumbnail as CKRecordValue }
         if share.publicPermission != .none {
             share.publicPermission = .none
         }

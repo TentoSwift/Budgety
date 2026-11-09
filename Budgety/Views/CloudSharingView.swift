@@ -31,10 +31,11 @@ struct CloudSharingView: View {
         .task(id: attempt) {
             do {
                 let coordinator = ShareCoordinator.shared
+                let thumbnail = SharingAppIcon.pngData
                 if let existing = coordinator.existingShare(for: record) {
-                    share = existing
+                    share = await coordinator.shareForPresentation(existing, thumbnail: thumbnail)
                 } else if record.isOwnedByCurrentUser {
-                    share = try await coordinator.prepareShareLink(for: record).share
+                    share = try await coordinator.prepareShareLink(for: record, thumbnail: thumbnail).share
                 } else {
                     throw ShareError.storeNotReady
                 }
@@ -43,6 +44,25 @@ struct CloudSharingView: View {
             }
         }
     }
+}
+
+@MainActor
+private enum SharingAppIcon {
+    static let pngData: Data? = {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let name = (primary["CFBundleIconFiles"] as? [String])?.last,
+              let image = UIImage(named: name) else { return nil }
+
+        let bounds = CGRect(x: 0, y: 0, width: 120, height: 120)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        return UIGraphicsImageRenderer(bounds: bounds, format: format).pngData { _ in
+            UIBezierPath(roundedRect: bounds, cornerRadius: 27).addClip()
+            image.draw(in: bounds)
+        }
+    }()
 }
 
 private struct SystemSharingSheet: UIViewControllerRepresentable {
@@ -73,11 +93,7 @@ private struct SystemSharingSheet: UIViewControllerRepresentable {
         func itemTitle(for csc: UICloudSharingController) -> String? { title }
 
         func itemThumbnailData(for csc: UICloudSharingController) -> Data? {
-            guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
-                  let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-                  let files = primary["CFBundleIconFiles"] as? [String],
-                  let name = files.last else { return nil }
-            return UIImage(named: name)?.pngData()
+            SharingAppIcon.pngData
         }
 
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
