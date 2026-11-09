@@ -11,6 +11,10 @@ import Combine
 final class PersistenceController: ObservableObject {
     static let shared = PersistenceController()
 
+    #if os(iOS)
+    private var widgetPublisher: WidgetSnapshotPublisher?
+    #endif
+
     let container: NSPersistentCloudKitContainer
 
     var privateStore: NSPersistentStore?
@@ -192,6 +196,11 @@ final class PersistenceController: ObservableObject {
             seedPreviewData()
         } else if ProcessInfo.processInfo.environment["EXPENSO_SEED"] == "1" {
             seedDevDataIfNeeded()
+        }
+        #endif
+        #if os(iOS)
+        if !inMemory {
+            widgetPublisher = WidgetSnapshotPublisher(container: container)
         }
         #endif
     }

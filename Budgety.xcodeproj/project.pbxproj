@@ -15,6 +15,7 @@
 		B0010000B0010000B0010000 /* CustomNavigationTitle in Frameworks */ = {isa = PBXBuildFile; productRef = B0030000B0030000B0030000 /* CustomNavigationTitle */; };
 		3D18B4E12FB31605006F2C2A /* CustomPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 2D84845F2FADB766001AB1B6 /* CustomPicker */; };
 		3D18B4E32FB31605006F2C2A /* LicenseList in Frameworks */ = {isa = PBXBuildFile; productRef = 2D31C3692FC452E10011566C /* LicenseList */; };
+		D679079B2F1A53B3B57112B8 /* BudgetyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 690A79E02A425C72A1F4CB35 /* BudgetyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -24,6 +25,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 2D18B4C12FB31605006F2C29;
 			remoteInfo = "Budgety For watchOS Watch App";
+		};
+		82FA8C635B0555BEB45D1478 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2DDCE1162FA8974700A42F60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D9893FE67C4D579B8AB5E8AB;
+			remoteInfo = BudgetyWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -39,6 +47,17 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB1D2A2A769252C3830FABC9 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D679079B2F1A53B3B57112B8 /* BudgetyWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +65,7 @@
 		2DDCE11E2FA8974700A42F60 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D18B4C22FB31605006F2C2A /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D18B4C22FB31605006F2C30 /* Budgety.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Budgety.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		690A79E02A425C72A1F4CB35 /* BudgetyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BudgetyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -298,6 +318,20 @@
 			);
 			target = 4D18B4C12FB31605006F2C30 /* Budgety For macOS */;
 		};
+		73EDD147DB1A59FAAC6BC5BF /* Exceptions for "Budgety" folder in "BudgetyWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Support/WidgetSnapshot.swift,
+			);
+			target = D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */;
+		};
+		B1D7BCB4A1EF564E9C6556B5 /* Exceptions for "BudgetyWidget" folder in "BudgetyWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -310,6 +344,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				2DDCE1702FA89B5900A42F60 /* Exceptions for "Budgety" folder in "Budgety" target */,
+				73EDD147DB1A59FAAC6BC5BF /* Exceptions for "Budgety" folder in "BudgetyWidget" target */,
 				2D18B4D92FB31696006F2C29 /* Exceptions for "Budgety" folder in "Budgety For watchOS Watch App" target */,
 				3D18B4D92FB31696006F2C2A /* Exceptions for "Budgety" folder in "Budgety For visionOS" target */,
 				4D18B4D92FB31696006F2C30 /* Exceptions for "Budgety" folder in "Budgety For macOS" target */,
@@ -331,6 +366,14 @@
 				4D18B4DA2FB31696006F2C30 /* Exceptions for "Budgety For macOS" folder in "Budgety For macOS" target */,
 			);
 			path = "Budgety For macOS";
+			sourceTree = "<group>";
+		};
+		17E644196C195361815CC266 /* BudgetyWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B1D7BCB4A1EF564E9C6556B5 /* Exceptions for "BudgetyWidget" folder in "BudgetyWidget" target */,
+			);
+			path = BudgetyWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -371,6 +414,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8AED3F37734D59D9838BD3AF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -382,6 +432,7 @@
 				3D18B4C32FB31605006F2C2A /* Budgety For visionOS */,
 				4D18B4C32FB31605006F2C30 /* Budgety For macOS */,
 				2DDCE11F2FA8974700A42F60 /* Products */,
+				17E644196C195361815CC266 /* BudgetyWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -389,6 +440,7 @@
 			isa = PBXGroup;
 			children = (
 				2DDCE11E2FA8974700A42F60 /* Budgety.app */,
+				690A79E02A425C72A1F4CB35 /* BudgetyWidget.appex */,
 				2D18B4C22FB31605006F2C29 /* Budgety For watchOS Watch App.app */,
 				3D18B4C22FB31605006F2C2A /* Budgety.app */,
 				4D18B4C22FB31605006F2C30 /* Budgety.app */,
@@ -429,11 +481,13 @@
 				2DDCE11B2FA8974700A42F60 /* Frameworks */,
 				2DDCE11C2FA8974700A42F60 /* Resources */,
 				2D18B4D02FB31606006F2C29 /* Embed Watch Content */,
+				BB1D2A2A769252C3830FABC9 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				2D18B4CB2FB31606006F2C29 /* PBXTargetDependency */,
+				66C9E2374BF35D3AB042C618 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				2DDCE1202FA8974700A42F60 /* Budgety */,
@@ -496,6 +550,26 @@
 			productReference = 4D18B4C22FB31605006F2C30 /* Budgety.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 904C6D8C96975FE895A89AC0 /* Build configuration list for PBXNativeTarget "BudgetyWidget" */;
+			buildPhases = (
+				AB490C2F7A7157F4BE2D0C08 /* Sources */,
+				8AED3F37734D59D9838BD3AF /* Frameworks */,
+				5368DC8487BC5D268D28D6F9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				17E644196C195361815CC266 /* BudgetyWidget */,
+			);
+			name = BudgetyWidget;
+			productName = BudgetyWidget;
+			productReference = 690A79E02A425C72A1F4CB35 /* BudgetyWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -549,6 +623,7 @@
 			projectRoot = "";
 			targets = (
 				2DDCE11D2FA8974700A42F60 /* Budgety */,
+				D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */,
 				2D18B4C12FB31605006F2C29 /* Budgety For watchOS Watch App */,
 				3D18B4C12FB31605006F2C2A /* Budgety For visionOS */,
 				4D18B4C12FB31605006F2C30 /* Budgety For macOS */,
@@ -579,6 +654,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4D18B4C02FB31605006F2C30 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5368DC8487BC5D268D28D6F9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -616,6 +698,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AB490C2F7A7157F4BE2D0C08 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -623,6 +712,11 @@
 			isa = PBXTargetDependency;
 			target = 2D18B4C12FB31605006F2C29 /* Budgety For watchOS Watch App */;
 			targetProxy = 2D18B4CA2FB31606006F2C29 /* PBXContainerItemProxy */;
+		};
+		66C9E2374BF35D3AB042C618 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */;
+			targetProxy = 82FA8C635B0555BEB45D1478 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1082,6 +1176,62 @@
 			};
 			name = Release;
 		};
+		3188CD054A3B521B997B1467 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = BudgetyWidget/BudgetyWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071801;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BudgetyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX).widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0396366D45B502587C5C994 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = BudgetyWidget/BudgetyWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071801;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BudgetyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Budgety;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.tento.budgety$(BUNDLE_ID_SUFFIX).widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1126,6 +1276,15 @@
 			buildConfigurations = (
 				4D18B4CE2FB31606006F2C30 /* Debug */,
 				4D18B4CF2FB31606006F2C30 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		904C6D8C96975FE895A89AC0 /* Build configuration list for PBXNativeTarget "BudgetyWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3188CD054A3B521B997B1467 /* Debug */,
+				D0396366D45B502587C5C994 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

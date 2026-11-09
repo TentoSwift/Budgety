@@ -57,6 +57,9 @@ final class SheetLockManager: ObservableObject {
         guard !password.isEmpty else { return }
         let salt = Self.randomSaltBase64()
         let hash = Self.hash(password: password, salt: salt)
+        #if os(iOS)
+        WidgetSnapshotPublisher.exclude(sheet.objectID)
+        #endif
         sheet.lockPasswordSalt = salt
         sheet.lockPasswordHash = hash
         sheet.lockBiometricEnabled = enableBiometric
