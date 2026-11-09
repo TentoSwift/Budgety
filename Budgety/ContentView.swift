@@ -51,7 +51,11 @@ private struct DuoSheetsView: View {
     private var sheets: FetchedResults<ExpenseSheet>
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI = ""
     @AppStorage("iosArchivedSectionExpanded") private var archivedExpanded = false
-    @State private var showingLibrary = false
+    private enum SidebarSheet: String, Identifiable {
+        case settings, library
+        var id: Self { self }
+    }
+    @State private var sidebarSheet: SidebarSheet?
 
     private var selected: ExpenseSheet? {
         sheets.first { $0.objectID == sheetPath.last }
@@ -93,9 +97,13 @@ private struct DuoSheetsView: View {
                 .animation(.easeInOut(duration: 0.25), value: archivedExpanded)
                 .navigationTitle("シート")
                 .toolbar {
-                    Button("シートを管理", systemImage: "folder.badge.gearshape") { showingLibrary = true }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("設定", systemImage: "gearshape") { sidebarSheet = .settings }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("シートを管理", systemImage: "folder") { sidebarSheet = .library }
+                    }
                 }
-                .sheet(isPresented: $showingLibrary) { SheetListView() }
             } detail: {
                 if let selected {
                     NavigationStack { SheetDetailView(record: selected).sheetLockCover(selected) }
@@ -104,6 +112,12 @@ private struct DuoSheetsView: View {
             }
             .navigationSplitViewStyle(.balanced)
         }
+        }
+        .sheet(item: $sidebarSheet) { destination in
+            switch destination {
+            case .settings: SettingsView()
+            case .library: SheetListView(remembersNavigation: false)
+            }
         }
         .animation(nil, value: compact)
         .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in

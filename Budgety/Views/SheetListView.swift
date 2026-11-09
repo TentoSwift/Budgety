@@ -47,6 +47,7 @@ private enum SheetSubScreen: Identifiable {
 }
 
 struct SheetListView: View {
+    var remembersNavigation = true
     var showsQuickExpense = false
     var sharedPath: Binding<[NSManagedObjectID]>? = nil
     @State private var quickExpenseSheet: ExpenseSheet?
@@ -343,10 +344,8 @@ struct SheetListView: View {
             }
             .onChange(of: path) { oldPath, newPath in
                 // 末尾のシート URI を覚えておき、次回起動時に復元する
-                if let last = newPath.last {
-                    lastOpenedSheetURI = last.uriRepresentation().absoluteString
-                } else {
-                    lastOpenedSheetURI = ""
+                if remembersNavigation {
+                    lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
                 }
                 // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
                 // 精算/詳細などの子画面 push は label ベースで path を変えないため、
@@ -871,7 +870,7 @@ struct SheetListView: View {
     /// 後から sheets が更新された時点 (`onChange(of: sheets.count)`) に再試行する。
     /// 一度成功したら以後は走らないように `didRestorePath` でガード。
     private func restoreLastOpenedSheetIfNeeded() {
-        guard sharedPath == nil, !didRestorePath else { return }
+        guard remembersNavigation, sharedPath == nil, !didRestorePath else { return }
         guard !lastOpenedSheetURI.isEmpty, sheets.first != nil else { return }
         guard let coord = viewContext.persistentStoreCoordinator,
               let url = URL(string: lastOpenedSheetURI),
