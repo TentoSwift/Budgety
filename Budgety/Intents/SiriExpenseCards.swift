@@ -151,10 +151,6 @@ struct SiriExpenseCardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(tint.opacity(0.13), in: tile)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(tint).frame(width: 3)
-        }
-        .clipShape(tile)
         .accessibilityElement(children: .combine)
     }
 }
