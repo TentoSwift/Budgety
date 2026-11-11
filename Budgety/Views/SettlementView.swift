@@ -45,8 +45,9 @@ struct SettlementView: View {
         ScrollView {
             VStack(spacing: 16) {
                 if let result {
-                    if result.includedExpenseCount == 0 {
+                    if result.includedExpenseCount == 0 && settlementsInCurrentRange.isEmpty {
                         emptySection
+                        if record.hasAcceptedOtherMembers() { settlementHistorySection }
                     } else {
                         summarySection(result: result)
                         // 自分しかいない (= 共有もバーチャルメンバーも無い) シートでは
@@ -86,6 +87,13 @@ struct SettlementView: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
             recompute()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidMergeChangesObjectIDs, object: viewContext)) { note in
+            let keys = [NSInsertedObjectIDsKey, NSUpdatedObjectIDsKey, NSDeletedObjectIDsKey]
+            if keys.contains(where: { key in
+                let ids = note.userInfo?[key] as? Set<NSManagedObjectID> ?? []
+                return ids.contains { $0.entity.name == "SettlementRecord" }
+            }) { recompute() }
+        }
         .onChange(of: fx.lastUpdated) { _, _ in recompute() }
         .alert(
             "送金を記録しますか？",
@@ -100,10 +108,10 @@ struct SettlementView: View {
         } message: { target in
             Text("\(target.fromName) → \(target.toName)\n\(target.formattedAmount)")
         }
-        .sheet(item: $editingRecord) { rec in
+        .sheet(item: $editingRecord, onDismiss: recompute) { rec in
             LogSettlementView(sheet: record, record: rec)
         }
-        .sheet(isPresented: $showingNewLog) {
+        .sheet(isPresented: $showingNewLog, onDismiss: recompute) {
             LogSettlementView(sheet: record, record: nil)
         }
         // 削除確認ダイアログは各送金履歴行に個別に attach する

@@ -925,54 +925,57 @@ struct SheetDetailView: View {
     }
 
     private var sectionedList: some View {
-            ForEach(groupedByDay(), id: \.key) { section in
-                Section {
-                        ForEach(section.value) { item in
-                            switch item {
-                            case .expense(let expense):
-                                // 削除確認は各支出行に .confirmationDialog を付ける。
-                                // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
-                                // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
-                                ExpenseRowContainer(
-                                    expense: expense,
-                                    pendingDelete: $pendingDeleteExpense,
-                                    onEdit: { editingExpense = expense },
-                                    onEditRule: expense.generatedFromRuleID != nil
-                                        ? { editingRule = expense.relatedRule.map { RecurringRuleTarget(rule: $0, scheduledDate: expense.scheduledDate ?? expense.date) } }
-                                        : nil,
-                                    onDuplicate: { duplicate(expense) },
-                                    onDelete: { deleteExpense(expense) }
-                                )
-                                // 挿入/削除時の opacity フェードを無くす (残る行の reflow は維持)。
-                                .transition(.identity)
-                            case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。実支出と同じ ExpenseRowContainer で
-                                // 描画し、見た目 (シェブロン/レイアウト) もスワイプ/コンテキストメニューも統一する。
-                                // 詳細と編集も、保存を確定するまでは同じ表示用の行を使う。
-                                ExpenseRowContainer(
-                                    expense: virtualBacking.displayExpense(for: occ, sheet: record),
-                                    pendingDelete: $pendingDeleteExpense,
-                                    onEdit: {
-                                        pendingDidCommit = false
-                                        editingExpense = detailBacking.displayExpense(for: occ, sheet: record)
-                                    },
-                                    onEditRule: {
-                                        editingRule = ruleForOccurrence(occ).map { RecurringRuleTarget(rule: $0, scheduledDate: occ.scheduledDate) }
-                                    },
-                                    onDuplicate: { duplicateOccurrence(occ) },
-                                    onDelete: { skipOccurrence(occ) },
-                                    onTap: { detailOccurrence = occ }
-                                )
-                                .transition(.identity)
-                            }
-                        }
-                } header: {
-                    DateHeaderView(label: section.dayLabel,
-                                   net: section.dayNet,
-                                   currency: record.resolvedDefaultCurrencyCode,
-                                   tint: record.tint)
+        ForEach(groupedByDay(), id: \.key) { section in
+            Section {
+                ForEach(section.value) { item in
+                    ledgerRow(item)
+                        .transition(.identity)
+                        .listRowSeparator(item.id == section.value.last?.id ? .hidden : .automatic, edges: .bottom)
                 }
+            } header: {
+                DateHeaderView(label: section.dayLabel, net: section.dayNet,
+                               currency: record.resolvedDefaultCurrencyCode, tint: record.tint)
             }
+            .listSectionSeparator(.hidden, edges: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private func ledgerRow(_ item: LedgerItem) -> some View {
+        switch item {
+        case .expense(let expense):
+            // 削除確認は各支出行に .confirmationDialog を付ける。
+            // 共有 state (pendingDeleteExpense) を渡しつつ、setter は
+            // 「自分が対象の時だけ nil」にガードして他行との干渉を防ぐ。
+            ExpenseRowContainer(
+                expense: expense,
+                pendingDelete: $pendingDeleteExpense,
+                onEdit: { editingExpense = expense },
+                onEditRule: expense.generatedFromRuleID != nil
+                    ? { editingRule = expense.relatedRule.map { RecurringRuleTarget(rule: $0, scheduledDate: expense.scheduledDate ?? expense.date) } }
+                    : nil,
+                onDuplicate: { duplicate(expense) },
+                onDelete: { deleteExpense(expense) }
+            )
+        case .occurrence(let occ):
+            // 仮想 occurrence (未実体化の定期分)。実支出と同じ ExpenseRowContainer で
+            // 描画し、見た目 (シェブロン/レイアウト) もスワイプ/コンテキストメニューも統一する。
+            // 詳細と編集も、保存を確定するまでは同じ表示用の行を使う。
+            ExpenseRowContainer(
+                expense: virtualBacking.displayExpense(for: occ, sheet: record),
+                pendingDelete: $pendingDeleteExpense,
+                onEdit: {
+                    pendingDidCommit = false
+                    editingExpense = detailBacking.displayExpense(for: occ, sheet: record)
+                },
+                onEditRule: {
+                    editingRule = ruleForOccurrence(occ).map { RecurringRuleTarget(rule: $0, scheduledDate: occ.scheduledDate) }
+                },
+                onDuplicate: { duplicateOccurrence(occ) },
+                onDelete: { skipOccurrence(occ) },
+                onTap: { detailOccurrence = occ }
+            )
+        }
     }
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。

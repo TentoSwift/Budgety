@@ -24,6 +24,26 @@ struct ExpensoShortcuts: AppShortcutsProvider {
         #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
         if #available(iOS 27.3, *) {
             AppShortcut(
+                intent: SiriSettlementStatusIntent(),
+                phrases: ["\(.applicationName) で精算を確認", "Check settlements in \(.applicationName)"],
+                shortTitle: "精算を確認", systemImageName: "arrow.left.arrow.right.circle"
+            )
+            AppShortcut(
+                intent: SiriSettleSuggestedTransferIntent(),
+                phrases: ["\(.applicationName) で精算済みにする", "Mark a transfer as settled in \(.applicationName)"],
+                shortTitle: "精算済みにする", systemImageName: "checkmark.circle"
+            )
+            AppShortcut(
+                intent: SiriLogSettlementTransferIntent(),
+                phrases: ["\(.applicationName) で送金を記録", "Log a transfer in \(.applicationName)"],
+                shortTitle: "送金を記録", systemImageName: "arrow.right.circle"
+            )
+            AppShortcut(
+                intent: SiriEditSettlementTransferIntent(),
+                phrases: ["\(.applicationName) で送金を編集", "Edit a transfer in \(.applicationName)"],
+                shortTitle: "送金を編集", systemImageName: "pencil.circle"
+            )
+            AppShortcut(
                 intent: SiriFindMemberTransactionsIntent(),
                 phrases: [
                     "\(.applicationName) でメンバーの収支を調べて",

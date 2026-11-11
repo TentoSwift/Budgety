@@ -95,7 +95,7 @@ enum SettlementCalculator {
         let fx = FXRatesService.shared
         let allExpenses = (sheet.expenses as? Set<Expense>) ?? []
         let expenses = allExpenses.filter { e in
-            guard e.kind == .expense else { return false }
+            guard !e.isDeleted, !e.isSkipped, e.kind == .expense else { return false }
             if let range = dateRange {
                 guard let d = e.date else { return false }
                 return range.contains(d)
