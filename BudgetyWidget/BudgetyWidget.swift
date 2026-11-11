@@ -39,59 +39,85 @@ struct SelectWidgetSheet: WidgetConfigurationIntent {
     var sheet: WidgetSheetEntity?
 }
 
-private enum SheetWidgetContent {
+enum SheetWidgetContent {
     case spending(WidgetSheetSnapshot)
     case selectSheet
     case unavailable
-    case needsRefresh
+    case needsRefresh(String)
 }
 
-private struct SheetWidgetEntry: TimelineEntry {
+struct SheetWidgetEntry: TimelineEntry {
     let date: Date
     let content: SheetWidgetContent
+
+    var sheetURL: URL? {
+        switch content {
+        case .spending(let sheet): WidgetSheetLink.url(for: sheet.id)
+        case .needsRefresh(let id): WidgetSheetLink.url(for: id)
+        case .selectSheet, .unavailable: nil
+        }
+    }
 }
 
-private struct SheetWidgetProvider: AppIntentTimelineProvider {
+struct SheetWidgetProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> SheetWidgetEntry {
+        let calendar = Calendar.current
+        let now = Date.now
+        let start = calendar.dateInterval(of: .month, for: now)?.start ?? now
+        let sampleDaily: [Decimal] = [1200, 0, 740, 3800, 0, 560, 0, 2500]
+        let count = calendar.ordinality(of: .day, in: .month, for: now) ?? 1
+        let chart = (0..<count).map { sampleDaily[$0 % sampleDaily.count] }
+        let previous = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        let rows = [
+            WidgetExpenseRow(date: now, title: String(localized: "ランチ"), category: String(localized: "食費"),
+                             symbol: "fork.knife", colorHex: "#F4784B", amount: 1200, currency: "JPY"),
+            WidgetExpenseRow(date: previous, title: String(localized: "電車"), category: String(localized: "交通費"),
+                             symbol: "tram.fill", colorHex: "#42A8D0", amount: 740, currency: "JPY")
+        ]
         let sample = WidgetSheetSnapshot(id: "preview", name: String(localized: "家計"), symbol: "house.fill",
-                                         colorHex: "#AF52DE", monthStart: .now, expense: 28400, income: 0,
-                                         currency: "JPY", missingRates: false)
-        return SheetWidgetEntry(date: .now, content: .spending(sample))
+                                         colorHex: "#AF52DE", monthStart: start, expense: chart.reduce(0, +), income: 98000,
+                                         currency: "JPY", missingRates: false, dailyExpenses: chart,
+                                         recentExpenses: rows, recentExpenseCount: 2)
+        return SheetWidgetEntry(date: now, content: .spending(sample))
     }
 
     func snapshot(for configuration: SelectWidgetSheet, in context: Context) async -> SheetWidgetEntry {
         if context.isPreview && configuration.sheet == nil { return placeholder(in: context) }
-        return entry(for: configuration, at: .now)
+        return entries(for: configuration.sheet?.id, at: .now).first!
     }
 
     func timeline(for configuration: SelectWidgetSheet, in context: Context) async -> Timeline<SheetWidgetEntry> {
         let now = Date.now
-        let current = entry(for: configuration, at: now)
-        var entries = [current]
-        if case .spending = current.content,
-           let nextMonth = Calendar.current.dateInterval(of: .month, for: now)?.end {
-            // Stop labeling last month's amount as current even if WidgetKit delays the refresh.
-            entries.append(SheetWidgetEntry(date: nextMonth, content: .needsRefresh))
-        }
-        return Timeline(entries: entries, policy: .after(now.addingTimeInterval(3600)))
+        return Timeline(entries: entries(for: configuration.sheet?.id, at: now), policy: .after(now.addingTimeInterval(3600)))
     }
 
-    private func entry(for configuration: SelectWidgetSheet, at date: Date) -> SheetWidgetEntry {
-        guard let id = configuration.sheet?.id else {
-            return SheetWidgetEntry(date: date, content: .selectSheet)
+    func entries(for id: String?, at date: Date, sheets: [WidgetSheetSnapshot] = WidgetSheetStore.read(),
+                 calendar: Calendar = .current) -> [SheetWidgetEntry] {
+        guard let id else { return [SheetWidgetEntry(date: date, content: .selectSheet)] }
+        guard let sheet = sheets.first(where: { $0.id == id }) else {
+            return [SheetWidgetEntry(date: date, content: .unavailable)]
         }
-        guard let sheet = WidgetSheetStore.read().first(where: { $0.id == id }) else {
-            return SheetWidgetEntry(date: date, content: .unavailable)
+        let current = sheet.displayed(at: date, calendar: calendar)
+        var entries = [SheetWidgetEntry(date: date, content: current.map(SheetWidgetContent.spending) ?? .needsRefresh(id))]
+        guard current != nil else { return entries }
+        let lastDay = sheet.ledger?.lastDisplayDay ?? calendar.startOfDay(for: date)
+        var day = calendar.startOfDay(for: date)
+        while let next = calendar.date(byAdding: .day, value: 1, to: day), next.compare(lastDay) != .orderedDescending {
+            guard let projected = sheet.displayed(at: next, calendar: calendar) else { break }
+            entries.append(SheetWidgetEntry(date: next, content: .spending(projected)))
+            day = next
         }
-        guard Calendar.current.isDate(sheet.monthStart, equalTo: date, toGranularity: .month) else {
-            return SheetWidgetEntry(date: date, content: .needsRefresh)
-        }
-        return SheetWidgetEntry(date: date, content: .spending(sheet))
+        let expires = sheet.ledger == nil ? calendar.dateInterval(of: .month, for: date)?.end
+                                         : calendar.date(byAdding: .day, value: 1, to: lastDay)
+        if let expires { entries.append(SheetWidgetEntry(date: expires, content: .needsRefresh(id))) }
+        return entries
     }
+
 }
 
 private struct SheetWidgetView: View {
     let entry: SheetWidgetEntry
+    @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
@@ -108,15 +134,19 @@ private struct SheetWidgetView: View {
                 }
                     .font(.headline)
                     .lineLimit(1)
-                Spacer(minLength: 0)
-                Text("今月の支出")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(sheet.expense, format: .currency(code: sheet.currency))
-                    .font(.title.bold())
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.55)
-                    .lineLimit(1)
+                if family == .systemLarge {
+                    LargeSheetWidgetContent(sheet: sheet)
+                } else {
+                    Spacer(minLength: 0)
+                    Text("今月の支出")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(sheet.expense, format: .currency(code: sheet.currency))
+                        .font(.title.bold())
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.55)
+                        .lineLimit(1)
+                }
                 if sheet.missingRates {
                     Text("為替レート未取得の明細を除く")
                         .font(.caption2)
@@ -137,20 +167,29 @@ private struct SheetWidgetView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .widgetURL(entry.sheetURL)
         .privacySensitive()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .containerBackground(.background, for: .widget)
     }
 }
 
-@main
 struct BudgetySheetWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: WidgetSheetStore.kind, intent: SelectWidgetSheet.self, provider: SheetWidgetProvider()) { entry in
             SheetWidgetView(entry: entry)
         }
         .configurationDisplayName("今月の支出")
-        .description("選んだシートの今月の支出を表示します。")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("選んだシートの今月の収支と直近の支出を表示します。")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}
+
+
+@main
+struct BudgetyWidgets: WidgetBundle {
+    var body: some Widget {
+        BudgetySheetWidget()
+        ExpenseChartWidget()
     }
 }

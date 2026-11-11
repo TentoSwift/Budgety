@@ -257,7 +257,7 @@ struct SettingsView: View {
                         NavigationLink {
                             RecurringDiagnosticsView()
                         } label: {
-                            Label("定期項目の診断", systemImage: "repeat.circle")
+                            Label("繰り返しの診断", systemImage: "repeat.circle")
                         }
                         Toggle(isOn: $recurringVirtualization) {
                             Label("定期を仮想化 (保存しない)", systemImage: "wand.and.stars")
@@ -265,7 +265,7 @@ struct SettingsView: View {
                     } header: {
                         Text("デバッグ")
                     } footer: {
-                        Text("ON で定期項目を保存せず、表示時にルールから算出します (実験的)。既存の生成済みデータはそのまま残ります。")
+                        Text("ON で繰り返しを保存せず、表示時にルールから算出します (実験的)。既存の生成済みデータはそのまま残ります。")
                             .font(.caption)
                     }
                 }

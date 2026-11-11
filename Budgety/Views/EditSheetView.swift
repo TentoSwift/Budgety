@@ -453,19 +453,15 @@ struct EditSheetView: View {
     private func deleteOrLeave() async {
         if record.isOwnedByCurrentUser {
             viewContext.delete(record)
-            PersistenceController.shared.save()
-            Haptics.warning()
-            dismiss()
+            if PersistenceController.shared.saveReportingSuccess() { Haptics.warning() }
+            // Removing the detail destination also closes its editor.
         } else {
             do {
                 try await ShareCoordinator.shared.leaveSharedSheet(record)
                 Haptics.warning()
-                dismiss()
             } catch {
-                // 失敗しても dismiss はしない。エラー表示は今後追加できる
-                #if DEBUG
-                print("⚠️ leaveSharedSheet failed: \(error)")
-                #endif
+                NotificationCenter.default.post(name: .expensoSaveFailed, object: nil,
+                                                userInfo: ["message": error.localizedDescription])
             }
         }
     }

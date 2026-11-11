@@ -17,6 +17,7 @@ struct BudgetyVisionSheetView: View {
 
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
+    @State private var virtualEditor: RecurringOccurrenceDraft?
 
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
@@ -82,12 +83,16 @@ struct BudgetyVisionSheetView: View {
         .sheet(item: $editingExpense) { e in
             VisionAddExpenseView(sheet: sheet, expense: e)
         }
+        .sheet(item: $virtualEditor) { draft in
+            VisionAddExpenseView(sheet: sheet, expense: draft.expense, isVirtualDraft: true)
+        }
     }
 
     // MARK: - Sections
 
     private var summaryHero: some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            SheetMemberAvatars(sheet: sheet)
             HStack {
                 Image(systemName: sheet.symbol ?? "person.2.fill")
                     .foregroundStyle(.white)
@@ -153,11 +158,11 @@ struct BudgetyVisionSheetView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text(dayHeader(group.date))
-                            .font(.sheetNumber(.subheadline, weight: .semibold))
+                            .font(.sheetNumber(.headline, weight: .semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(daySigned(group.items, code: sheet.resolvedDefaultCurrencyCode))
-                            .font(.sheetNumber(.subheadline))
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
@@ -173,8 +178,12 @@ struct BudgetyVisionSheetView: View {
                                 }
                                 .buttonStyle(.plain)
                             case .occurrence(let occ):
-                                // visionOS には定期管理 UI が無いので表示のみ。
-                                virtualRow(occ)
+                                Button {
+                                    virtualEditor = RecurringOccurrenceDraft(occ, sheet: sheet)
+                                } label: {
+                                    virtualRow(occ)
+                                }
+                                .buttonStyle(.plain)
                             }
                             if item.id != group.items.last?.id {
                                 Divider().padding(.leading, 60)
@@ -213,7 +222,7 @@ struct BudgetyVisionSheetView: View {
             }
             Spacer()
             Text(e.formattedSignedAmount)
-                .font(.sheetNumber(.callout))
+                .font(.sheetNumber(.headline))
                 .foregroundStyle(e.kind == .income ? .green : .primary)
         }
         .padding(.horizontal, 16)
@@ -252,7 +261,7 @@ struct BudgetyVisionSheetView: View {
         return sign + CurrencyCatalog.format(total, code: code)
     }
 
-    /// 仮想 occurrence の行 (visionOS, 表示のみ・控えめ)。
+    /// 仮想 occurrence の行。
     private func virtualRow(_ occ: RecurringOccurrence) -> some View {
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
         let category = occ.categoryRaw.isEmpty ? nil : cats.first { $0.name == occ.categoryRaw }
@@ -262,14 +271,14 @@ struct BudgetyVisionSheetView: View {
                 Image(systemName: "repeat").foregroundStyle(.gray).font(.callout)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(occ.title.isEmpty ? (category?.displayName ?? String(localized: "定期項目")) : occ.title)
+                Text(occ.title.isEmpty ? (category?.displayName ?? String(localized: "繰り返し")) : occ.title)
                     .font(.body).foregroundStyle(.primary)
                 Text(category?.displayName ?? (occ.categoryRaw.isEmpty ? String(localized: "定期") : occ.categoryRaw))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
-                .font(.sheetNumber(.callout))
+            Text((occ.kind == .income ? "+" : "-") + CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
+                .font(.sheetNumber(.headline))
                 .foregroundStyle(occ.kind == .income ? .green : .primary)
         }
         .padding(.horizontal, 16)

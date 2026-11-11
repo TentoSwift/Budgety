@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23000" systemVersion="26F0" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="V20">
+    <entity name="ExpenseCategory" representedClassName="ExpenseCategory" syncable="YES" codeGenerationType="class">
+        <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#888888"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isBuiltIn" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
+        <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="symbol" optional="YES" attributeType="String" defaultValueString="ellipsis.circle"/>
+        <relationship name="expenses" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Expense" inverseName="category" inverseEntity="Expense"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" renamingIdentifier="group" destinationEntity="ExpenseSheet" inverseName="categories" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <entity name="ExpenseSheet" representedClassName="ExpenseSheet" renamingIdentifier="ExpenseGroup" syncable="YES" codeGenerationType="class">
+        <attribute name="archived" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="defaultCurrencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="lockBiometricEnabled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lockPasswordHash" optional="YES" attributeType="String"/>
+        <attribute name="lockPasswordSalt" optional="YES" attributeType="String"/>
+        <attribute name="monthlyBudget" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="ownerIsPremium" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="symbol" optional="YES" attributeType="String" defaultValueString="person.2.fill"/>
+        <relationship name="categories" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExpenseCategory" inverseName="sheet" inverseEntity="ExpenseCategory"/>
+        <relationship name="expenses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Expense" inverseName="sheet" inverseEntity="Expense"/>
+        <relationship name="participantProfiles" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ParticipantProfile" inverseName="sheet" inverseEntity="ParticipantProfile"/>
+        <relationship name="recurringRules" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="RecurringRule" inverseName="sheet" inverseEntity="RecurringRule"/>
+        <relationship name="settlements" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="SettlementRecord" inverseName="sheet" inverseEntity="SettlementRecord"/>
+        <relationship name="templates" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ExpenseTemplate" inverseName="sheet" inverseEntity="ExpenseTemplate"/>
+    </entity>
+    <entity name="ExpenseTemplate" representedClassName="ExpenseTemplate" syncable="YES" codeGenerationType="class">
+        <attribute name="amount" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="beneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="categoryRaw" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="payerMemberID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="title" optional="YES" attributeType="String" defaultValueString=""/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="templates" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <entity name="RecurringRule" representedClassName="RecurringRule" syncable="YES" codeGenerationType="class">
+        <attribute name="amount" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="beneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="categoryRaw" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="endDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="frequency" optional="YES" attributeType="String" defaultValueString="monthly"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="interval" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
+        <attribute name="lastGeneratedDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="photoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="postingDayOffset" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="scheduleAnchor" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="seriesID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="skippedDates" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="startDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="title" optional="YES" attributeType="String" defaultValueString=""/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="recurringRules" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <entity name="ParticipantProfile" representedClassName="ParticipantProfile" syncable="YES" codeGenerationType="class">
+        <attribute name="archived" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
+        <attribute name="displayName" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="isPremium" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="photoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="recordName" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="participantProfiles" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <entity name="Expense" representedClassName="Expense" syncable="YES" codeGenerationType="class">
+        <attribute name="amount" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="beneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="categoryRaw" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fxConvertedAmount" optional="YES" attributeType="Decimal"/>
+        <attribute name="fxTargetCurrency" optional="YES" attributeType="String"/>
+        <attribute name="kindRaw" optional="YES" attributeType="String" defaultValueString="expense"/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="generatedFromRuleID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="scheduledDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isSkipped" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="settledBeneficiaryProfileIDs" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="paidBy" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="payerMemberID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="payerProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="photoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="title" optional="YES" attributeType="String" defaultValueString=""/>
+        <relationship name="category" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseCategory" inverseName="expenses" inverseEntity="ExpenseCategory"/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" renamingIdentifier="group" destinationEntity="ExpenseSheet" inverseName="expenses" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <entity name="Member" representedClassName="Member" syncable="YES" codeGenerationType="class">
+        <attribute name="colorHex" optional="YES" attributeType="String" defaultValueString="#5B8DEF"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="photoData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="recordName" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="SettlementRecord" representedClassName="SettlementRecord" syncable="YES" codeGenerationType="class">
+        <attribute name="amount" optional="YES" attributeType="Decimal" defaultValueString="0"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="createdByProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="currencyCode" optional="YES" attributeType="String" defaultValueString="JPY"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fromProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="fxConvertedAmount" optional="YES" attributeType="Decimal"/>
+        <attribute name="fxTargetCurrency" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="note" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="toProfileID" optional="YES" attributeType="String" defaultValueString=""/>
+        <relationship name="sheet" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ExpenseSheet" inverseName="settlements" inverseEntity="ExpenseSheet"/>
+    </entity>
+    <configuration name="Private" usedWithCloudKit="YES">
+        <memberEntity name="ExpenseCategory"/>
+        <memberEntity name="ExpenseSheet"/>
+        <memberEntity name="Expense"/>
+        <memberEntity name="ExpenseTemplate"/>
+        <memberEntity name="Member"/>
+        <memberEntity name="ParticipantProfile"/>
+        <memberEntity name="RecurringRule"/>
+        <memberEntity name="SettlementRecord"/>
+    </configuration>
+    <configuration name="Shared" usedWithCloudKit="YES">
+        <memberEntity name="ExpenseCategory"/>
+        <memberEntity name="ExpenseSheet"/>
+        <memberEntity name="Expense"/>
+        <memberEntity name="ExpenseTemplate"/>
+        <memberEntity name="ParticipantProfile"/>
+        <memberEntity name="RecurringRule"/>
+        <memberEntity name="SettlementRecord"/>
+    </configuration>
+</model>

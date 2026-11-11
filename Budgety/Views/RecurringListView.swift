@@ -17,11 +17,14 @@ struct RecurringListView: View {
     /// 親 view から「この Rule を表示直後に開いて」と指定されるとここに入り、
     /// `onAppear` で `editingRule` にセットしてシートを開く。
     private let autoEditRule: RecurringRule?
+    private let autoEditDate: Date?
+    @State private var occurrenceDate: Date?
     @State private var didAutoOpen = false
 
-    init(record: ExpenseSheet, autoEditRule: RecurringRule? = nil) {
+    init(record: ExpenseSheet, autoEditRule: RecurringRule? = nil, autoEditDate: Date? = nil) {
         self.record = record
         self.autoEditRule = autoEditRule
+        self.autoEditDate = autoEditDate
         _rules = FetchRequest<RecurringRule>(
             sortDescriptors: [NSSortDescriptor(keyPath: \RecurringRule.createdAt, ascending: true)],
             predicate: NSPredicate(format: "sheet == %@", record),
@@ -29,19 +32,22 @@ struct RecurringListView: View {
         )
     }
 
-    private var expenseRules: [RecurringRule] {
-        rules.filter { $0.kind == .expense }
-    }
-
-    private var incomeRules: [RecurringRule] {
-        rules.filter { $0.kind == .income }
+    private var displayedRules: [RecurringRule] {
+        let families = Dictionary(grouping: rules) { $0.recurringSeriesID?.uuidString ?? $0.objectID.uriRepresentation().absoluteString }
+        return families.values.compactMap { segments in
+            let chronological = segments.sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
+            return chronological.first { $0.nextScheduledOccurrence != nil } ?? chronological.last
+        }.sorted {
+            ($0.createdAt ?? .distantPast, $0.objectID.uriRepresentation().absoluteString) <
+            ($1.createdAt ?? .distantPast, $1.objectID.uriRepresentation().absoluteString)
+        }
     }
 
     var body: some View {
         Group {
             if rules.isEmpty {
                 ContentUnavailableView {
-                    Label("定期項目がありません", systemImage: "repeat")
+                    Label("繰り返しがありません", systemImage: "repeat")
                 } description: {
                     Text("家賃・サブスク・給料など、毎月や毎週に繰り返される支出/収入を登録すると、自動でシートに追加されます。")
                 } actions: {
@@ -54,12 +60,13 @@ struct RecurringListView: View {
                 }
             } else {
                 List {
-                    section(title: TransactionKind.expense.label, items: expenseRules)
-                    section(title: TransactionKind.income.label, items: incomeRules)
+                    let items = displayedRules
+                    section(title: TransactionKind.expense.label, items: items.filter { $0.kind == .expense })
+                    section(title: TransactionKind.income.label, items: items.filter { $0.kind == .income })
                 }
             }
         }
-        .navigationTitle("定期項目")
+        .navigationTitle("繰り返し")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -71,7 +78,7 @@ struct RecurringListView: View {
             }
         }
         .sheet(item: $editingRule) { rule in
-            EditRecurringRuleView(mode: .edit(rule: rule))
+            EditRecurringRuleView(mode: .edit(rule: rule), occurrenceDate: occurrenceDate)
         }
         .sheet(isPresented: $showingNew) {
             EditRecurringRuleView(mode: .create(record: record))
@@ -82,6 +89,7 @@ struct RecurringListView: View {
             guard !didAutoOpen, let target = autoEditRule else { return }
             didAutoOpen = true
             DispatchQueue.main.async {
+                occurrenceDate = autoEditDate
                 editingRule = target
             }
         }
@@ -93,6 +101,7 @@ struct RecurringListView: View {
             Section(title) {
                 ForEach(items) { rule in
                     Button {
+                        occurrenceDate = nil
                         editingRule = rule
                     } label: {
                         RecurringRow(rule: rule, sheet: record)
@@ -143,32 +152,47 @@ private struct RecurringRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             icon
-            VStack(alignment: .leading, spacing: 2) {
-                Text(rule.displayTitle.isEmpty ? String(localized: "(無題)") : rule.displayTitle)
-                    .font(.body)
-                HStack(spacing: 6) {
-                    Image(systemName: "repeat")
-                    Text(rule.resolvedFrequency.summary(interval: rule.resolvedInterval))
-                        .font(.sheetNumber(.caption2))
-                    Text("·")
-                    Text(categoryName)
-                    if let next = rule.nextOccurrence {
-                        Text("·")
-                        Text("次回 \(formatted(next))")
-                            .font(.sheetNumber(.caption2))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        title.fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 0)
+                        amount.fixedSize(horizontal: true, vertical: false)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        title
+                        amount
                     }
                 }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                let frequency = rule.resolvedFrequency.summary(interval: rule.resolvedInterval)
+                Text(verbatim: "\(frequency) · \(categoryName)")
+                    .font(.sheetNumber(.subheadline))
+                    .foregroundStyle(.secondary)
+                if let next = rule.nextOccurrence {
+                    Text("次回 \(formatted(next))")
+                        .font(.sheetNumber(.body))
+                        .foregroundStyle(.secondary)
+                }
             }
-            Spacer()
-            Text(rule.formattedAmount)
-                .font(.sheetNumber(.subheadline))
-                .foregroundStyle(rule.kind == .income ? .green : .primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .padding(.vertical, 4)
+    }
+
+    private var title: some View {
+        Text(rule.displayTitle.isEmpty ? String(localized: "(無題)") : rule.displayTitle)
+            .font(.body)
+    }
+
+    private var amount: some View {
+        Text(rule.formattedAmount)
+            .font(.sheetNumber(.title3, weight: .semibold))
+            .foregroundStyle(rule.kind == .income ? Color.green : Color.primary)
     }
 
     private func formatted(_ date: Date) -> String {

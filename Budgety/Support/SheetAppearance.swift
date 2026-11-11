@@ -10,6 +10,35 @@ extension Font {
     }
 }
 
+struct SheetMemberAvatars: View {
+    @ObservedObject var sheet: ExpenseSheet
+    @ObservedObject private var profiles = PublicProfileSync.shared
+    @ObservedObject private var userProfile = UserProfileStore.shared
+    @ScaledMetric(relativeTo: .body) private var overlap: CGFloat = 6
+
+    var body: some View {
+        let members = sheet.acceptedMemberProfileIDs()
+        if members.count > 1 || members.contains(where: UserProfileStore.isVirtualRecordName) {
+            HStack(spacing: -overlap) {
+                ForEach(members.prefix(4), id: \.self) { id in
+                    let info = sheet.memberDisplayInfo(for: id)
+                    AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 28)
+                        .overlay { Circle().strokeBorder(.background, lineWidth: 1.5) }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(verbatim: info.name))
+                }
+                if members.count > 4 {
+                    Text("+\(members.count - 4)")
+                        .font(.sheetNumber(.caption, weight: .semibold))
+                        .padding(5)
+                        .background(.background, in: Capsule())
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
 #if canImport(UIKit)
 import UIKit
 

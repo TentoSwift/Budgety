@@ -18,6 +18,8 @@ struct EditRecurringRuleView: View {
     @StateObject private var profile = UserProfileStore.shared
 
     let mode: Mode
+    var occurrenceDate: Date? = nil
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var title: String = ""
     @State private var amountText: String = ""
@@ -34,6 +36,11 @@ struct EditRecurringRuleView: View {
     @State private var payerExplicitlyCleared: Bool = false
     @State private var note: String = ""
     @State private var didLoad: Bool = false
+    @State private var original: Values?
+    @State private var targetDay: Date?
+    @State private var choosingScope = false
+    @State private var saveError: String?
+
 
     /// 受益者 (誰の負担として扱うか) の profileID 集合。空 = 割り勘オフ (支払者単独負担)。
     @State private var selectedBeneficiaries: Set<String> = []
@@ -240,8 +247,8 @@ struct EditRecurringRuleView: View {
 
     private var navTitle: String {
         switch mode {
-        case .create: String(localized: "定期項目を追加")
-        case .edit:   String(localized: "定期項目を編集")
+        case .create: String(localized: "繰り返しを追加")
+        case .edit:   String(localized: "繰り返しを編集")
         }
     }
 
@@ -251,18 +258,18 @@ struct EditRecurringRuleView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section {
                     Picker("種別", selection: $kind) {
                         ForEach(TransactionKind.allCases) { k in
                             Label(k.label, systemImage: k.symbol).tag(k)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .modifier(RecurringKindPickerStyle(accessible: dynamicTypeSize.isAccessibilitySize))
+                    .listRowBackground(Color.clear)
                 }
 
-                Section("内容") {
-                    TextField(kind == .expense ? "タイトル (例: Netflix, 家賃)" : "タイトル (例: 給料)", text: $title)
+                Section {
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
                             .font(.sheetNumber(.body))
@@ -270,7 +277,7 @@ struct EditRecurringRuleView: View {
                             .frame(minWidth: 24, alignment: .leading)
                         TextField("0", text: $amountText)
                             .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .font(.sheetNumber(.title3))
+                            .font(.sheetNumber(.title2))
                             .onChange(of: amountText) { _, new in
                                 let allowed = decimalKeypadNeeded
                                     ? new.filter { $0.isNumber || $0 == "." }
@@ -278,6 +285,7 @@ struct EditRecurringRuleView: View {
                                 if allowed != new { amountText = allowed }
                             }
                     }
+                    TextField("タイトル", text: $title)
                     Picker("通貨", selection: $currencyCode) {
                         ForEach(CurrencyCatalog.allOrderedByLocale) { opt in
                             Text("\(opt.symbol)  \(opt.code) — \(opt.displayName)").tag(opt.code)
@@ -288,6 +296,12 @@ struct EditRecurringRuleView: View {
                     #else
                     .pickerStyle(.navigationLink)
                     #endif
+                }
+
+                if let sheet = contextSheet {
+                    Section {
+                        TransactionCategoryMenu(sheet: sheet, kind: kind, selection: $selectedCategory)
+                    }
                 }
 
                 Section {
@@ -314,29 +328,6 @@ struct EditRecurringRuleView: View {
                     }
                 } header: {
                     Text("繰り返し")
-                } footer: {
-                    Text("開始日から指定の頻度で、過去〜今日までの未生成分を自動でシートに追加します。")
-                }
-
-                Section("カテゴリ") {
-                    if let sheet = contextSheet {
-                        NavigationLink {
-                            CategoryPickerView(selected: $selectedCategory, record: sheet, kind: kind)
-                        } label: {
-                            HStack {
-                                Text("カテゴリ")
-                                Spacer()
-                                if let cat = selectedCategory {
-                                    CategoryIconView(category: cat, size: 24)
-                                    Text(cat.displayName)
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    Text("未選択")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
                 }
 
                 payerSection
@@ -410,6 +401,8 @@ struct EditRecurringRuleView: View {
                     }
                 }
             }
+            .listStyle(.plain)
+            .tint(contextSheet?.tint ?? .accentColor)
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             #if !os(visionOS)
@@ -429,6 +422,26 @@ struct EditRecurringRuleView: View {
                     #endif
                 }
             }
+            .confirmationDialog("変更の適用範囲", isPresented: $choosingScope, titleVisibility: .visible) {
+                Button("この回のみ") { commit(scope: .thisOnly) }
+                    .disabled(scheduleChanged || targetDay == nil)
+                Button("この回以降") { commit(scope: .thisAndFollowing) }
+                    .disabled(targetDay == nil)
+                Button("すべて") { commit(scope: .all) }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                if case .edit(let rule) = mode, let day = targetDay {
+                    Text(rule.postingDay(for: day), format: .dateTime.year().month().day())
+                }
+                if scheduleChanged {
+                    Text("繰り返しの設定を変更する場合は「この回以降」か「すべて」を選んでください。")
+                }
+            }
+            .alert("保存できませんでした", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("OK") { saveError = nil }
+            } message: {
+                Text(saveError ?? "")
+            }
             .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
                 TextField("名前", text: $newMemberName)
                 Button("追加") {
@@ -441,6 +454,9 @@ struct EditRecurringRuleView: View {
                 Button("キャンセル", role: .cancel) { newMemberName = "" }
             } message: {
                 Text("アプリを使っていない相手を割り勘・支払者に追加できます。")
+            }
+            .onChange(of: kind) { _, newKind in
+                if let selectedCategory, selectedCategory.kind != newKind { self.selectedCategory = nil }
             }
             .onAppear { loadIfNeeded() }
         }
@@ -540,6 +556,7 @@ struct EditRecurringRuleView: View {
                 selectedPayer = (try? viewContext.fetch(req))?.first
             }
         case .edit(let rule):
+            targetDay = occurrenceDate ?? rule.nextScheduledOccurrence ?? rule.lastScheduledOccurrence(onOrBefore: .now)
             title = rule.displayTitle
             amountText = NSDecimalNumber(decimal: rule.amountDecimal).stringValue
             kind = rule.kind
@@ -571,46 +588,126 @@ struct EditRecurringRuleView: View {
                 selectedBeneficiaries = Set([loadedPayerID])
             }
         }
+        if case .edit = mode { original = values }
+    }
+
+    private struct Values: Equatable {
+        var title: String
+        var amount: Decimal
+        var kind: TransactionKind
+        var currency: String
+        var note: String
+        var category: NSManagedObjectID?
+        var payerID: String?
+        var payerName: String?
+        var beneficiaries: String
+        var frequency: RecurrenceFrequency
+        var interval: Int32
+        var start: Date
+        var end: Date?
+    }
+
+    private var values: Values {
+        Values(title: title.trimmingCharacters(in: .whitespacesAndNewlines), amount: amountDecimal ?? 0,
+               kind: kind, currency: currencyCode, note: note, category: selectedCategory?.objectID,
+               payerID: effectivePayerProfileID, payerName: effectivePaidByFallback,
+               beneficiaries: effectiveBeneficiaryCSV, frequency: frequency, interval: Int32(interval),
+               start: Calendar.current.startOfDay(for: startDate),
+               end: hasEndDate ? Calendar.current.startOfDay(for: endDate) : nil)
+    }
+
+    private var scheduleChanged: Bool {
+        guard let original else { return false }
+        let current = values
+        return current.frequency != original.frequency || current.interval != original.interval
+            || current.start != original.start || current.end != original.end
     }
 
     private func save() {
-        guard let amountDecimal else { return }
-        let pc = PersistenceController.shared
-
-        switch mode {
-        case .create(let record):
-            let rule = RecurringRule(context: viewContext)
-            // 親シートと同じストアに割り当て
-            if let store = record.objectID.persistentStore {
-                viewContext.assign(rule, to: store)
-            }
-            rule.id = UUID()
-            rule.createdAt = .now
-            rule.sheet = record
-            apply(to: rule, amount: amountDecimal)
-        case .edit(let rule):
-            apply(to: rule, amount: amountDecimal)
+        guard canSave else { return }
+        if case .edit = mode {
+            guard values != original else { dismiss(); return }
+            choosingScope = true
+        } else {
+            commit(scope: .all)
         }
-        pc.save()
-        // 保存直後にも一回 generate を回して、startDate が今日以前ならすぐに反映
-        RecurringExpenseGenerator.generateAll(in: viewContext)
-        Haptics.success()
-        dismiss()
     }
 
-    private func apply(to rule: RecurringRule, amount: Decimal) {
-        rule.title = title.trimmingCharacters(in: .whitespaces)
-        rule.amount = NSDecimalNumber(decimal: amount)
-        rule.kindRaw = kind.rawValue
-        rule.currencyCode = currencyCode
-        rule.categoryRaw = selectedCategory?.name
-        rule.paidBy = effectivePaidByFallback
-        rule.payerProfileID = effectivePayerProfileID
-        rule.beneficiaryProfileIDs = effectiveBeneficiaryCSV
-        rule.note = note
-        rule.frequency = frequency.rawValue
-        rule.interval = Int32(interval)
-        rule.startDate = Calendar.current.startOfDay(for: startDate)
-        rule.endDate = hasEndDate ? Calendar.current.startOfDay(for: endDate) : nil
+    private func commit(scope: RecurringEditScope) {
+        guard let source = contextSheet, !source.isDeleted else { return }
+        // Save the rule and its exceptions together. A failed edit can be retried with the form still open.
+        let writer = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        writer.persistentStoreCoordinator = PersistenceController.shared.container.persistentStoreCoordinator
+        let current = values
+        let initial = original
+        let originalRuleID: NSManagedObjectID?
+        if case .edit(let rule) = mode { originalRuleID = rule.objectID } else { originalRuleID = nil }
+        let sheetID = source.objectID
+        let categoryID = current.category
+        do {
+            guard let sheet = try writer.existingObject(with: sheetID) as? ExpenseSheet else { throw CocoaError(.validationMissingMandatoryProperty) }
+            let category = try categoryID.flatMap { try writer.existingObject(with: $0) as? ExpenseCategory }
+
+            func updateRule(_ rule: RecurringRule) {
+                if initial?.title != current.title { rule.title = current.title }
+                if initial?.amount != current.amount { rule.amountDecimal = current.amount }
+                if initial?.kind != current.kind { rule.kind = current.kind }
+                if initial?.currency != current.currency { rule.currencyCode = current.currency }
+                if initial?.note != current.note { rule.note = current.note }
+                if initial?.category != current.category { rule.categoryRaw = category?.name }
+                if initial == nil || initial?.payerID != current.payerID || initial?.payerName != current.payerName {
+                    rule.payerProfileID = current.payerID
+                    rule.paidBy = current.payerName
+                }
+                if initial?.beneficiaries != current.beneficiaries { rule.beneficiaryProfileIDs = current.beneficiaries }
+                if initial?.frequency != current.frequency { rule.frequency = current.frequency.rawValue }
+                if initial?.interval != current.interval { rule.interval = current.interval }
+                if initial?.start != current.start { rule.startDate = current.start }
+                if initial?.end != current.end { rule.endDate = current.end }
+            }
+            if let originalRuleID {
+                guard let rule = try writer.existingObject(with: originalRuleID) as? RecurringRule,
+                      let day = targetDay ?? rule.startDate else { throw CocoaError(.validationMissingMandatoryProperty) }
+                try RecurringExpenseGenerator.edit(rule, on: day, scope: scope) { row, _ in
+                    if initial?.title != current.title { row.title = current.title }
+                    if initial?.amount != current.amount { row.amount = NSDecimalNumber(decimal: current.amount) }
+                    if initial?.kind != current.kind { row.kindRaw = current.kind.rawValue }
+                    if initial?.currency != current.currency { row.currencyCode = current.currency }
+                    if initial?.note != current.note { row.note = current.note }
+                    if initial?.category != current.category {
+                        row.category = category
+                        row.categoryRaw = category?.name
+                    }
+                    if initial?.payerID != current.payerID || initial?.payerName != current.payerName {
+                        row.payerProfileID = current.payerID
+                        row.paidBy = current.payerName
+                        row.payerMemberID = nil
+                    }
+                    if initial?.beneficiaries != current.beneficiaries { row.beneficiaryProfileIDs = current.beneficiaries }
+                } updateRule: { updateRule($0) }
+            } else {
+                let rule = RecurringRule(context: writer)
+                if let store = sheet.objectID.persistentStore { writer.assign(rule, to: store) }
+                rule.id = UUID()
+                rule.createdAt = .now
+                rule.sheet = sheet
+                updateRule(rule)
+                if !RecurringOccurrenceService.virtualizationEnabled { RecurringExpenseGenerator.generate(for: rule, in: writer) }
+            }
+            try writer.save()
+            Haptics.success()
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+}
+
+
+private struct RecurringKindPickerStyle: ViewModifier {
+    let accessible: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if accessible { content.pickerStyle(.menu) }
+        else { content.pickerStyle(.segmented) }
     }
 }

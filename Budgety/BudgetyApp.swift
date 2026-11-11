@@ -91,6 +91,13 @@ struct BudgetyApp: App {
                     let message = (note.userInfo?["message"] as? String) ?? String(localized: "データベースをリセットしました")
                     showToast(message)
                 }
+                #if os(iOS)
+                .onOpenURL { url in
+                    if let id = WidgetSheetLink.sheetIdentifier(from: url) {
+                        DeepLinkRouter.shared.requestOpenSheet(identifier: id)
+                    }
+                }
+                #endif
                 #if canImport(CoreSpotlight)
                 // Spotlight 検索結果をタップして起動/復帰した時、対象シートを開く。
                 .onContinueUserActivity(CSSearchableItemActionType) { activity in

@@ -1,89 +1,58 @@
-//
-//  CategoryPickerView.swift
-//  Expenso
-//
-
 import SwiftUI
 import CoreData
 
-struct CategoryPickerView: View {
-    @Binding var selected: ExpenseCategory?
-    let record: ExpenseSheet
+struct TransactionCategoryMenu: View {
+    @ObservedObject var sheet: ExpenseSheet
     let kind: TransactionKind
-    @Environment(\.dismiss) private var dismiss
-
+    @Binding var selection: ExpenseCategory?
+    @State private var addingCategory = false
     @FetchRequest private var categories: FetchedResults<ExpenseCategory>
 
-    @State private var showingNew = false
-
-    init(selected: Binding<ExpenseCategory?>, record: ExpenseSheet, kind: TransactionKind = .expense) {
-        self._selected = selected
-        self.record = record
+    init(sheet: ExpenseSheet, kind: TransactionKind, selection: Binding<ExpenseCategory?>) {
+        self.sheet = sheet
         self.kind = kind
-        // kindRaw 未設定の旧カテゴリは支出扱いに含める
-        let predicate: NSPredicate = {
-            if kind == .expense {
-                return NSPredicate(
-                    format: "sheet == %@ AND (kindRaw == %@ OR kindRaw == nil OR kindRaw == '')",
-                    record, kind.rawValue
-                )
-            } else {
-                return NSPredicate(format: "sheet == %@ AND kindRaw == %@", record, kind.rawValue)
-            }
-        }()
-        _categories = FetchRequest<ExpenseCategory>(
-            sortDescriptors: [
-                NSSortDescriptor(keyPath: \ExpenseCategory.sortOrder, ascending: true),
-                NSSortDescriptor(keyPath: \ExpenseCategory.createdAt, ascending: true)
-            ],
-            predicate: predicate,
-            animation: .default
-        )
+        _selection = selection
+        let predicate = kind == .expense
+            ? NSPredicate(format: "sheet == %@ AND (kindRaw == %@ OR kindRaw == nil OR kindRaw == '')", sheet, kind.rawValue)
+            : NSPredicate(format: "sheet == %@ AND kindRaw == %@", sheet, kind.rawValue)
+        _categories = FetchRequest(sortDescriptors: [
+            NSSortDescriptor(keyPath: \ExpenseCategory.sortOrder, ascending: true),
+            NSSortDescriptor(keyPath: \ExpenseCategory.createdAt, ascending: true)
+        ], predicate: predicate)
     }
 
     var body: some View {
-        List {
-            ForEach(categories) { cat in
-                Button {
-                    selected = cat
-                    dismiss()
-                } label: {
-                    HStack(spacing: 12) {
-                        CategoryIconView(category: cat, size: 36)
-                        Text(cat.displayName)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if selected?.objectID == cat.objectID {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-
-            // 追加ボタンも各カテゴリ行と同じ UI (色付き円アイコン + テキスト) に揃える。
-            Button {
-                showingNew = true
-            } label: {
-                HStack(spacing: 12) {
-                    CategoryIconView(symbol: "plus", tint: record.tint, size: 36)
-                    Text("新しいカテゴリを追加")
-                        .foregroundStyle(record.tint)
-                    Spacer()
+        Menu {
+            Picker("カテゴリ", selection: $selection) {
+                Text("未選択").tag(nil as ExpenseCategory?)
+                ForEach(categories, id: \.objectID) { category in
+                    Label(category.displayName, systemImage: category.displaySymbol)
+                        .tag(Optional(category))
                 }
             }
-            .buttonStyle(.plain)
+            .pickerStyle(.inline)
+            Divider()
+            Button("新しいカテゴリを追加", systemImage: "plus") { addingCategory = true }
+        } label: {
+            HStack(spacing: 8) {
+                Text("カテゴリ").foregroundStyle(.primary)
+                Spacer()
+                if let selection {
+                    CategoryIconView(category: selection, size: 24)
+                    Text(selection.displayName)
+                } else {
+                    Text("未選択")
+                }
+                Image(systemName: "chevron.up.chevron.down").font(.caption)
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
         }
-        .listStyle(.plain)
-        .tint(record.tint)
-        .navigationTitle("カテゴリを選択")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingNew) {
-            EditCategoryView(mode: .create(record: record), defaultKind: kind) { newCat in
-                selected = newCat
-                dismiss()
-            }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .accessibilityValue(selection?.displayName ?? String(localized: "未選択"))
+        .sheet(isPresented: $addingCategory) {
+            EditCategoryView(mode: .create(record: sheet), defaultKind: kind) { selection = $0 }
         }
     }
 }

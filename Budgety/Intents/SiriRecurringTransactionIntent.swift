@@ -21,7 +21,7 @@ nonisolated extension RecurrenceFrequency: AppEnum {
 @AppIntent(.tool)
 struct SiriRecurringTransactionIntent: AppIntent {
     static let title: LocalizedStringResource = "定期収入・定期支出を設定"
-    static let description = IntentDescription("毎月の給与や家賃、毎週の交通費などを、指定した日から繰り返す定期項目としてシートに登録します。")
+    static let description = IntentDescription("毎月の給与や家賃、毎週の交通費など、繰り返す収入や支出をシートに登録します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity

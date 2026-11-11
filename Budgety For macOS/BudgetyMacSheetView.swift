@@ -13,19 +13,6 @@ import CoreData
 import CloudKit
 import UniformTypeIdentifiers
 
-/// 支出の支払い者が指定 profileID と一致するか。「自分」(selfIDs のいずれか) を
-/// 選んだ場合は、payerProfileID が selfIDs に含まれれば一致とみなす (旧 ID 対応)。
-fileprivate func macPayerMatches(_ pid: String, payerID: String, selfIDs: Set<String>) -> Bool {
-    if selfIDs.contains(payerID) {
-        return selfIDs.contains(pid)
-    }
-    return pid == payerID
-}
-
-fileprivate func macExpensePayerMatches(_ exp: Expense, payerID: String, selfIDs: Set<String>) -> Bool {
-    macPayerMatches(exp.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs)
-}
-
 struct BudgetyMacSheetView: View {
     @ObservedObject var sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var viewContext
@@ -40,10 +27,7 @@ struct BudgetyMacSheetView: View {
     @State private var detailExpense: Expense?
     /// スワイプ削除で選択された支出。確認ダイアログの対象。
     @State private var pendingDelete: Expense?
-    /// 仮想 occurrence をタップして materialize した未保存 Expense (commit しなければ詳細を閉じた時に破棄)。
-    @State private var materializedPending: Expense?
-    /// 詳細から実際に保存 (commit)/削除されたか。materializedPending の破棄判定に使う。
-    @State private var detailDidCommit = false
+    @State private var virtualDetail: RecurringOccurrenceDraft?
     @State private var showingSettlement = false
     @State private var showingCategories = false
     @State private var showingRecurring = false
@@ -66,7 +50,6 @@ struct BudgetyMacSheetView: View {
     @State private var selectedCategory: ExpenseCategory?
     /// 「カテゴリなし」(= category == nil) でフィルタ中か。selectedCategory と相互排他。
     @State private var filterUncategorized: Bool = false
-    @State private var selectedPayerID: String?
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
@@ -74,8 +57,6 @@ struct BudgetyMacSheetView: View {
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
-    /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
-    @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     /// 検索中だけ使う期間。永続化せず、検索のたびに全期間から始める (iOS と同じ)。
     @State private var searchPeriod: Period = .all
 
@@ -136,7 +117,7 @@ struct BudgetyMacSheetView: View {
             }
     }
 
-    /// カテゴリ・支払い者・検索クエリで絞り込む (期間は含めない)。
+    /// カテゴリ・検索クエリで絞り込む (期間は含めない)。
     /// 期間ピッカーは合計にのみ反映する仕様なので、期間の適用は呼び出し側で行う。
     private func applyNonPeriodFilters(_ input: [Expense]) -> [Expense] {
         var list = input
@@ -144,11 +125,6 @@ struct BudgetyMacSheetView: View {
             list = list.filter { $0.category?.objectID == cat.objectID }
         } else if filterUncategorized {
             list = list.filter { $0.category == nil }
-        }
-        if let payerID = selectedPayerID {
-            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
-                forShare: ShareCoordinator.shared.existingShare(for: sheet))
-            list = list.filter { macExpensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
         let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
@@ -175,7 +151,7 @@ struct BudgetyMacSheetView: View {
         )
     }
 
-    /// サマリー合計用の支出。期間 (検索中は searchPeriod) + カテゴリ・支払い者・検索を適用。
+    /// サマリー合計用の支出。期間 (検索中は searchPeriod) + カテゴリ・検索を適用。
     private var summaryExpenses: [Expense] {
         applyNonPeriodFilters(allExpenses.filter { effectivePeriod.contains($0.date) })
     }
@@ -194,7 +170,7 @@ struct BudgetyMacSheetView: View {
         RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
     }
 
-    /// カテゴリ・支払い者・検索で絞る (期間は含めない)。Expense 版と同条件。
+    /// カテゴリ・検索で絞る (期間は含めない)。Expense 版と同条件。
     private func applyNonPeriodFiltersV(_ input: [RecurringOccurrence]) -> [RecurringOccurrence] {
         var list = input
         if let cat = selectedCategory {
@@ -202,11 +178,6 @@ struct BudgetyMacSheetView: View {
             list = list.filter { $0.categoryRaw == name }
         } else if filterUncategorized {
             list = list.filter { $0.categoryRaw.isEmpty }
-        }
-        if let payerID = selectedPayerID {
-            let selfIDs = UserProfileStore.shared.canonicalSelfIDs(
-                forShare: ShareCoordinator.shared.existingShare(for: sheet))
-            list = list.filter { macPayerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
         }
         let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
@@ -228,7 +199,7 @@ struct BudgetyMacSheetView: View {
 
     /// 絞り込みが有効か。
     private var isFiltering: Bool {
-        selectedCategory != nil || filterUncategorized || selectedPayerID != nil
+        selectedCategory != nil || filterUncategorized
             || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
@@ -309,7 +280,7 @@ struct BudgetyMacSheetView: View {
     }
 
     /// サマリー合計 (summaryExpenses をシート既定通貨に FX 換算)。
-    /// 期間ピッカー + 検索/カテゴリ/支払い者を反映する (一覧とは別に期間を適用)。
+    /// 期間ピッカー + 検索/カテゴリを反映する (一覧とは別に期間を適用)。
     private var filteredTotals: (expense: Decimal, income: Decimal) {
         let target = sheet.resolvedDefaultCurrencyCode
         let fx = FXRatesService.shared
@@ -336,11 +307,6 @@ struct BudgetyMacSheetView: View {
         ScrollView {
             VStack(spacing: 20) {
                 summaryHero
-                // 参加者が自分だけ (solo) のときはメンバー表示を出さない。
-                // バーチャルメンバーがいれば iCloud 未ログイン時でも表示する。
-                if hasAcceptedOtherParticipants {
-                    membersStrip
-                }
                 if !usedCategories.isEmpty {
                     categoryPills
                 }
@@ -356,7 +322,7 @@ struct BudgetyMacSheetView: View {
                 searchPeriod = .all
             }
         }
-        // 別シートへ切り替わったらフィルタ (検索・カテゴリ・支払者) を解除する。
+        // 別シートへ切り替わったらフィルタ (検索・カテゴリ) を解除する。
         // detail の BudgetyMacSheetView は位置が同じため再生成されず @State が残るので、
         // sheet の変化を検知して明示的にクリアする。
         .onChange(of: sheet.objectID) { _, _ in
@@ -396,7 +362,7 @@ struct BudgetyMacSheetView: View {
                     }
                     if RecurringOccurrenceService.featureEnabled {
                         Button { showingRecurring = true } label: {
-                            Label("繰り返し項目", systemImage: "repeat")
+                            Label("繰り返し", systemImage: "repeat")
                         }
                     }
                     Divider()
@@ -440,26 +406,15 @@ struct BudgetyMacSheetView: View {
         .sheet(item: $editingExpense) { e in
             MacAddExpenseView(sheet: sheet, expense: e)
         }
-        .sheet(item: $detailExpense, onDismiss: {
-            // 仮想 occurrence をタップして materialize した分は、commit (保存/削除) されなければ
-            // 破棄する (= 見ただけ/キャンセルで expenses に保存しない)。
-            if let m = materializedPending {
-                materializedPending = nil
-                if !detailDidCommit {
-                    viewContext.delete(m)
-                    PersistenceController.shared.save()
-                }
-            }
-            detailDidCommit = false
-        }) { e in
+        .sheet(item: $detailExpense) { expense in
             MacModalSheet {
-                ExpenseDetailView(expense: e, onCommit: {
-                    detailDidCommit = true
-                    // 編集/削除後はオブジェクトが変化/解放されるので詳細を閉じて一覧へ戻す
-                    // (仮想を materialize した場合のみ。実支出の詳細は閉じない)。
-                    if materializedPending != nil { detailExpense = nil }
+                ExpenseDetailView(expense: expense, onCommit: {
+                    if expense.isDeleted || expense.managedObjectContext == nil { detailExpense = nil }
                 })
             }
+        }
+        .sheet(item: $virtualDetail) { draft in
+            MacRecurringExpenseDetail(sheet: sheet, draft: draft)
         }
         .sheet(isPresented: $showingSettlement) {
             MacModalSheet { SettlementView(record: sheet) }
@@ -513,8 +468,6 @@ struct BudgetyMacSheetView: View {
     /// 支出を削除する (iOS の SheetDetailView.deleteExpense と同じロジック)。
     /// 定期由来の支出は、行を消すだけだと仮想で復活するのでルールに skip を記録する。
     private func deleteExpense(_ expense: Expense) {
-        // 未 commit の materialize 済み仮想を削除するケースに備えて後始末する。
-        if materializedPending == expense { materializedPending = nil }
         RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
         PersistenceController.shared.save()
         Haptics.warning()
@@ -524,7 +477,6 @@ struct BudgetyMacSheetView: View {
         searchText = ""
         selectedCategory = nil
         filterUncategorized = false
-        selectedPayerID = nil
         searchPeriod = .all
     }
 
@@ -584,13 +536,14 @@ struct BudgetyMacSheetView: View {
 
     private var summaryHero: some View {
         let filtering = isFiltering
-        // 期間 + 検索/カテゴリ/支払い者の絞り込みを反映した合計。
+        // 期間 + 検索/カテゴリの絞り込みを反映した合計。
         let t = filteredTotals
         let code = sheet.resolvedDefaultCurrencyCode
         let net = t.income - t.expense
         // 残予算は今月 + 非フィルタ時のみ (予算未設定なら monthlyRemainingBudget が nil)
         let remaining: Decimal? = (period == .thisMonth && !filtering) ? monthlyRemainingBudget : nil
         return VStack(alignment: .leading, spacing: 8) {
+            SheetMemberAvatars(sheet: sheet)
             HStack {
                 ZStack(alignment: .bottomTrailing) {
                     ZStack {
@@ -708,56 +661,6 @@ struct BudgetyMacSheetView: View {
         .padding(.top, 4)
     }
 
-    /// シートの参加者一覧 (Apple ID 名 + アバター)。
-    /// 名前が "メンバー" になっていれば PP/CKShare がまだ来ていない or
-    /// エンタイトルメントの効果が及んでいない可能性あり。
-    /// 「今いるメンバー」= 自分 + CKShare で受諾済みの参加者のみ。
-    /// 招待中 (.pending) や解除済みの ParticipantProfile は除外する。
-    /// CKShare 未ロード時 (solo / 取得前) は allMemberProfileIDs にフォールバック。
-    private var currentMemberIDs: [String] {
-        // 自分 + 受諾済み参加者 + バーチャルメンバー。
-        // acceptedMemberProfileIDs は CKShare 未ロード時は PP にフォールバックしつつ、
-        // CKShare に出ないバーチャルメンバーも含める。
-        sheet.acceptedMemberProfileIDs()
-    }
-
-    private var membersStrip: some View {
-        let ids = currentMemberIDs
-        return HStack(spacing: 12) {
-            ForEach(ids, id: \.self) { id in
-                let info = sheet.memberDisplayInfo(for: id)
-                let isSelected = selectedPayerID == id
-                Button {
-                    // タップで「その人が支払い者」の絞り込みをトグル。
-                    selectedPayerID = isSelected ? nil : id
-                } label: {
-                    VStack(spacing: 4) {
-                        AvatarView(
-                            photoData: info.photoData,
-                            displayName: info.name,
-                            colorHex: info.colorHex,
-                            size: 36
-                        )
-                        .overlay(
-                            Circle().strokeBorder(sheet.tint, lineWidth: isSelected ? 2.5 : 0)
-                        )
-                        Text(info.name)
-                            .font(.caption2.weight(isSelected ? .semibold : .regular))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .foregroundStyle(isSelected ? sheet.tint : .secondary)
-                    }
-                    // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
-                    .frame(width: memberCellWidth)
-                }
-                .buttonStyle(.plain)
-                .help(isSelected ? "フィルタを解除" : "\(info.name) の支出で絞り込む")
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 8)
-    }
-
     /// カテゴリ絞り込みのチップ列。macOS 26 のメール風に「非選択 = アイコンのみ /
     /// 選択 = カテゴリ色の背景 + ラベルに展開」する (選択切替はアニメーション)。
     private var categoryPills: some View {
@@ -856,11 +759,11 @@ struct BudgetyMacSheetView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text(dayHeader(group.date))
-                            .font(.sheetNumber(.subheadline, weight: .semibold))
+                            .font(.sheetNumber(.headline, weight: .semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(daySigned(group.items, code: sheet.resolvedDefaultCurrencyCode))
-                            .font(.sheetNumber(.subheadline))
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -908,11 +811,8 @@ struct BudgetyMacSheetView: View {
                                     }
                                 }
                             case .occurrence(let occ):
-                                // 仮想 occurrence (未実体化の定期分)。iOS と同じく、タップで materialize
-                                // (未保存) して実支出と同じ詳細へ。編集 commit しなければ閉じた時に破棄。
                                 Button {
-                                    detailDidCommit = false
-                                    detailExpense = materialize(occ)
+                                    virtualDetail = RecurringOccurrenceDraft(occ, sheet: sheet)
                                 } label: {
                                     virtualRow(occ)
                                 }
@@ -935,35 +835,6 @@ struct BudgetyMacSheetView: View {
         // Reduce Motion 時はアニメーションしない。
         .animation(reduceMotion ? nil : .default,
                    value: listExpenses.map { $0.objectID.uriRepresentation().absoluteString } + listVirtuals.map(\.id))
-    }
-
-    /// 仮想 occurrence をタップ編集するため viewContext へ materialize (未保存)。
-    /// commit (保存/削除) しなければ詳細を閉じた時に破棄する (materializedPending、commit-guard)。
-    private func materialize(_ occ: RecurringOccurrence) -> Expense {
-        let store = sheet.objectID.persistentStore
-        let e = Expense(context: viewContext)
-        if let store { viewContext.assign(e, to: store) }
-        e.title = occ.title.isEmpty ? nil : occ.title
-        e.amount = NSDecimalNumber(decimal: occ.amount)
-        e.kindRaw = occ.kind.rawValue
-        e.currencyCode = occ.currencyCode
-        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
-        e.payerProfileID = occ.payerProfileID
-        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
-        e.note = ""
-        e.date = occ.date
-        e.scheduledDate = occ.date
-        e.createdAt = .now
-        e.sheet = sheet
-        e.generatedFromRuleID = occ.ruleID
-        if !occ.categoryRaw.isEmpty,
-           let cats = sheet.categories as? Set<ExpenseCategory>,
-           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
-           cat.objectID.persistentStore == store {
-            e.category = cat
-        }
-        materializedPending = e
-        return e
     }
 
     private func expenseRow(_ e: Expense) -> some View {
@@ -994,7 +865,7 @@ struct BudgetyMacSheetView: View {
             }
             Spacer()
             Text(e.formattedSignedAmount)
-                .font(.sheetNumber(.callout))
+                .font(.sheetNumber(.headline))
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 12)
@@ -1083,14 +954,14 @@ struct BudgetyMacSheetView: View {
                     .font(.body)
                 HStack(spacing: 4) {
                     Image(systemName: "repeat")
-                    Text(occ.title.isEmpty ? "定期項目" : occ.title)
+                    Text(occ.title.isEmpty ? "繰り返し" : occ.title)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
-                .font(.sheetNumber(.callout))
+            Text((occ.kind == .income ? "+" : "-") + CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
+                .font(.sheetNumber(.headline))
                 .foregroundStyle(occ.kind == .income ? Color.green : Color.primary)
         }
         .padding(.horizontal, 12)
@@ -1154,5 +1025,21 @@ struct MacModalSheet<Content: View>: View {
             minWidth: 600, idealWidth: 720, maxWidth: 900,
             minHeight: 500, idealHeight: 720, maxHeight: 820
         )
+    }
+}
+
+private struct MacRecurringExpenseDetail: View {
+    let sheet: ExpenseSheet
+    let draft: RecurringOccurrenceDraft
+    @Environment(\.dismiss) private var dismiss
+    @State private var editing = false
+
+    var body: some View {
+        MacModalSheet {
+            ExpenseDetailView(expense: draft.expense, onEdit: { editing = true })
+        }
+        .sheet(isPresented: $editing) {
+            MacAddExpenseView(sheet: sheet, expense: draft.expense, onCommit: { dismiss() }, isVirtualDraft: true)
+        }
     }
 }

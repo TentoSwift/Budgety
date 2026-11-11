@@ -16,7 +16,7 @@ import Foundation
 struct QuickBudgetIntent: AppIntent {
     static let title: LocalizedStringResource = "Budgety MCP"
     static let description = IntentDescription(
-        "支出/収入の追加・取得、定期項目の追加を 1 つの JSON 入力で行います。op='add' / 'get' / 'recurring'。MCP / 自動化向け。"
+        "支出/収入の追加・取得、繰り返しの追加を 1 つの JSON 入力で行います。op='add' / 'get' / 'recurring'。MCP / 自動化向け。"
     )
     static let openAppWhenRun: Bool = false
 

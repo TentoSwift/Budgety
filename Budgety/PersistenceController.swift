@@ -579,10 +579,15 @@ final class PersistenceController: ObservableObject {
     }
 
     func save() {
+        _ = saveReportingSuccess()
+    }
+
+    func saveReportingSuccess() -> Bool {
         let ctx = container.viewContext
-        guard ctx.hasChanges else { return }
+        guard ctx.hasChanges else { return true }
         do {
             try ctx.save()
+            return true
         } catch {
             let nsError = error as NSError
             #if DEBUG
@@ -608,6 +613,7 @@ final class PersistenceController: ObservableObject {
                     userInfo: ["message": String(localized: "保存に失敗しました: \(error.localizedDescription)")]
                 )
             }
+            return false
         }
     }
 

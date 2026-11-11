@@ -375,3 +375,32 @@ struct TransactionSearchTerm {
         return folded.applyingTransform(.hiraganaToKatakana, reverse: false) ?? folded
     }
 }
+
+#if os(macOS) || os(visionOS)
+/// The editor may stay open while the main context saves unrelated changes.
+@MainActor
+struct RecurringOccurrenceDraft: Identifiable {
+    let id: String
+    let context: NSManagedObjectContext
+    let expense: Expense
+
+    init?(_ occurrence: RecurringOccurrence, sheet: ExpenseSheet) {
+        guard let coordinator = sheet.managedObjectContext?.persistentStoreCoordinator else { return nil }
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+        context.automaticallyMergesChangesFromParent = true
+        guard let draftSheet = try? context.existingObject(with: sheet.objectID) as? ExpenseSheet,
+              let rules = draftSheet.recurringRules as? Set<RecurringRule>,
+              let rule = rules.first(where: { $0.id == occurrence.ruleID }) else { return nil }
+        let category = (draftSheet.categories as? Set<ExpenseCategory>)?.first {
+            $0.kind == occurrence.kind && $0.name == occurrence.categoryRaw
+        }
+        let expense = RecurringExpenseGenerator.makeOccurrence(for: rule, on: occurrence.scheduledDate,
+                                                              sheet: draftSheet, category: category, in: context)
+        expense.date = occurrence.date
+        id = occurrence.id
+        self.context = context
+        self.expense = expense
+    }
+}
+#endif

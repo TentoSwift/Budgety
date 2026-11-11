@@ -109,10 +109,9 @@ struct SheetListView: View {
     @State private var editingSearchExpense: Expense?
     /// 全シート検索に仮想 occurrence を出すための表示専用 Expense 供給器 (子コンテキスト、never save)。
     @State private var searchVirtualBacking = VirtualRowBacking()
-    /// 仮想 occurrence をタップして materialize した未保存 Expense (commit しなければ破棄)。
-    @State private var materializedSearchPending: Expense?
-    /// 直近のエディタで保存 (commit) されたか。materializedSearchPending の破棄判定に使う。
-    @State private var searchDidCommit = false
+    @State private var searchEditorBacking = VirtualRowBacking()
+    @State private var pendingSearchRule: RecurringRuleTarget?
+    @State private var editingSearchRule: RecurringRuleTarget?
     /// 検索結果から解錠しようとしているロック中シート。
     @State private var unlockingSheet: ExpenseSheet?
     /// 行の長押しメニューから開くロック設定シート。
@@ -209,10 +208,11 @@ struct SheetListView: View {
             }
             .navigationTitle("シート")
             .navigationDestination(for: NSManagedObjectID.self) { id in
-                if let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet {
+                if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
                     LockedSheetGate(record: sheet) {
                         SheetDetailView(record: sheet)
                     }
+                    .id(id)
                     .navigationBarBackButtonHidden(usesDuoSidebar)
                     .toolbar {
                         if usesDuoSidebar, let showDuoSidebar {
@@ -235,18 +235,6 @@ struct SheetListView: View {
             .onChange(of: searchFocused) { _, focused in
                 // 新規検索 (フォーカス取得かつ未入力) のたびに期間を全期間から始める。
                 if focused && trimmedQuery.isEmpty { searchPeriod = .all }
-            }
-            // Spotlight 検索結果から「このシートを開いて」と要求されたら該当シートへ遷移。
-            .onReceive(NotificationCenter.default.publisher(for: .expensoOpenSheet)) { note in
-                if let identifier = note.userInfo?["identifier"] as? String {
-                    openSheet(spotlightIdentifier: identifier)
-                }
-            }
-            .task {
-                // cold launch 時、ビュー生成前に届いた Spotlight 遷移要求を拾う。
-                if let identifier = DeepLinkRouter.shared.consumePendingSheetIdentifier() {
-                    openSheet(spotlightIdentifier: identifier)
-                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -281,18 +269,15 @@ struct SheetListView: View {
                 AddSheetView()
             }
             .sheet(item: $editingSearchExpense, onDismiss: {
-                // 仮想 occurrence をタップして materialize した分は、エディタで実際に保存
-                // (commit) されなければ破棄する (= 見ただけ/キャンセルで expenses に保存しない)。
-                if let m = materializedSearchPending {
-                    materializedSearchPending = nil
-                    if !searchDidCommit {
-                        viewContext.delete(m)
-                        PersistenceController.shared.save()
-                    }
-                }
-                searchDidCommit = false
+                editingSearchRule = pendingSearchRule
+                pendingSearchRule = nil
             }) { expense in
-                AddExpenseView(expense: expense, onCommit: { searchDidCommit = true })
+                AddExpenseView(expense: expense, isVirtualDraft: expense.managedObjectContext !== viewContext, onEditRule: { rule in
+                    pendingSearchRule = RecurringRuleTarget(rule: rule, scheduledDate: expense.scheduledDate ?? expense.date)
+                })
+            }
+            .sheet(item: $editingSearchRule) { target in
+                EditRecurringRuleView(mode: .edit(rule: target.rule), occurrenceDate: target.scheduledDate)
             }
             .sheet(item: $unlockingSheet) { sheet in
                 NavigationStack {
@@ -338,6 +323,15 @@ struct SheetListView: View {
                 restoreLastOpenedSheetIfNeeded()
             }
         }
+        // Stay subscribed when another sheet detail is already pushed. On a cold
+        // launch, wait for the local stores to load before consuming the request.
+        .onReceive(NotificationCenter.default.publisher(for: .expensoOpenSheet)) { _ in
+            openPendingSheetIfReady()
+        }
+        .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
+            if sharedPath == nil, let selected = path.last, !ids.contains(selected) { path = [] }
+            openPendingSheetIfReady()
+        }
         .onChange(of: path) { oldPath, newPath in
             // 末尾のシート URI を覚えておき、次回起動時に復元する
             lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
@@ -377,10 +371,7 @@ struct SheetListView: View {
         sheets.filter { lockManager.hasPassword(for: $0) && !lockManager.isUnlocked($0) }
     }
 
-    /// 検索ヒットをシートごとにまとめた1グループ。
-    /// `net` はヒット項目だけの合計 (シート既定通貨に FX 換算; 収入 +, 支出 -)。
-    /// 検索ヒット 1 件。実支出 (occurrence == nil) か、仮想 occurrence (display は子コンテキストの
-    /// 表示専用 transient、tap 時に materialize する)。
+    /// 仮想の検索結果には、表示専用の行と繰り返しの日付に基づく識別子を使う。
     private struct SearchItem: Identifiable {
         let display: Expense
         let occurrence: RecurringOccurrence?
@@ -390,6 +381,7 @@ struct SheetListView: View {
         }
     }
 
+    /// ヒット項目だけをシートの通貨で合算した検索結果。
     private struct ExpenseMatchGroup: Identifiable {
         let sheet: ExpenseSheet
         let items: [SearchItem]
@@ -443,42 +435,12 @@ struct SheetListView: View {
             || q.matches(e.formattedSignedAmount) || q.matches(e.note ?? "")
     }
 
-    /// 仮想 occurrence 1 件がクエリにマッチするか (matchesExpense と同じフィールド。note は無し)。
+    /// 仮想 occurrence 1 件がクエリにマッチするか (matchesExpense と同じフィールド)。
     private func matchesOccurrence(_ occ: RecurringOccurrence, query q: TransactionSearchTerm, sheet: ExpenseSheet) -> Bool {
         if q.matchesNameOrCategory(of: occ) { return true }
         let payerName = occ.payerProfileID.flatMap { $0.isEmpty ? nil : sheet.memberDisplayInfo(for: $0).name } ?? ""
         let amount = (occ.kind == .expense ? "-" : "+") + CurrencyCatalog.format(occ.amount, code: occ.currencyCode)
-        return q.matches(payerName) || q.matches(amount)
-    }
-
-    /// 仮想 occurrence をタップ編集するため viewContext へ materialize (未保存)。
-    /// commit しなければ editingSearchExpense の onDismiss で破棄する。
-    @MainActor
-    private func materializeSearch(_ occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
-        let store = sheet.objectID.persistentStore
-        let e = Expense(context: viewContext)
-        if let store { viewContext.assign(e, to: store) }
-        e.title = occ.title.isEmpty ? nil : occ.title
-        e.amount = NSDecimalNumber(decimal: occ.amount)
-        e.kindRaw = occ.kind.rawValue
-        e.currencyCode = occ.currencyCode
-        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
-        e.payerProfileID = occ.payerProfileID
-        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
-        e.note = ""
-        e.date = occ.date
-        e.scheduledDate = occ.date
-        e.createdAt = .now
-        e.sheet = sheet
-        e.generatedFromRuleID = occ.ruleID
-        if !occ.categoryRaw.isEmpty,
-           let cats = sheet.categories as? Set<ExpenseCategory>,
-           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
-           cat.objectID.persistentStore == store {
-            e.category = cat
-        }
-        materializedSearchPending = e
-        return e
+        return q.matches(payerName) || q.matches(amount) || q.matches(occ.note)
     }
 
     // MARK: - Context Menu (シート行の長押し)
@@ -596,16 +558,14 @@ struct SheetListView: View {
         path.append(sheet.objectID)
     }
 
-    /// Spotlight の一意識別子 (objectID の URI) から該当シートを開く。
-    /// 見つからない (別インストールの古い索引など) 場合は何もしない。
-    /// LockedSheetGate 経由で開くのでロック済みシートはパスワード確認される。
-    private func openSheet(spotlightIdentifier identifier: String) {
-        guard let oid = SpotlightIndexer.objectID(forIdentifier: identifier, in: viewContext),
-              (try? viewContext.existingObject(with: oid)) is ExpenseSheet else { return }
-        // 検索中なら解除してから遷移する。
+    private func openPendingSheetIfReady() {
+        guard !sheets.isEmpty, let id = DeepLinkRouter.shared.consumePendingSheetIdentifier(),
+              let oid = SpotlightIndexer.objectID(forIdentifier: id, in: viewContext) else { return }
+        didRestorePath = true
         searchText = ""
         searchFocused = false
-        path = [oid]
+        lastOpenedSheetURI = id
+        if path != [oid] { path = [oid] }
     }
 
     #if canImport(UIKit) && !os(watchOS)
@@ -790,13 +750,9 @@ struct SheetListView: View {
                     Section {
                         ForEach(group.items) { item in
                             Button {
-                                if let occ = item.occurrence {
-                                    // 仮想は materialize (未保存) して編集。commit しなければ破棄。
-                                    searchDidCommit = false
-                                    editingSearchExpense = materializeSearch(occ, sheet: group.sheet)
-                                } else {
-                                    editingSearchExpense = item.display
-                                }
+                                editingSearchExpense = item.occurrence.map {
+                                    searchEditorBacking.displayExpense(for: $0, sheet: group.sheet)
+                                } ?? item.display
                             } label: {
                                 SearchResultRow(expense: item.display, showSheetName: false)
                             }

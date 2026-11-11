@@ -41,6 +41,13 @@ fileprivate func beneficiaryMatches(_ beneficiaryIDs: [String], beneficiaryID: S
     return beneficiaryIDs.contains(beneficiaryID)
 }
 
+struct RecurringRuleTarget: Identifiable {
+    let rule: RecurringRule
+    let scheduledDate: Date?
+
+    var id: NSManagedObjectID { rule.objectID }
+}
+
 struct SheetDetailView: View {
     @ObservedObject var record: ExpenseSheet
     /// プレビュー表示用。true なら検索バー・ツールバーを描画しない。
@@ -198,23 +205,18 @@ struct SheetDetailView: View {
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
-    /// メンバーストリップのセル幅 (アバターの @ScaledMetric と同じ body 基準で追従)。
-    @ScaledMetric(relativeTo: .body) private var memberCellWidth: CGFloat = 72
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
     @State private var editingExpense: Expense?
-    @State private var editingRule: RecurringRule?
-    /// 仮想 occurrence をタップした時に詳細へ push する Expense (materialize した未保存行)。
-    @State private var detailExpense: Expense?
-    /// 仮想 occurrence をタップして materialize した Expense。
-    /// 詳細から実際に保存 (commit) されなければ、詳細を閉じた時に破棄する。
-    @State private var materializedPending: Expense?
-    /// 直近のエディタで実際に保存 (commit) されたか。materializedPending の破棄判定に使う。
+    @State private var editingRule: RecurringRuleTarget?
+    @State private var detailOccurrence: RecurringOccurrence?
     @State private var pendingDidCommit = false
     /// 仮想 occurrence を実支出と同じ ExpenseRowContainer で描くための表示専用 Expense 供給器
     /// (子コンテキスト、never save)。参照型を @State で保持し view identity 間で安定させる。
     @State private var virtualBacking = VirtualRowBacking()
+    // 長い明細一覧のキャッシュが入れ替わっても、開いている行は保持する。
+    @State private var detailBacking = VirtualRowBacking()
     @State private var showingEditGroup = false
     /// 削除確認の対象支出 (List 単位の 1 つの confirmationDialog で表示する)。
     @State private var pendingDeleteExpense: Expense?
@@ -255,9 +257,9 @@ struct SheetDetailView: View {
     @State private var demoOpenChat: Bool = false
     /// AddExpenseView から「定期項目を編集」が押された時にセットされる。
     /// シートが閉じきった後で `recurringListAutoEdit` に流して RecurringListView へ push する。
-    @State private var pendingEditRule: RecurringRule?
+    @State private var pendingEditRule: RecurringRuleTarget?
     @State private var showRecurringListAutoEdit: Bool = false
-    @State private var recurringListAutoEdit: RecurringRule?
+    @State private var recurringListAutoEdit: RecurringRuleTarget?
     @AppStorage("expenseSortField") private var sortFieldRaw: String = SortField.date.rawValue
     /// `true` = 昇順 (古い順 / 少ない順), `false` = 降順 (新しい順 / 多い順)。
     /// デフォルトは降順 = 新しい順。
@@ -428,17 +430,6 @@ struct SheetDetailView: View {
                 #endif
             }
             .listSectionSeparator(.hidden)
-
-                // Mac と同じく、サマリ下にメンバーストリップを出す
-                // (フィルタシートの「人」と同じ selectedPayerID を操作するので同期する)。
-                if hasAcceptedOtherMembers {
-                    Section {
-                        membersStrip
-                            // 行の左右インセットを 0 にして、横スクロールが画面端まで届くようにする。
-                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                    }
-                    .listSectionSeparator(.hidden)
-                }
 
                 // カテゴリフィルタ (ピル)。割り勘フィルタはフィルタシート側のみ。
                 // 絞り込める対象 (カテゴリ or カテゴリなし) があれば表示する
@@ -646,7 +637,7 @@ struct SheetDetailView: View {
                             RecurringListView(record: record)
                                 .sheetLockCover(record)
                         } label: {
-                            Label("定期項目", systemImage: "repeat")
+                            Label("繰り返し", systemImage: "repeat")
                         }
                     }
                     Divider()
@@ -740,9 +731,9 @@ struct SheetDetailView: View {
             Button("削除", role: .destructive) {
                 Task { @MainActor in
                     viewContext.delete(record)
-                    PersistenceController.shared.save()
-                    Haptics.warning()
-                    dismiss()
+                    if PersistenceController.shared.saveReportingSuccess() { Haptics.warning() }
+                    // The sheet list owns navigation after deletion; dismissing here
+                    // can also pop the replacement selected by the Duo sidebar.
                 }
             }
             Button("キャンセル", role: .cancel) { }
@@ -752,9 +743,13 @@ struct SheetDetailView: View {
         .alert("このシートから退出しますか?", isPresented: $showingLeaveConfirm) {
             Button("退出", role: .destructive) {
                 Task { @MainActor in
-                    try? await ShareCoordinator.shared.leaveSharedSheet(record)
-                    Haptics.warning()
-                    dismiss()
+                    do {
+                        try await ShareCoordinator.shared.leaveSharedSheet(record)
+                        Haptics.warning()
+                    } catch {
+                        NotificationCenter.default.post(name: .expensoSaveFailed, object: nil,
+                                                        userInfo: ["message": error.localizedDescription])
+                    }
                 }
             }
             Button("キャンセル", role: .cancel) { }
@@ -762,18 +757,7 @@ struct SheetDetailView: View {
             Text("“\(record.displayName)”から退出します。オーナーや他の参加者のデータは残ります。")
         }
         .sheet(item: $editingExpense, onDismiss: {
-            // 仮想 occurrence をタップして materialize した Expense は、エディタで実際に
-            // 保存 (commit) された時だけ残す。キャンセル時は破棄する。
-            // → 「編集画面を開いただけで expenses に保存される」のを防ぐ。
-            // ※ onAppear の ensureSelfMemberExists 等が viewContext を save して保留中の
-            //   insert が永続化されることがあるため、temporary-ID ではなく commit 有無で判定する。
-            if let m = materializedPending {
-                materializedPending = nil
-                if !pendingDidCommit {
-                    viewContext.delete(m)
-                    PersistenceController.shared.save()
-                }
-            }
+            if pendingDidCommit || pendingEditRule != nil { detailOccurrence = nil }
             pendingDidCommit = false
             // 「定期項目を編集」経由で閉じた時だけ、RecurringListView に
             // 遷移して該当 Rule の編集シートを自動で開く。
@@ -783,34 +767,24 @@ struct SheetDetailView: View {
                 showRecurringListAutoEdit = true
             }
         }) { expense in
-            AddExpenseView(expense: expense, onEditRule: { rule in
-                pendingEditRule = rule
+            AddExpenseView(expense: expense, isVirtualDraft: expense.managedObjectContext !== viewContext, onEditRule: { rule in
+                pendingEditRule = RecurringRuleTarget(rule: rule, scheduledDate: expense.scheduledDate ?? expense.date)
             }, onCommit: {
                 pendingDidCommit = true
             })
         }
-        .sheet(item: $editingRule) { rule in
-            EditRecurringRuleView(mode: .edit(rule: rule))
+        .sheet(item: $editingRule) { target in
+            EditRecurringRuleView(mode: .edit(rule: target.rule), occurrenceDate: target.scheduledDate)
         }
-        // 仮想 occurrence をタップ → materialize した Expense の詳細へ push (実支出と同じ画面)。
-        .navigationDestination(item: $detailExpense) { exp in
-            // commit 時は詳細を閉じて一覧へ戻す。これにより「この項目のみ=切り離し」「今後/全て=
-            // edit-point 削除」のどちらでも、編集後に解放済み/変化したオブジェクトを描画しない。
-            ExpenseDetailView(expense: exp, onCommit: {
-                pendingDidCommit = true
-                detailExpense = nil
-            })
-        }
-        // 詳細を閉じた時、編集が commit されていなければ materialize した未保存行を破棄する
-        // (= 仮想を見ただけ/編集せず戻った場合は expenses に保存しない)。
-        .onChange(of: detailExpense) { _, newValue in
-            if newValue == nil, let m = materializedPending {
-                materializedPending = nil
-                if !pendingDidCommit {
-                    viewContext.delete(m)
-                    PersistenceController.shared.save()
-                }
-                pendingDidCommit = false
+        .navigationDestination(isPresented: Binding(
+            get: { detailOccurrence != nil },
+            set: { if !$0 { detailOccurrence = nil } }
+        )) {
+            if let occurrence = detailOccurrence {
+                ExpenseDetailView(expense: detailBacking.displayExpense(for: occurrence, sheet: record), onEdit: {
+                    pendingDidCommit = false
+                    editingExpense = detailBacking.displayExpense(for: occurrence, sheet: record)
+                }, lockRecord: record)
             }
         }
         .sheet(isPresented: $showingEditGroup) {
@@ -831,7 +805,7 @@ struct SheetDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showRecurringListAutoEdit) {
-            RecurringListView(record: record, autoEditRule: recurringListAutoEdit)
+            RecurringListView(record: record, autoEditRule: recurringListAutoEdit?.rule, autoEditDate: recurringListAutoEdit?.scheduledDate)
                 .sheetLockCover(record)
         }
         .navigationDestination(isPresented: $demoOpenStats) {
@@ -955,7 +929,7 @@ struct SheetDetailView: View {
                                     pendingDelete: $pendingDeleteExpense,
                                     onEdit: { editingExpense = expense },
                                     onEditRule: expense.generatedFromRuleID != nil
-                                        ? { editingRule = expense.relatedRule }
+                                        ? { editingRule = expense.relatedRule.map { RecurringRuleTarget(rule: $0, scheduledDate: expense.scheduledDate ?? expense.date) } }
                                         : nil,
                                     onDuplicate: { duplicate(expense) },
                                     onDelete: { deleteExpense(expense) }
@@ -965,28 +939,20 @@ struct SheetDetailView: View {
                             case .occurrence(let occ):
                                 // 仮想 occurrence (未実体化の定期分)。実支出と同じ ExpenseRowContainer で
                                 // 描画し、見た目 (シェブロン/レイアウト) もスワイプ/コンテキストメニューも統一する。
-                                // 表示は子コンテキストの transient Expense (never save)。操作は materialize
-                                // (commit-guard) や skip へ流す:
-                                //   タップ/編集 = materialize→詳細 or エディタ (commit しなければ破棄)
-                                //   削除 = この回だけ skip (ルールに記録)
-                                //   定期項目を編集 = 該当ルールの編集
-                                //   複製 = occurrence 値から独立した実支出コピーを作成
+                                // 詳細と編集も、保存を確定するまでは同じ表示用の行を使う。
                                 ExpenseRowContainer(
                                     expense: virtualBacking.displayExpense(for: occ, sheet: record),
                                     pendingDelete: $pendingDeleteExpense,
                                     onEdit: {
                                         pendingDidCommit = false
-                                        editingExpense = materialize(occ)
+                                        editingExpense = detailBacking.displayExpense(for: occ, sheet: record)
                                     },
-                                    onEditRule: { editingRule = ruleForOccurrence(occ) },
+                                    onEditRule: {
+                                        editingRule = ruleForOccurrence(occ).map { RecurringRuleTarget(rule: $0, scheduledDate: occ.scheduledDate) }
+                                    },
                                     onDuplicate: { duplicateOccurrence(occ) },
                                     onDelete: { skipOccurrence(occ) },
-                                    onTap: {
-                                        // タップで materialize (未保存) して詳細へ push。編集 commit
-                                        // しなければ詳細を閉じた時に破棄する (= 見ただけでは保存しない)。
-                                        pendingDidCommit = false
-                                        detailExpense = materialize(occ)
-                                    }
+                                    onTap: { detailOccurrence = occ }
                                 )
                                 .transition(.identity)
                             }
@@ -998,49 +964,6 @@ struct SheetDetailView: View {
                                    tint: record.tint)
                 }
             }
-    }
-
-    /// Mac の `membersStrip` と同じ、シートに参加しているメンバーのアバター + 名前一覧。
-    /// 現在のメンバー (= 自分 + CKShare 受諾済み参加者 + アーカイブされていない
-    /// バーチャル) のみ表示する。退室済み参加者やアーカイブ済みバーチャルは
-    /// 表示しない (過去の支出には残るが、フィルタには出さない)。
-    private var membersStrip: some View {
-        let ids = record.acceptedMemberProfileIDs()
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(ids, id: \.self) { id in
-                    let info = record.memberDisplayInfo(for: id)
-                    let isSelected = selectedPayerID == id
-                    Button {
-                        // タップで「その人が支払い者」の絞り込みをトグル。
-                        selectedPayerID = isSelected ? nil : id
-                    } label: {
-                        VStack(spacing: 4) {
-                            AvatarView(
-                                photoData: info.photoData,
-                                displayName: info.name,
-                                colorHex: info.colorHex,
-                                size: 36
-                            )
-                            // strokeBorder は枠内に描くので、枠が見切れない。
-                            .overlay(
-                                Circle().strokeBorder(record.tint, lineWidth: isSelected ? 2.5 : 0)
-                            )
-                            Text(info.name)
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .foregroundStyle(isSelected ? record.tint : .secondary)
-                        }
-                        // 固定幅にして、名前の長さに依らずメンバー同士の間隔を揃える。
-                        .frame(width: memberCellWidth)
-                        .padding(.vertical, 3)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 16)
-        }
     }
 
     /// 参加済の他メンバー (= 自分以外で acceptanceStatus == .accepted) が居るか。
@@ -1167,20 +1090,11 @@ struct SheetDetailView: View {
 
     /// カテゴリ未設定 (= category == nil) の支出が含まれているか。仮想 occurrence も含める。
     private var hasUncategorizedExpenses: Bool {
-        if allExpenses.contains(where: { $0.category == nil && !isPendingMaterialized($0) }) {
+        if allExpenses.contains(where: { $0.category == nil }) {
             return true
         }
         return RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
             .contains { $0.categoryRaw.isEmpty }
-    }
-
-    /// 仮想 occurrence をタップして materialize した「未 commit」の Expense か。
-    /// これは詳細を見ているだけの一時的な実体で、閉じれば破棄される。フィルタ
-    /// (カテゴリ chip / 未分類) の母集合から外し、「見ただけでその支出のカテゴリ
-    /// フィルタが一時的に出る」のを防ぐ。@FetchRequest は pending 挿入も拾うため必要。
-    private func isPendingMaterialized(_ exp: Expense) -> Bool {
-        if let m = materializedPending, m === exp { return true }
-        return false
     }
 
     // MARK: - Helpers
@@ -1240,40 +1154,6 @@ struct SheetDetailView: View {
         (record.recurringRules as? Set<RecurringRule>)?.first { $0.id == occ.ruleID }
     }
 
-    /// 仮想 occurrence を実 Expense として実体化する (override 化)。
-    /// `(generatedFromRuleID, scheduledDate)` を持つので virtualOccurrences 側で
-    /// 以後この日付の仮想は出さなくなる。編集はこの実 Expense に対して既存フローで行う。
-    /// 定期 occurrence なので FX スナップショットは取らない (現行レートで精算)。
-    @MainActor
-    private func materialize(_ occ: RecurringOccurrence) -> Expense {
-        let e = Expense(context: viewContext)
-        let store = record.objectID.persistentStore
-        if let store { viewContext.assign(e, to: store) }
-        e.title = occ.title.isEmpty ? nil : occ.title
-        e.amount = NSDecimalNumber(decimal: occ.amount)
-        e.kindRaw = occ.kind.rawValue
-        e.currencyCode = occ.currencyCode
-        e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
-        e.payerProfileID = occ.payerProfileID
-        e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
-        e.note = ""
-        e.date = occ.date
-        e.scheduledDate = occ.date
-        e.createdAt = .now
-        e.sheet = record
-        e.generatedFromRuleID = occ.ruleID
-        if !occ.categoryRaw.isEmpty,
-           let cats = record.categories as? Set<ExpenseCategory>,
-           let cat = cats.first(where: { $0.name == occ.categoryRaw }),
-           cat.objectID.persistentStore == store {
-            e.category = cat
-        }
-        // ここでは保存しない (= 編集画面を開いただけで expenses に保存されないように)。
-        // エディタで実際に保存された時のみ永続化される。キャンセル時は onDismiss で破棄。
-        materializedPending = e
-        return e
-    }
-
     private var usedCategories: [ExpenseCategory] {
         var seen: Set<NSManagedObjectID> = []
         var result: [ExpenseCategory] = []
@@ -1282,7 +1162,7 @@ struct SheetDetailView: View {
             seen.insert(cat.objectID)
             result.append(cat)
         }
-        for exp in allExpenses where !isPendingMaterialized(exp) {
+        for exp in allExpenses {
             add(exp.category)
         }
         // 仮想 occurrence のカテゴリも含める (実支出に無く仮想にしか無いカテゴリも絞り込めるように)。
@@ -1324,7 +1204,7 @@ struct SheetDetailView: View {
     /// 仮想 occurrence を「この回だけ削除 (skip)」する。ルールに記録し、以後仮想表示しない。
     private func skipOccurrence(_ occ: RecurringOccurrence) {
         guard let rule = ruleForOccurrence(occ) else { return }
-        rule.addSkippedDay(occ.date)
+        rule.addSkippedDay(occ.scheduledDate)
         PersistenceController.shared.save()
         Haptics.warning()
     }
@@ -1384,7 +1264,8 @@ struct SheetDetailView: View {
         // 複製は割り勘を引き継がない (支払者のみの負担)。
         copy.beneficiaryProfileIDs = occ.payerProfileID
         copy.date = .now
-        copy.note = ""
+        copy.note = occ.note
+        copy.photoData = occ.photoData
         copy.createdAt = .now
         copy.sheet = record
         if !occ.categoryRaw.isEmpty,
@@ -1555,6 +1436,7 @@ private struct SummaryCard: View {
         let showBudgetMetrics = !isSearching && (period == .thisMonth || period == .lastMonth)
             && selectedCategory == nil && selectedPayerID == nil && budget != nil
         VStack(alignment: .leading, spacing: 12) {
+            SheetMemberAvatars(sheet: record)
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
             HStack(spacing: 10) {
                 ZStack {
@@ -2067,7 +1949,7 @@ private struct DateHeaderView: View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label)
-                    .font(.sheetNumber(.subheadline, weight: .semibold))
+                    .font(.sheetNumber(.headline, weight: .semibold))
                     .foregroundStyle(tint)
                 HStack {
                     Spacer()
@@ -2077,7 +1959,7 @@ private struct DateHeaderView: View {
         } else {
             HStack {
                 Text(label)
-                    .font(.sheetNumber(.subheadline, weight: .semibold))
+                    .font(.sheetNumber(.headline, weight: .semibold))
                     .foregroundStyle(tint)
                 Spacer()
                 netPill
@@ -2087,7 +1969,7 @@ private struct DateHeaderView: View {
 
     private var netPill: some View {
         Text(formattedNet)
-            .font(.sheetNumber(.caption, weight: .semibold))
+            .font(.sheetNumber(.body, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -2118,7 +2000,7 @@ private struct ExpenseRowContainer: View {
     let onDuplicate: () -> Void
     let onDelete: () -> Void
     /// 仮想 occurrence 行で使う。指定すると NavigationLink ではなく Button になり、
-    /// タップで materialize→詳細遷移 (commit-guard) のフローへ流す (PR #273)。見た目は
+    /// タップで仮想の明細を開く。見た目は
     /// NavigationLink と同じになるよう開示シェブロンを手動付与する。nil なら従来どおり
     /// NavigationLink で詳細へ push する (実支出行)。
     var onTap: (() -> Void)? = nil
@@ -2181,7 +2063,7 @@ private struct ExpenseRowContainer: View {
             }
             if let onEditRule {
                 Button(action: onEditRule) {
-                    Label("定期項目を編集", systemImage: "repeat")
+                    Label("繰り返しを編集", systemImage: "repeat")
                 }
             }
             Button(action: onDuplicate) {
@@ -2231,8 +2113,7 @@ private struct ExpenseRowContainer: View {
 /// **絶対に save しない**ので永続化されず、`ensureSelfMemberExists` 等の副次 save にも巻き込まれない
 /// (= 仮想化の「occurrence を保存しない」前提を壊さない)。sheet/category は親 (record) と同じ
 /// objectID を子で参照するので、`ExpenseRowView` の共有判定・支払者アバター・通貨・repeat アイコンが
-/// そのまま正しく描ける。タップ/編集は実体化 (materialize, commit-guard) へ流すので、この表示用
-/// Expense 自体は編集されない。
+/// そのまま正しく描ける。編集時の変更は保存を確定した時だけ別コンテキストで適用する。
 ///
 /// occurrence の内容 (金額/カテゴリ/支払者/タイトル等) を署名キーにしてキャッシュするので、
 /// ルール変更で値が変われば新しい行に作り直され、stale を防ぐ。
@@ -2244,7 +2125,11 @@ final class VirtualRowBacking {
     func displayExpense(for occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
         let ctx = ensureContext(parent: sheet.managedObjectContext)
         let key = sheet.objectID.uriRepresentation().absoluteString + "|" + signature(occ)
-        if let cached = cache[key] { return cached }
+        if let cached = cache[key] {
+            if cached.note != occ.note { cached.note = occ.note }
+            if cached.photoData != occ.photoData { cached.photoData = occ.photoData }
+            return cached
+        }
         // 暴走防止: 長期スクロール等でキャッシュが膨らんだら一旦クリアする。
         if cache.count > 400 {
             cache.values.forEach { ctx.delete($0) }
@@ -2266,9 +2151,10 @@ final class VirtualRowBacking {
         e.categoryRaw = occ.categoryRaw.isEmpty ? nil : occ.categoryRaw
         e.payerProfileID = occ.payerProfileID
         e.beneficiaryProfileIDs = occ.beneficiaryProfileIDs
-        e.note = ""
+        e.note = occ.note
+        e.photoData = occ.photoData
         e.date = occ.date
-        e.scheduledDate = occ.date
+        e.scheduledDate = occ.scheduledDate
         e.generatedFromRuleID = occ.ruleID   // → ExpenseRowView が repeat アイコンを出す
         cache[key] = e
         return e
@@ -2285,7 +2171,7 @@ final class VirtualRowBacking {
     }
 
     private func signature(_ o: RecurringOccurrence) -> String {
-        "\(o.id)|\(o.amount)|\(o.categoryRaw)|\(o.payerProfileID ?? "")|\(o.beneficiaryProfileIDs)|\(o.title)|\(o.kind.rawValue)|\(o.currencyCode)"
+        "\(o.id)|\(o.date.timeIntervalSinceReferenceDate)|\(o.amount)|\(o.categoryRaw)|\(o.payerProfileID ?? "")|\(o.beneficiaryProfileIDs)|\(o.title)|\(o.kind.rawValue)|\(o.currencyCode)"
     }
 }
 
@@ -2384,7 +2270,8 @@ private struct ExpenseRowView: View {
                         .foregroundStyle(.secondary)
                 }
                 Text(expense.formattedSignedAmount)
-                    .font(.sheetNumber(.subheadline))
+                    .font(.sheetNumber(.title3, weight: .medium))
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundStyle(.primary)
             }
             if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {

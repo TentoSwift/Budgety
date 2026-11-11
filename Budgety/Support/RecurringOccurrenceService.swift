@@ -18,7 +18,10 @@ import CoreData
 /// 完全仮想化方式で、一覧・集計・精算などの表示/計算時に実支出へマージするために使う。
 struct RecurringOccurrence: Identifiable {
     let ruleID: UUID
-    let date: Date                      // 予定スロット日 (startOfDay)
+    let scheduledDate: Date             // Original calendar slot, also identifies edits and exclusions.
+    let date: Date                      // Posting date shown in the ledger.
+    let note: String
+    let photoData: Data?
     let title: String
     let amount: Decimal
     let currencyCode: String
@@ -27,7 +30,7 @@ struct RecurringOccurrence: Identifiable {
     var categoryDisplayName: String { categoryRaw.isEmpty ? String(localized: "カテゴリなし") : categoryRaw }
     let payerProfileID: String?
     let beneficiaryProfileIDs: String   // CSV (空 = 割り勘オフ)
-    var id: String { "\(ruleID.uuidString)#\(Int(date.timeIntervalSince1970))" }
+    var id: String { "\(ruleID.uuidString)#\(Int(scheduledDate.timeIntervalSince1970))" }
 }
 
 /// 一覧表示用の union: 実 Expense か、ルールから算出した仮想 occurrence。
@@ -179,37 +182,43 @@ enum RecurringOccurrenceService {
 
         let today = calendar.startOfDay(for: Date())
         // 実体化済み (生成済み/override/skip) の (ruleID, day) 集合。これらの日付は仮想を出さない。
+        var familiesByRule: [UUID: UUID] = [:]
+        var excludedByFamily: [UUID: Set<Date>] = [:]
+        for rule in rules where !rule.isDeleted {
+            guard let id = rule.id, let family = rule.recurringSeriesID else { continue }
+            familiesByRule[id] = family
+            excludedByFamily[family, default: []].formUnion(rule.skippedDaySet)
+        }
         var materialized = Set<String>()
-        for case let e as Expense in (sheet.expenses as? Set<Expense> ?? []) {
+        for e in sheet.expenses as? Set<Expense> ?? [] where !e.isDeleted {
             guard let rid = e.generatedFromRuleID else { continue }
             let d = calendar.startOfDay(for: e.scheduledDate ?? e.date ?? .distantPast)
-            materialized.insert("\(rid.uuidString)#\(Int(d.timeIntervalSince1970))")
+            materialized.insert("\((familiesByRule[rid] ?? rid).uuidString)#\(Int(d.timeIntervalSince1970))")
         }
 
         var result: [RecurringOccurrence] = []
         for rule in rules {
-            guard let start = rule.startDate, let ruleID = rule.id else { continue }
+            guard !rule.isDeleted, let ruleID = rule.id, let family = rule.recurringSeriesID else { continue }
             var limit = includeFuture ? (futureHorizon ?? today) : today
-            if let end = rule.endDate, end.compare(limit) == .orderedAscending { limit = end }
             if let end = range?.upperBound, end.compare(limit) == .orderedAscending { limit = end }
-
-            let days = occurrenceDays(
-                start: start,
-                frequency: rule.resolvedFrequency,
-                interval: rule.resolvedInterval,
-                after: range.flatMap { calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: $0.lowerBound)) },
-                until: limit,
-                calendar: calendar
-            )
-            let skipped = rule.skippedDaySet   // 「この回だけ削除」された日付
+            let after = range.flatMap { window in
+                calendar.date(byAdding: .day, value: -1, to: rule.scheduledDay(forPostingDay: calendar.startOfDay(for: window.lowerBound), calendar: calendar))
+            }
+            let days = rule.scheduledDays(after: after, until: rule.scheduledDay(forPostingDay: limit, calendar: calendar),
+                                          calendar: calendar)
+            let skipped = excludedByFamily[family] ?? []
             for day in days {
-                if let range, day.compare(range.lowerBound) == .orderedAscending { continue }
+                let posting = rule.postingDay(for: day, calendar: calendar)
+                if let range, posting.compare(range.lowerBound) == .orderedAscending { continue }
                 if skipped.contains(day) { continue }         // スキップ (削除) 済み → 出さない
-                let key = "\(ruleID.uuidString)#\(Int(day.timeIntervalSince1970))"
+                let key = "\(family.uuidString)#\(Int(day.timeIntervalSince1970))"
                 if materialized.contains(key) { continue }   // 実在行あり → 仮想は出さない
                 result.append(RecurringOccurrence(
                     ruleID: ruleID,
-                    date: day,
+                    scheduledDate: day,
+                    date: posting,
+                    note: rule.note ?? "",
+                    photoData: rule.photoData,
                     title: rule.title ?? "",
                     amount: rule.amountDecimal,
                     currencyCode: rule.resolvedCurrencyCode,

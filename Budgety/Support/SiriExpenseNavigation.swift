@@ -79,7 +79,6 @@ private struct SiriVirtualExpenseDetail: View {
     @Environment(\.dismiss) private var dismiss
     @State private var backing = VirtualRowBacking()
     @State private var editor: Expense?
-    @State private var draft: Expense?
     @State private var didCommit = false
     @State private var pendingRule: RecurringRule?
     @State private var editingRule: RecurringRule?
@@ -96,10 +95,10 @@ private struct SiriVirtualExpenseDetail: View {
             }
         }
         .sheet(item: $editor, onDismiss: finishEditing) { expense in
-            AddExpenseView(expense: expense, onEditRule: { pendingRule = $0 }, onCommit: { didCommit = true })
+            AddExpenseView(expense: expense, isVirtualDraft: expense.managedObjectContext !== context, onEditRule: { pendingRule = $0 }, onCommit: { didCommit = true })
         }
         .sheet(item: $editingRule, onDismiss: { dismiss() }) { rule in
-            EditRecurringRuleView(mode: .edit(rule: rule))
+            EditRecurringRuleView(mode: .edit(rule: rule), occurrenceDate: occurrence.scheduledDate)
         }
     }
 
@@ -109,24 +108,12 @@ private struct SiriVirtualExpenseDetail: View {
         switch target {
         case .stored(let expense):
             editor = expense
-        case .virtual(let occurrence, let sheet, let rule):
-            let category = (sheet.categories as? Set<ExpenseCategory>)?.first {
-                $0.name == occurrence.categoryRaw && $0.kind == occurrence.kind && $0.objectID.persistentStore == sheet.objectID.persistentStore
-            }
-            let expense = RecurringExpenseGenerator.makeOccurrence(for: rule, on: occurrence.date, sheet: sheet,
-                                                                  category: category, in: context)
-            draft = expense
-            editor = expense
+        case .virtual(let occurrence, let sheet, _):
+            editor = backing.displayExpense(for: occurrence, sheet: sheet)
         }
     }
 
     private func finishEditing() {
-        if let draft, !didCommit, draft.managedObjectContext != nil, !draft.isDeleted {
-            let persisted = !draft.isInserted
-            context.delete(draft)
-            if persisted { PersistenceController.shared.save() }
-        }
-        draft = nil
         if didCommit { dismiss() }
         didCommit = false
         if let pendingRule {

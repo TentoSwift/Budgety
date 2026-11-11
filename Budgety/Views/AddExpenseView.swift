@@ -25,7 +25,10 @@ struct AddExpenseView: View {
     private var contextSheet: ExpenseSheet? {
         switch mode {
         case .create(let g): return g
-        case .edit(let e): return e.sheet
+        case .edit(let expense):
+            guard let sheet = expense.sheet else { return nil }
+            if sheet.managedObjectContext === viewContext { return sheet }
+            return try? viewContext.existingObject(with: sheet.objectID) as? ExpenseSheet
         }
     }
 
@@ -150,11 +153,10 @@ struct AddExpenseView: View {
     @State private var origCurrencyCode: String = ""
     @State private var origCategoryObjectID: NSManagedObjectID?
     @State private var origPayerProfileID: String = ""
+    @State private var origHadPayer = false
     @State private var origDate: Date = .distantPast
     @State private var origNote: String = ""
-    /// 写真の差分検出用ベースライン (= ロード時のバイト数)。
-    /// 内容比較は重いので長さで近似 (差し替え/削除では必ず長さも変わる)。
-    @State private var origPhotoByteCount: Int = 0
+    @State private var origPhotoData: Data?
     @State private var origBeneficiaryCSV: String = ""
 
     /// 受益者 (誰の負担として扱うか) の profileID 集合。
@@ -357,17 +359,13 @@ struct AddExpenseView: View {
     /// 定期項目から生成された支出を編集中、保存ボタンを押した時に出る 3 択ダイアログ。
     @State private var showRecurringSaveChoice: Bool = false
 
-    /// 「定期項目に反映する」処理範囲 (2 択: この項目のみ / 全て)
-    private enum RecurringSaveScope {
-        case thisOnly   // この 1 件だけ (定期から切り離して通常支出化)
-        case all        // ルールを変更して全 occurrence に反映
-    }
+    @State private var recurringSaveError: String?
+    private var isVirtualDraft = false
 
     /// 「定期項目を編集」を押した時に呼ばれるコールバック。
     /// シートを閉じて、親 (= SheetDetailView) 側で定期項目 view へ遷移する経路を提供する。
     let onEditRule: ((RecurringRule) -> Void)?
-    /// ユーザーが実際に保存 (commit) した時に呼ばれる。仮想 occurrence を materialize して
-    /// 編集する経路で、キャンセル (未 commit) なら親側で未保存行を破棄するために使う。
+    /// 保存または削除が完了したときに明細の表示元へ通知する。
     let onCommit: (() -> Void)?
 
     private var coverEntry = false
@@ -379,8 +377,9 @@ struct AddExpenseView: View {
         self.onCommit = nil
     }
 
-    init(expense: Expense, onEditRule: ((RecurringRule) -> Void)? = nil, onCommit: (() -> Void)? = nil) {
+    init(expense: Expense, isVirtualDraft: Bool = false, onEditRule: ((RecurringRule) -> Void)? = nil, onCommit: (() -> Void)? = nil) {
         self.mode = .edit(expense: expense)
+        self.isVirtualDraft = isVirtualDraft
         self.onEditRule = onEditRule
         self.onCommit = onCommit
     }
@@ -667,7 +666,8 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var recurringSectionContent: some View {
-        if case .edit(let expense) = mode, let rule = expense.relatedRule {
+        if case .edit(let expense) = mode, let source = expense.relatedRule,
+           let rule = try? viewContext.existingObject(with: source.objectID) as? RecurringRule {
             // 既に Rule から生成された支出は、ここで Toggle / Stepper を編集させると
             // 「この項目だけ」と「Rule 全体」が混ざって混乱しやすい。
             // → 編集シートを閉じて、SheetDetailView 側で「定期項目」一覧 →
@@ -689,7 +689,7 @@ struct AddExpenseView: View {
                             .frame(width: 22)
                             .foregroundStyle(.tint)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("定期項目を編集")
+                            Text("繰り返しを編集")
                                 .foregroundStyle(.primary)
                             Text(rule.resolvedFrequency.summary(interval: Int(rule.resolvedInterval)))
                                 .font(.caption)
@@ -706,7 +706,7 @@ struct AddExpenseView: View {
             } header: {
                 Text("繰り返し")
             } footer: {
-                Text("この項目は定期項目から自動生成されています。頻度・間隔・終了日は定期項目の編集画面で変更できます。")
+                Text("頻度・間隔・終了日は「繰り返しを編集」で変更できます。")
                     .font(.caption2)
             }
         } else {
@@ -723,9 +723,7 @@ struct AddExpenseView: View {
                     )
                 } label: {
                     LabeledContent("繰り返し") {
-                        Text(isRecurring
-                             ? frequency.summary(interval: recurringInterval)
-                             : "OFF")
+                        Text(isRecurring ? String(localized: "する") : String(localized: "しない"))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -850,8 +848,22 @@ struct AddExpenseView: View {
     @MainActor
     private func deleteExpense() {
         guard case .edit(let expense) = mode else { return }
-        RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
-        PersistenceController.shared.save()
+        if isVirtualDraft {
+            guard let id = expense.relatedRule?.objectID, let day = expense.scheduledDate else { return }
+            do {
+                let writer = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+                writer.persistentStoreCoordinator = viewContext.persistentStoreCoordinator
+                guard let rule = try writer.existingObject(with: id) as? RecurringRule else { throw CocoaError(.validationMissingMandatoryProperty) }
+                rule.addSkippedDay(day)
+                try writer.save()
+            } catch {
+                recurringSaveError = error.localizedDescription
+                return
+            }
+        } else {
+            RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
+            PersistenceController.shared.save()
+        }
         onCommit?()
         Haptics.success()
         dismiss()
@@ -973,6 +985,7 @@ struct AddExpenseView: View {
     /// 2) ロード完了後にユーザーが何か変えた → スナップショットと差分 → true
     private var hasUnsavedChanges: Bool {
         guard let snap = loadedSnapshot else { return false }
+        if isRecurringLocked { return hasAnyEditChanges }
         return snap != currentSnapshot
     }
 
@@ -1232,11 +1245,18 @@ struct AddExpenseView: View {
                 isPresented: $showRecurringSaveChoice,
                 titleVisibility: .visible
             ) {
-                Button("この項目のみ保存") { performRecurringSave(scope: .thisOnly) }
-                Button("全ての定期項目で変更") { performRecurringSave(scope: .all) }
+                Button("この回のみ") { performRecurringSave(scope: .thisOnly) }
+                Button("この回以降") { performRecurringSave(scope: .thisAndFollowing) }
+                Button("すべて") { performRecurringSave(scope: .all) }
                 Button("キャンセル", role: .cancel) {}
+            }
+            .alert("保存に失敗しました", isPresented: Binding(
+                get: { recurringSaveError != nil },
+                set: { if !$0 { recurringSaveError = nil } }
+            )) {
+                Button("OK") {}
             } message: {
-                Text("この支出は定期項目から生成されています。この項目だけ変更するか、定期項目全体を変更するか選んでください。")
+                Text(verbatim: recurringSaveError ?? "")
             }
             .confirmationDialog(
                 "この支出を削除しますか？",
@@ -1344,31 +1364,9 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var categorySection: some View {
-        Section {
-            if let sheet = contextSheet {
-                NavigationLink {
-                    DiscardGuardedBack(modifier: discardDialogModifier) {
-                        CategoryPickerView(selected: $selectedCategory, record: sheet, kind: kind)
-                    }
-                    // push 先は Form の .tint(sheetTint) を継承せず既定色になるため、
-                    // 通貨ピッカーと同じく遷移元でシート色を明示適用する。
-                    // (CategoryPickerView 内 List の .tint だけではナビゲーションバーや
-                    //  .foregroundStyle(.tint) が既定色のままになるケースがある)
-                    .tint(sheetTint)
-                } label: {
-                    LabeledContent("カテゴリ") {
-                        if let cat = selectedCategory {
-                            HStack(spacing: 6) {
-                                CategoryIconView(category: cat, size: 24)
-                                Text(cat.displayName)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Text("未選択")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+        if let sheet = contextSheet {
+            Section {
+                TransactionCategoryMenu(sheet: sheet, kind: kind, selection: $selectedCategory)
             }
         }
     }
@@ -1479,15 +1477,15 @@ struct AddExpenseView: View {
     /// 保存ボタンタップ時のディスパッチ。定期由来の支出に変更があれば 3 択ダイアログ、
     /// それ以外は通常 save。
     private func trySave() {
-        // 機能オフ時は既存の生成由来支出も通常編集として保存する (2 択ダイアログを出さない)。
-        if RecurringOccurrenceService.featureEnabled,
-           case .edit(let expense) = mode,
-           expense.generatedFromRuleID != nil,
-           expense.relatedRule != nil,
-           hasAnyEditChanges {
-            showRecurringSaveChoice = true
+        finalizePendingCalcIfNeeded()
+        if case .edit(let expense) = mode, isVirtualDraft || expense.relatedRule != nil {
+            if hasAnyEditChanges {
+                showRecurringSaveChoice = true
+            } else {
+                dismiss()
+            }
         } else {
-            save()  // save() 内で dismiss() まで行う
+            save()
         }
     }
 
@@ -1500,11 +1498,16 @@ struct AddExpenseView: View {
         if currencyCode != origCurrencyCode { return true }
         if note != origNote { return true }
         if !Calendar.current.isDate(date, inSameDayAs: origDate) { return true }
-        if (selectedPayerProfileID ?? "") != origPayerProfileID { return true }
+        if payerHasChanged { return true }
         if selectedCategory?.objectID != origCategoryObjectID { return true }
         if effectiveBeneficiaryCSV != origBeneficiaryCSV { return true }
-        if (photoData?.count ?? 0) != origPhotoByteCount { return true }
+        if photoData != origPhotoData { return true }
         return false
+    }
+
+    private var payerHasChanged: Bool {
+        if (selectedPayerProfileID ?? "") != origPayerProfileID { return true }
+        return payerExplicitlyCleared && origHadPayer
     }
 
     /// 編集中の差分を、対象の Expense / RecurringRule に適用する。
@@ -1532,12 +1535,11 @@ struct AddExpenseView: View {
             }
         }
         if note != origNote { expense.note = note }
-        if (photoData?.count ?? 0) != origPhotoByteCount { expense.photoData = photoData }
+        if photoData != origPhotoData { expense.photoData = photoData }
         if includeDate, !Calendar.current.isDate(date, inSameDayAs: origDate) {
             expense.date = date
         }
-        let newPayerProfileID = selectedPayerProfileID ?? ""
-        if newPayerProfileID != origPayerProfileID {
+        if payerHasChanged {
             expense.payerProfileID = selectedPayerProfileID
             // paidBy は denormalized キャッシュなので書かない。表示は payerProfileID +
             // CKShare 参加者 / UserProfileStore から動的解決される。
@@ -1546,9 +1548,10 @@ struct AddExpenseView: View {
         }
         if selectedCategory?.objectID != origCategoryObjectID {
             expense.categoryRaw = selectedCategory?.name
-            let store = expense.objectID.persistentStore
-            if let cat = selectedCategory, cat.objectID.persistentStore == store {
-                expense.category = cat
+            let store = expense.sheet?.objectID.persistentStore
+            if let cat = selectedCategory, cat.objectID.persistentStore == store,
+               let context = expense.managedObjectContext {
+                expense.category = try? context.existingObject(with: cat.objectID) as? ExpenseCategory
             } else {
                 expense.category = nil
             }
@@ -1568,65 +1571,47 @@ struct AddExpenseView: View {
         if kind.rawValue != origKindRaw { rule.kindRaw = kind.rawValue }
         if currencyCode != origCurrencyCode { rule.currencyCode = currencyCode }
         if note != origNote { rule.note = note }
-        let newPayerProfileID = selectedPayerProfileID ?? ""
-        if newPayerProfileID != origPayerProfileID {
+        if payerHasChanged {
             rule.payerProfileID = selectedPayerProfileID
             rule.paidBy = nil
         }
         if selectedCategory?.objectID != origCategoryObjectID {
             rule.categoryRaw = selectedCategory?.name
         }
+        if effectiveBeneficiaryCSV != origBeneficiaryCSV {
+            rule.beneficiaryProfileIDs = effectiveBeneficiaryCSV
+        }
+        if photoData != origPhotoData { rule.photoData = photoData }
     }
 
-    /// 「変更の適用範囲」ダイアログから呼ばれる。
-    private func performRecurringSave(scope: RecurringSaveScope) {
+    private func performRecurringSave(scope: RecurringEditScope) {
         guard case .edit(let expense) = mode else { return }
-        // save() と同じく、計算途中の状態は確定してから保存する。
-        finalizePendingCalcIfNeeded()
-        if !expense.isInserted { viewContext.refresh(expense, mergeChanges: true) }
-
-        // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
-        applyChanges(toExpense: expense, includeDate: true)
-
-        // 「この項目のみ」変更 = この回を定期から切り離して通常の支出にする (もう定期項目ではない)。
-        // ルールにこの日付を skip 記録 (仮想の重複防止) し、Expense からは定期リンクを外す。
-        if scope == .thisOnly, RecurringOccurrenceService.virtualizationEnabled,
-           let rule = expense.relatedRule, let day = expense.scheduledDate ?? expense.date {
-            rule.addSkippedDay(day)
-            expense.generatedFromRuleID = nil
-            expense.scheduledDate = nil
-            // 通常の支出になったので FX を凍結する (定期は非凍結だが、切り離したら通常扱い)。
-            expense.captureFXSnapshot()
-        }
-
-        // 2) 「全て」= ルールを変更して全 occurrence に反映する。
-        if scope == .all, let rule = expense.relatedRule {
-            applyChanges(toRule: rule)
-            // 過去に実体化済みの他の支出 (override 等) にも反映する。
-            if let ruleID = rule.id {
-                let req = NSFetchRequest<Expense>(entityName: "Expense")
-                req.predicate = NSPredicate(format: "generatedFromRuleID == %@", ruleID as CVarArg)
-                let others = (try? viewContext.fetch(req)) ?? []
-                for other in others where other.objectID != expense.objectID {
-                    applyChanges(toExpense: other, includeDate: false)
+        do {
+            let writer = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+            writer.persistentStoreCoordinator = viewContext.persistentStoreCoordinator
+            if isVirtualDraft {
+                guard let id = expense.relatedRule?.objectID, let day = expense.scheduledDate,
+                      let rule = try writer.existingObject(with: id) as? RecurringRule else {
+                    throw CocoaError(.validationMissingMandatoryProperty)
                 }
+                try RecurringExpenseGenerator.edit(rule, on: day, scope: scope,
+                                                   updateExpense: applyChanges(toExpense:includeDate:),
+                                                   updateRule: applyChanges(toRule:))
+            } else {
+                guard let row = try writer.existingObject(with: expense.objectID) as? Expense else {
+                    throw CocoaError(.validationMissingMandatoryProperty)
+                }
+                try RecurringExpenseGenerator.edit(row, scope: scope,
+                                                   updateExpense: applyChanges(toExpense:includeDate:),
+                                                   updateRule: applyChanges(toRule:))
             }
+            try writer.save()
+            onCommit?()
+            Haptics.success()
+            dismiss()
+        } catch {
+            recurringSaveError = error.localizedDescription
         }
-
-        // 繰り返しの頻度・間隔・終了日の変更は scope に関わらず常に Rule に反映
-        applyRecurringChanges(for: expense)
-
-        // 全て: 編集内容はルールに反映済みなので、タップで materialize した実 Expense は
-        // 残さず削除し、その回も仮想 (= ルールから算出) のまま表示する。
-        if scope == .all, RecurringOccurrenceService.virtualizationEnabled {
-            viewContext.delete(expense)
-        }
-
-        PersistenceController.shared.save()
-        RecurringExpenseGenerator.generateAll(in: viewContext)
-        onCommit?()
-        Haptics.success()
-        dismiss()
     }
 
     private func datePresetButton(_ label: String, offset: Int) -> some View {
@@ -1678,7 +1663,7 @@ struct AddExpenseView: View {
             amountText = NSDecimalNumber(decimal: expense.amountDecimal).stringValue
             kind = expense.kind
             currencyCode = expense.resolvedCurrencyCode
-            selectedCategory = expense.category
+            selectedCategory = expense.category.flatMap { try? viewContext.existingObject(with: $0.objectID) as? ExpenseCategory }
             selectedPayer = expense.resolvedPayer
             date = expense.date ?? .now
             note = expense.note ?? ""
@@ -1714,21 +1699,15 @@ struct AddExpenseView: View {
             // CRDT 用スナップショット
             origTitle = title
             origAmountText = amountText
-            origKindRaw = expense.kindRaw ?? ""
-            origCurrencyCode = expense.currencyCode ?? ""
+            origKindRaw = expense.kind.rawValue
+            origCurrencyCode = expense.resolvedCurrencyCode
             origCategoryObjectID = expense.category?.objectID
-            origPayerProfileID = expense.payerProfileID ?? ""
+            origPayerProfileID = selectedPayerProfileID ?? ""
+            origHadPayer = expense.payerProfileID?.isEmpty == false || expense.paidBy?.isEmpty == false || expense.payerMemberID != nil
             origDate = expense.date ?? .distantPast
             origNote = expense.note ?? ""
-            origPhotoByteCount = expense.photoData?.count ?? 0
-            // 保存値そのものを基準にする (UI 正規化に引きずられない)。
-            // 「[支払者]」 と 「空」 は同じ意味 (= 割り勘オフ) なので、空に正規化して
-            // 編集なしの再保存で誤って dirty 扱いにならないようにする。
-            let storedCSV = expense.beneficiaryProfileIDs ?? ""
-            origBeneficiaryCSV = (!loadedPayerID.isEmpty
-                                  && Set(expense.beneficiaryIDList) == Set([loadedPayerID]))
-                ? ""
-                : storedCSV
+            origPhotoData = expense.photoData
+            origBeneficiaryCSV = effectiveBeneficiaryCSV
             origIsRecurring = isRecurring
             origFrequencyRaw = frequency.rawValue
             origRecurringInterval = Int32(recurringInterval)
@@ -1878,6 +1857,7 @@ struct AddExpenseView: View {
         rule.payerProfileID = effectivePayerProfileID
         rule.beneficiaryProfileIDs = effectiveBeneficiaryCSV
         rule.note = note
+        rule.photoData = photoData
         rule.frequency = frequency.rawValue
         rule.interval = Int32(recurringInterval)
         rule.startDate = Calendar.current.startOfDay(for: startDate)
@@ -1886,7 +1866,7 @@ struct AddExpenseView: View {
     }
 }
 
-/// 各サブ view (CategoryPickerView 等) を NavigationLink で push する時に
+/// 各サブ view (通貨選択等) を NavigationLink で push する時に
 /// この wrapper でくるんで、`.cancellationAction` 位置に **透明な 0pt の
 /// プレースホルダ** を置き、それに `DiscardConfirmModifier` を当てる。
 /// 自動の back chevron は触らない。

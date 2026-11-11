@@ -13,6 +13,7 @@ import UIKit
 
 struct ExpenseDetailView: View {
     @ObservedObject var expense: Expense
+    var isVirtualDraft = false
     /// 仮想 occurrence を materialize して詳細表示している場合に、編集が実際に保存(commit)
     /// されたことを親へ伝えるコールバック。未 commit で戻ったら親が未保存行を破棄する。
     var onCommit: (() -> Void)? = nil
@@ -22,6 +23,10 @@ struct ExpenseDetailView: View {
     @ObservedObject private var pub = PublicProfileSync.shared
     @ObservedObject private var profileStore = UserProfileStore.shared
     @State private var showingEdit = false
+    #if !os(macOS)
+    @State private var pendingRule: RecurringRuleTarget?
+    @State private var editingRule: RecurringRuleTarget?
+    #endif
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -44,7 +49,7 @@ struct ExpenseDetailView: View {
             }
             if expense.generatedFromRuleID != nil {
                 Section {
-                    Label("定期項目から作成されました", systemImage: "repeat")
+                    Label("繰り返しから作成されました", systemImage: "repeat")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -65,15 +70,25 @@ struct ExpenseDetailView: View {
                     #endif
             }
         }
-        .sheet(isPresented: $showingEdit) {
-            #if os(macOS)
-            if let sheet = expense.sheet {
-                MacAddExpenseView(sheet: sheet, expense: expense, onCommit: onCommit)
-            }
-            #else
-            AddExpenseView(expense: expense, onCommit: onCommit)
-            #endif
+        #if !os(macOS)
+        .sheet(isPresented: $showingEdit, onDismiss: {
+            editingRule = pendingRule
+            pendingRule = nil
+        }) {
+            AddExpenseView(expense: expense, isVirtualDraft: isVirtualDraft, onEditRule: { rule in
+                pendingRule = RecurringRuleTarget(rule: rule, scheduledDate: expense.scheduledDate ?? expense.date)
+            }, onCommit: onCommit)
         }
+        .sheet(item: $editingRule) { target in
+            EditRecurringRuleView(mode: .edit(rule: target.rule), occurrenceDate: target.scheduledDate)
+        }
+        #else
+        .sheet(isPresented: $showingEdit) {
+            if let sheet = expense.sheet {
+                MacAddExpenseView(sheet: sheet, expense: expense, onCommit: onCommit, isVirtualDraft: isVirtualDraft)
+            }
+        }
+        #endif
         #if os(iOS)
         // 親シートが再ロックされたら詳細画面にロックを重ねる。overlay 方式なので
         // 編集シート表示中でも再ホストせず、編集内容を壊さない。
@@ -243,7 +258,7 @@ struct ExpenseDetailView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
             : AnyLayout(HStackLayout(spacing: 12))
         layout {
-            Text(expense.kind == .income ? "受け取った人" : "支払った人")
+            Text(expense.kind.partyLabel)
                 .foregroundStyle(.secondary)
             if !isAX { Spacer(minLength: 8) }
             HStack(spacing: 8) {

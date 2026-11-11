@@ -75,13 +75,20 @@ private struct DuoSheetsView: View {
                           usesDuoSidebar: !compact, showDuoSidebar: sidebarHidden ? { sidebarHidden = false } : nil)
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
-        .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
+        .onChange(of: sheets.map(\.objectID), initial: true) { previousIDs, ids in
             if !restoredSelection && !ids.isEmpty {
                 restoredSelection = true
                 let restored = ids.first { $0.uriRepresentation().absoluteString == lastOpenedSheetURI }
-                if let id = restored ?? (compact ? nil : firstSidebarSheetID) { sheetPath = [id] }
+                if sheetPath.isEmpty, let id = restored ?? (compact ? nil : firstSidebarSheetID) { sheetPath = [id] }
             } else if let id = sheetPath.last, !ids.contains(id) {
-                sheetPath = compact ? [] : firstSidebarSheetID.map { [$0] } ?? []
+                // Keep the neighboring visible row selected, as in the sidebar.
+                // A deleted row must never remain the detail destination.
+                let visible = Set(sheets.filter { !$0.archived || archivedExpanded }.map(\.objectID))
+                let neighbors = previousIDs.firstIndex(of: id).map { index in
+                    Array(previousIDs.dropFirst(index + 1)) + Array(previousIDs.prefix(index).reversed())
+                } ?? []
+                let replacement = neighbors.first(where: visible.contains) ?? firstSidebarSheetID
+                sheetPath = compact ? [] : replacement.map { [$0] } ?? []
             }
         }
     }
@@ -96,7 +103,9 @@ private struct DuoSheetsView: View {
             List(selection: Binding<NSManagedObjectID?>(
                 get: { sheetPath.last },
                 set: { id in
-                    if let id, id != sheetPath.last { sheetPath = [id] }
+                    if let id, id != sheetPath.last, sheets.contains(where: { $0.objectID == id && !$0.isDeleted }) {
+                        sheetPath = [id]
+                    }
                 }
             )) {
                 ForEach(sheets.filter { !$0.archived }) { sheet in

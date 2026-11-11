@@ -44,8 +44,8 @@ enum TransactionKind: String, CaseIterable, Identifiable, Sendable {
     /// 「支払者」「受取者」相当のラベル (種別に応じて切替)
     var partyLabel: String {
         switch self {
-        case .expense: String(localized: "支払")
-        case .income:  String(localized: "受取")
+        case .expense: String(localized: "支払い")
+        case .income:  String(localized: "受け取り")
         }
     }
 

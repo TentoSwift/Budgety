@@ -88,9 +88,22 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene,
                willConnectTo session: UISceneSession,
                options connectionOptions: UIScene.ConnectionOptions) {
+        openWidgetSheet(in: connectionOptions.urlContexts)
         if let metadata = connectionOptions.cloudKitShareMetadata {
             accept(metadata: metadata)
         }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        openWidgetSheet(in: URLContexts)
+    }
+
+    private func openWidgetSheet(in contexts: Set<UIOpenURLContext>) {
+        #if os(iOS)
+        if let id = contexts.compactMap({ WidgetSheetLink.sheetIdentifier(from: $0.url) }).first {
+            DeepLinkRouter.shared.requestOpenSheet(identifier: id)
+        }
+        #endif
     }
 
     func windowScene(_ windowScene: UIWindowScene,

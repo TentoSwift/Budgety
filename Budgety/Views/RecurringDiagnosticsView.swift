@@ -29,14 +29,14 @@ struct RecurringDiagnosticsView: View {
     var body: some View {
         List {
             if rules.isEmpty {
-                ContentUnavailableView("定期項目がありません", systemImage: "repeat")
+                ContentUnavailableView("繰り返しがありません", systemImage: "repeat")
             } else {
                 ForEach(rules) { rule in
                     RuleDiagnosticsSection(rule: rule, ctx: ctx)
                 }
             }
         }
-        .navigationTitle("定期項目の診断")
+        .navigationTitle("繰り返しの診断")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

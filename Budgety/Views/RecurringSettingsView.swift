@@ -20,8 +20,12 @@ struct RecurringSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle("繰り返し", isOn: $isRecurring)
-                    .disabled(isLocked)
+                Picker("繰り返し", selection: $isRecurring) {
+                    Text("しない").tag(false)
+                    Text("する").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .disabled(isLocked)
             } footer: {
                 if isRecurring {
                     Text("この日付を開始日として、未生成分を自動的にシートに追加します。")
