@@ -74,6 +74,28 @@ enum LedgerItem: Identifiable {
     }
 }
 
+enum ExpenseRecurrenceFilter: String, CaseIterable, Identifiable {
+    case all, recurring, nonrecurring
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .all: String(localized: "すべて")
+        case .recurring: String(localized: "繰り返しのみ")
+        case .nonrecurring: String(localized: "繰り返し以外")
+        }
+    }
+
+    func matches(isRecurring: Bool) -> Bool {
+        switch self {
+        case .all: true
+        case .recurring: isRecurring
+        case .nonrecurring: !isRecurring
+        }
+    }
+}
+
 enum RecurringOccurrenceService {
 
     private static let maximumSlotsPerRule = 200_000

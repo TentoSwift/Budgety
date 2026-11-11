@@ -50,6 +50,7 @@ extension SiriExpenseScope {
 struct SiriExpenseSearchFilter {
     let name: String?
     let categoryName: String?
+    let spokenKind: SiriTransactionSelection?
     let scope: SiriExpenseScope
 
     init(expenseName: String?, categoryName: String? = nil, month: Date?, day: Date? = nil, period: SiriExpensePeriod?,
@@ -58,6 +59,7 @@ struct SiriExpenseSearchFilter {
         let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         self.categoryName = category.isEmpty ? nil : category
         let question = Self.searchQuestion(text)
+        spokenKind = question?.kind
         let spokenPeriod = question?.period
         if let question {
             name = question.term
@@ -79,7 +81,7 @@ struct SiriExpenseSearchFilter {
 
     // The Home Screen shortcut passes its entire text field as expenseName. Only consume
     // complete questions so names containing a period, such as 「今日のランチ」, remain searchable.
-    private static func searchQuestion(_ text: String) -> (period: SiriExpensePeriod, term: String?)? {
+    private static func searchQuestion(_ text: String) -> (period: SiriExpensePeriod?, term: String?, kind: SiriTransactionSelection?)? {
         let question = text.trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
         let phrases: [(String, SiriExpensePeriod)] = [
             ("今日", .today), ("きょう", .today), ("本日", .today),
@@ -90,19 +92,28 @@ struct SiriExpenseSearchFilter {
             let rest = question.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
             guard rest.hasPrefix("の") else { continue }
             let subject = rest.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
-            let compact = subject.filter { !$0.isWhitespace }.replacingOccurrences(of: "ししゅつ", with: "支出")
-            switch compact {
-            case "支出", "支出は", "支出はいくら", "支出はいくらですか", "支出を教えて", "支出を見せて":
-                return (period, nil)
-            default: break
-            }
+            if let kind = transactionKind(in: subject) { return (period, nil, kind) }
             // Preserve the literal merchant name and spaces within it unless a question was asked.
             for suffix in ["はいくらですか", "はいくら", "を教えて", "を見せて", "は"] where subject.hasSuffix(suffix) {
                 let term = subject.dropLast(suffix.count).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !term.isEmpty { return (period, term) }
+                if !term.isEmpty { return (period, term, nil) }
             }
         }
-        return nil
+        return transactionKind(in: question).map { (nil, nil, $0) }
+    }
+
+    private static func transactionKind(in subject: String) -> SiriTransactionSelection? {
+        var text = subject.filter { !$0.isWhitespace }
+        for suffix in ["はいくらですか", "はいくら", "を教えてください", "を教えて", "を見せて", "は"] where text.hasSuffix(suffix) {
+            text.removeLast(suffix.count)
+            break
+        }
+        switch text {
+        case "支出", "ししゅつ": return .expense
+        case "収入", "しゅうにゅう": return .income
+        case "収支", "収入と支出", "支出と収入", "収入・支出", "しゅうし": return .both
+        default: return nil
+        }
     }
 }
 #endif

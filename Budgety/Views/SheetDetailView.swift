@@ -236,6 +236,7 @@ struct SheetDetailView: View {
     @State private var selectedBeneficiaryID: String?
     /// 割り勘フィルタ (受益者 2 人以上 = 割り勘あり)。フィルタシートで選ぶ。
     @State private var splitFilter: ExpenseSplitFilter = .all
+    @State private var recurrenceFilter: ExpenseRecurrenceFilter = .all
     /// フィルタシートの表示。
     @State private var showingFilters = false
     /// TipKit: フィルタボタン / もっと見るメニュー / 項目追加ボタンの機能紹介。
@@ -258,6 +259,7 @@ struct SheetDetailView: View {
     /// AddExpenseView から「定期項目を編集」が押された時にセットされる。
     /// シートが閉じきった後で `recurringListAutoEdit` に流して RecurringListView へ push する。
     @State private var pendingEditRule: RecurringRuleTarget?
+    @State private var showingSettlement = false
     @State private var showRecurringListAutoEdit: Bool = false
     @State private var recurringListAutoEdit: RecurringRuleTarget?
     @AppStorage("expenseSortField") private var sortFieldRaw: String = SortField.date.rawValue
@@ -328,7 +330,7 @@ struct SheetDetailView: View {
     /// 検索中は検索専用の期間 (初期=全期間) で「その期間のみ」に絞り込む。
     /// カテゴリピル・検索・並び順はここで適用する。
     private var filteredExpenses: [Expense] {
-        var list = Array(allExpenses)
+        var list = allExpenses.filter { recurrenceFilter.matches(isRecurring: $0.generatedFromRuleID != nil) }
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         } else if filterUncategorized {
@@ -369,6 +371,7 @@ struct SheetDetailView: View {
     /// 一覧に混ぜる仮想 occurrence (完全仮想化フラグ OFF なら空)。
     /// `filteredExpenses` と同じ条件 (カテゴリ/支払者/検索/検索期間) で絞り込む。
     private var filteredVirtuals: [RecurringOccurrence] {
+        guard recurrenceFilter.matches(isRecurring: true) else { return [] }
         let range = isSearchActive ? searchPeriod.occurrenceRange() : nil
         var list = RecurringOccurrenceService.virtualOccurrences(for: record, in: range)
         guard !list.isEmpty else { return [] }
@@ -416,11 +419,14 @@ struct SheetDetailView: View {
                     customStart: $customStartRaw,
                     customEnd: $customEndRaw,
                     onEditCustomPeriod: { showingCustomPeriod = true },
+                    onOpenSettlement: { showingSettlement = true },
                     searchActive: isSearchActive,
                     selectedCategory: selectedCategory,
+                    filterUncategorized: filterUncategorized,
                     selectedPayerID: selectedPayerID,
                     selectedBeneficiaryID: selectedBeneficiaryID,
                     splitFilter: splitFilter,
+                    recurrenceFilter: recurrenceFilter,
                     searchQuery: searchText.trimmingCharacters(in: .whitespaces)
                 )
                 #if os(iOS)
@@ -441,7 +447,7 @@ struct SheetDetailView: View {
                         .listSectionSeparator(.hidden)
                 }
 
-                if allExpenses.isEmpty && filteredVirtuals.isEmpty {
+                if allExpenses.isEmpty && filteredVirtuals.isEmpty && !isFilterActive && !isSearchActive {
                     emptyStateInitial
                 } else if searchFocused && searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                     // 検索フォーカス直後 (未入力) は全件ではなく 0 件 (入力待ち) を表示。
@@ -564,10 +570,7 @@ struct SheetDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    NavigationLink {
-                        SettlementView(record: record)
-                            .sheetLockCover(record)
-                    } label: {
+                    Button { showingSettlement = true } label: {
                         Label("精算", systemImage: "arrow.left.arrow.right.circle")
                     }
                     NavigationLink {
@@ -692,7 +695,8 @@ struct SheetDetailView: View {
                 filterUncategorized: $filterUncategorized,
                 selectedPayerID: $selectedPayerID,
                 selectedBeneficiaryID: $selectedBeneficiaryID,
-                splitFilter: $splitFilter
+                splitFilter: $splitFilter,
+                recurrenceFilter: $recurrenceFilter
             )
         }
         .sheet(isPresented: $showingCSVImport) {
@@ -804,6 +808,9 @@ struct SheetDetailView: View {
             default: break
             }
         }
+        .navigationDestination(isPresented: $showingSettlement) {
+            SettlementView(record: record).sheetLockCover(record)
+        }
         .navigationDestination(isPresented: $showRecurringListAutoEdit) {
             RecurringListView(record: record, autoEditRule: recurringListAutoEdit?.rule, autoEditDate: recurringListAutoEdit?.scheduledDate)
                 .sheetLockCover(record)
@@ -867,7 +874,7 @@ struct SheetDetailView: View {
     private var isFilterActive: Bool {
         selectedCategory != nil || filterUncategorized || selectedPayerID != nil
             || selectedBeneficiaryID != nil
-            || splitFilter != .all
+            || splitFilter != .all || recurrenceFilter != .all
             || (isSearchActive && searchPeriod.isFiltering)
     }
 
@@ -880,6 +887,7 @@ struct SheetDetailView: View {
         if selectedPayerID != nil { parts.append(String(localized: "メンバー")) }
         if selectedBeneficiaryID != nil { parts.append(String(localized: "受益者")) }
         if splitFilter != .all { parts.append(String(localized: "割り勘")) }
+        if recurrenceFilter != .all { parts.append(recurrenceFilter.label) }
         let sep = String(localized: "filterList.separator", defaultValue: "・")
         return String(localized: "filterDescription.suffix", defaultValue: "\(parts.joined(separator: sep))でフィルタされています。")
     }
@@ -902,6 +910,7 @@ struct SheetDetailView: View {
                     selectedPayerID = nil
                     selectedBeneficiaryID = nil
                     splitFilter = .all
+                    recurrenceFilter = .all
                     searchPeriod = .all
                 }
                 .tint(record.tint)
@@ -1291,13 +1300,16 @@ private struct SummaryCard: View {
     @Binding var customEndRaw: Double
     /// 「カスタム…」を選んだときに親へ範囲編集シートを開かせるコールバック。
     let onEditCustomPeriod: () -> Void
+    let onOpenSettlement: () -> Void
     /// 検索バーがアクティブ (フォーカス中 or 入力済み) か。
     /// アクティブ かつ クエリ未入力なら合計は 0 (= 行リストの「0 件」と一致させる)。
     let searchActive: Bool
     let selectedCategory: ExpenseCategory?
+    let filterUncategorized: Bool
     let selectedPayerID: String?
     let selectedBeneficiaryID: String?
     let splitFilter: ExpenseSplitFilter
+    let recurrenceFilter: ExpenseRecurrenceFilter
     /// 親 view (SheetDetailView) の searchText (trimmed)。空でなければ
     /// 集計を検索ヒットに絞る + ヘッダーに件数を表示する。
     let searchQuery: String
@@ -1317,11 +1329,14 @@ private struct SummaryCard: View {
         customStart: Binding<Double>,
         customEnd: Binding<Double>,
         onEditCustomPeriod: @escaping () -> Void,
+        onOpenSettlement: @escaping () -> Void,
         searchActive: Bool = false,
         selectedCategory: ExpenseCategory? = nil,
+        filterUncategorized: Bool = false,
         selectedPayerID: String? = nil,
         selectedBeneficiaryID: String? = nil,
         splitFilter: ExpenseSplitFilter = .all,
+        recurrenceFilter: ExpenseRecurrenceFilter = .all,
         searchQuery: String = ""
     ) {
         self.record = record
@@ -1329,11 +1344,14 @@ private struct SummaryCard: View {
         self._customStartRaw = customStart
         self._customEndRaw = customEnd
         self.onEditCustomPeriod = onEditCustomPeriod
+        self.onOpenSettlement = onOpenSettlement
         self.searchActive = searchActive
         self.selectedCategory = selectedCategory
+        self.filterUncategorized = filterUncategorized
         self.selectedPayerID = selectedPayerID
         self.selectedBeneficiaryID = selectedBeneficiaryID
         self.splitFilter = splitFilter
+        self.recurrenceFilter = recurrenceFilter
         self.searchQuery = searchQuery
         self._expenses = FetchRequest<Expense>(
             sortDescriptors: [
@@ -1362,7 +1380,7 @@ private struct SummaryCard: View {
     private var filterSig: String {
         let cat = selectedCategory?.objectID.uriRepresentation().absoluteString ?? "-"
         let custom = period == .custom ? "\(customStartRaw)-\(customEndRaw)" : "-"
-        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(period.rawValue)|\(custom)|\(searchQuery)"
+        return "\(cat)|\(selectedPayerID ?? "-")|\(selectedBeneficiaryID ?? "-")|\(splitFilter.rawValue)|\(filterUncategorized)|\(recurrenceFilter.rawValue)|\(period.rawValue)|\(custom)|\(searchQuery)"
     }
 
     private func totals() -> (expense: Decimal, income: Decimal, missing: Set<String>, hitCount: Int) {
@@ -1381,7 +1399,9 @@ private struct SummaryCard: View {
         var missing: Set<String> = []
         var hitCount = 0
         for e in expenses where period.contains(e.date, customStart: customStart, customEnd: customEnd) {
+            guard recurrenceFilter.matches(isRecurring: e.generatedFromRuleID != nil) else { continue }
             if let categoryID, e.category?.objectID != categoryID { continue }
+            if filterUncategorized, e.category != nil { continue }
             if let payerID = selectedPayerID, !expensePayerMatches(e, payerID: payerID, selfIDs: selfIDs) { continue }
             if let benID = selectedBeneficiaryID, !beneficiaryMatches(e.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) { continue }
             if !splitFilter.matches(beneficiaryIDs: e.beneficiaryIDList, payerID: e.payerProfileID) { continue }
@@ -1402,7 +1422,9 @@ private struct SummaryCard: View {
         }
         // 仮想 occurrence (完全仮想化 ON 時のみ非空) も同条件で合計に反映する。
         let range = period.occurrenceRange(customStart: customStart, customEnd: customEnd)
+        guard recurrenceFilter.matches(isRecurring: true) else { return (expenseSum, incomeSum, missing, hitCount) }
         for occ in RecurringOccurrenceService.virtualOccurrences(for: record, in: range) {
+            if filterUncategorized, !occ.categoryRaw.isEmpty { continue }
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
@@ -1434,7 +1456,7 @@ private struct SummaryCard: View {
         // 予算は月単位なので、月単位の期間 (今月/先月) のときだけ予算バーを出す。
         // 先月表示時は先月の支出に対する進捗になる。
         let showBudgetMetrics = !isSearching && (period == .thisMonth || period == .lastMonth)
-            && selectedCategory == nil && selectedPayerID == nil && budget != nil
+            && selectedCategory == nil && !filterUncategorized && selectedPayerID == nil && recurrenceFilter == .all && budget != nil
         VStack(alignment: .leading, spacing: 12) {
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
             HStack(alignment: .top, spacing: 8) {
@@ -1466,7 +1488,7 @@ private struct SummaryCard: View {
                         .lineLimit(2)
                 }
                 Spacer(minLength: 0)
-                SheetMemberAvatars(sheet: record)
+                SheetSettlementButton(sheet: record, action: onOpenSettlement)
                     .fixedSize(horizontal: true, vertical: false)
             }
 
@@ -1678,13 +1700,11 @@ private struct SummaryCard: View {
         VStack(spacing: 8) {
             HStack {
                 Text("予算 \(CurrencyCatalog.format(budget, code: code))")
-                    .font(.sheetNumber(.caption))
-                    .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int((ratio * 100).rounded())) %")
-                    .font(.sheetNumber(.caption, weight: .semibold))
-                    .foregroundStyle(color)
             }
+            .font(.sheetNumber(.caption, weight: .semibold))
+            .foregroundStyle(color)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.15))
@@ -2394,6 +2414,7 @@ struct ExpenseFilterSheet: View {
     @Binding var selectedPayerID: String?
     @Binding var selectedBeneficiaryID: String?
     @Binding var splitFilter: ExpenseSplitFilter
+    @Binding var recurrenceFilter: ExpenseRecurrenceFilter
     @Environment(\.dismiss) private var dismiss
     // シート内はドラフト (ローカル) で編集し、「完了」で親フィルタに反映する。キャンセルは破棄。
     @State private var draftCategory: ExpenseCategory?
@@ -2401,11 +2422,12 @@ struct ExpenseFilterSheet: View {
     @State private var draftPayerID: String?
     @State private var draftBeneficiaryID: String?
     @State private var draftSplit: ExpenseSplitFilter = .all
+    @State private var draftRecurrence: ExpenseRecurrenceFilter = .all
     @State private var didInit = false
 
     private var isAnyActive: Bool {
         draftCategory != nil || draftUncategorized || draftPayerID != nil
-            || draftBeneficiaryID != nil || draftSplit != .all
+            || draftBeneficiaryID != nil || draftSplit != .all || draftRecurrence != .all
     }
 
     var body: some View {
@@ -2417,6 +2439,14 @@ struct ExpenseFilterSheet: View {
                     beneficiarySection
                 }
                 categorySection
+                Section {
+                    Picker("繰り返し", selection: $draftRecurrence) {
+                        ForEach(ExpenseRecurrenceFilter.allCases, id: \.self) { filter in
+                            Text(filter.label).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
             }
             // シート内のリセットボタン・選択チェックマーク等をシート色に統一する
             // (FilterOptionList の checkmark は .tint を参照する)。
@@ -2438,6 +2468,7 @@ struct ExpenseFilterSheet: View {
                         draftPayerID = nil
                         draftBeneficiaryID = nil
                         draftSplit = .all
+                        draftRecurrence = .all
                     }
                     .disabled(!isAnyActive)
                 }
@@ -2449,6 +2480,7 @@ struct ExpenseFilterSheet: View {
                         selectedPayerID = draftPayerID
                         selectedBeneficiaryID = draftBeneficiaryID
                         splitFilter = draftSplit
+                        recurrenceFilter = draftRecurrence
                         dismiss()
                     } label: {
                         Label("完了", systemImage: "checkmark")
@@ -2463,6 +2495,7 @@ struct ExpenseFilterSheet: View {
                 draftPayerID = selectedPayerID
                 draftBeneficiaryID = selectedBeneficiaryID
                 draftSplit = splitFilter
+                draftRecurrence = recurrenceFilter
                 didInit = true
             }
         }

@@ -76,14 +76,14 @@ struct SiriExpenseCardRow: TransientAppEntity {
 
 @available(iOS 27.3, *)
 struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "支出の検索結果"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細の検索結果"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
     @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
     @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "対象期間") var period: String
-    @Property(title: "検索した支出名") var expenseName: String
+    @Property(title: "検索した明細名") var expenseName: String
     @Property(title: "該当件数") var count: Int
     @Property(title: "通貨別の合計") var total: String
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
@@ -109,6 +109,54 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
             SiriExpenseCardView(result: result)
+        }
+    }
+}
+
+@available(iOS 27.3, *)
+struct SiriMemberCardResult: TransientAppEntity, SnippetRepresentableEntity {
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "メンバーの収支"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Property(title: "メンバー") var memberName: String
+    @Property(title: "メンバーの色", visibility: .internal) var memberColorHex: String
+    @Property(title: "メンバーの写真", visibility: .internal) var memberPhoto: IntentFile?
+    @Property(title: "バーチャルメンバー", visibility: .internal) var memberIsVirtual: Bool
+    @Property(title: "シート名") var sheetName: String
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
+    @Property(title: "対象期間") var period: String
+    @Property(title: "支出") var expenseTotal: String?
+    @Property(title: "収入") var incomeTotal: String?
+    @Property(title: "該当件数") var count: Int
+    @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
+
+    init() {}
+
+    init(memberName: String, memberColorHex: String, memberPhoto: IntentFile?, memberIsVirtual: Bool,
+         sheetName: String, sheetSymbol: String?, sheetColorHex: String?, period: String,
+         expenseTotal: String?, incomeTotal: String?, count: Int, rows: [SiriExpenseCardRow]) {
+        self.memberName = memberName
+        self.memberColorHex = memberColorHex
+        self.memberPhoto = memberPhoto
+        self.memberIsVirtual = memberIsVirtual
+        self.sheetName = sheetName
+        self.sheetSymbol = sheetSymbol
+        self.sheetColorHex = sheetColorHex
+        self.period = period
+        self.expenseTotal = expenseTotal
+        self.incomeTotal = incomeTotal
+        self.count = count
+        self.rows = Array(rows.prefix(5))
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(memberName)", subtitle: "\(sheetName) · \(period)")
+    }
+
+    static var snippet: some EntitySnippetContent<Self> {
+        CardSnippet(supportedFamilies: [.standard]) { result, _ in
+            SiriExpenseCardView(member: result)
         }
     }
 }
@@ -154,11 +202,13 @@ struct SiriExpenseCardView: View {
     private enum Content {
         case search(SiriExpenseCardResult)
         case recorded(SiriRecordedTransaction)
+        case member(SiriMemberCardResult)
     }
     private let content: Content
     private var allowsOpening = true
 
     init(result: SiriExpenseCardResult) { content = .search(result) }
+    init(member: SiriMemberCardResult) { content = .member(member) }
     init(recorded: SiriRecordedTransaction, allowsOpening: Bool = true) {
         content = .recorded(recorded)
         self.allowsOpening = allowsOpening
@@ -189,6 +239,8 @@ struct SiriExpenseCardView: View {
             recorded.row.expenseIdentifier
         case .search(let result):
             result.count == 1 && result.rows.count == 1 ? result.rows.first?.expenseIdentifier : nil
+        case .member:
+            nil
         }
     }
 
@@ -206,6 +258,8 @@ struct SiriExpenseCardView: View {
                 }
             case .search(let result):
                 searchContent(result)
+            case .member(let member):
+                memberContent(member)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,16 +282,83 @@ struct SiriExpenseCardView: View {
         }
 
         if result.rows.isEmpty {
-            Text("該当する支出はありません")
+            Text("該当する明細はありません")
                 .font(.body)
         } else {
             Text(verbatim: result.total)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
-            ViewThatFits(in: .vertical) {
-                ForEach((0...result.rows.count).reversed(), id: \.self) { visibleCount in
-                    list(result, limit: visibleCount)
+            fittingRows(result.rows, count: result.count)
+        }
+    }
+
+    private func memberContent(_ result: SiriMemberCardResult) -> some View {
+        ViewThatFits(in: .vertical) {
+            ForEach((0...result.rows.count).reversed(), id: \.self) { visibleCount in
+                VStack(alignment: .leading, spacing: 8) {
+                    memberHeader(result)
+                    Divider()
+                    if result.count == 0 {
+                        Text("該当する明細はありません")
+                            .font(.subheadline)
+                            .foregroundStyle(secondaryInk)
+                    } else {
+                        list(result.rows, count: result.count, limit: visibleCount)
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func memberHeader(_ result: SiriMemberCardResult) -> some View {
+        VStack(spacing: 10) {
+            AvatarView(photoData: result.memberPhoto?.data, displayName: result.memberName,
+                       colorHex: result.memberColorHex, size: 72, isVirtual: result.memberIsVirtual)
+                .accessibilityHidden(true)
+            Text(verbatim: result.memberName)
+                .font(.title2.weight(.bold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            sheetHeader(name: result.sheetName, detail: result.period,
+                        symbol: result.sheetSymbol, colorHex: result.sheetColorHex)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) { memberTotals(result) }
+                .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 6) { memberTotals(result) }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 2)
+    }
+
+    @ViewBuilder
+    private func memberTotals(_ result: SiriMemberCardResult) -> some View {
+        if let value = result.expenseTotal { memberAmount("支出", value: value) }
+        if let value = result.incomeTotal { memberAmount("収入", value: value) }
+    }
+
+    private func memberAmount(_ label: LocalizedStringKey, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(secondaryInk)
+            Text(verbatim: value)
+                .font(.headline.monospacedDigit())
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func fittingRows(_ rows: [SiriExpenseCardRow], count: Int) -> some View {
+        ViewThatFits(in: .vertical) {
+            ForEach((0...rows.count).reversed(), id: \.self) { visibleCount in
+                list(rows, count: count, limit: visibleCount)
             }
         }
     }
@@ -253,11 +374,11 @@ struct SiriExpenseCardView: View {
         }
     }
 
-    private func list(_ result: SiriExpenseCardResult, limit: Int) -> some View {
+    private func list(_ rows: [SiriExpenseCardRow], count: Int, limit: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(0..<limit, id: \.self) { index in
-                let item = result.rows[index]
-                if index == 0 || result.rows[index - 1].date != item.date {
+                let item = rows[index]
+                if index == 0 || rows[index - 1].date != item.date {
                     Text(verbatim: item.date)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(secondaryInk)
@@ -270,7 +391,7 @@ struct SiriExpenseCardView: View {
                     row(item)
                 }
             }
-            let hiddenCount = result.count - limit
+            let hiddenCount = count - limit
             if hiddenCount > 0 {
                 Text("+\(hiddenCount)件")
                     .font(.caption)

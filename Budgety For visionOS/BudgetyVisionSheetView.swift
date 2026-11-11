@@ -18,6 +18,7 @@ struct BudgetyVisionSheetView: View {
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
     @State private var virtualEditor: RecurringOccurrenceDraft?
+    @State private var showingSettlement = false
 
     private var allExpenses: [Expense] {
         ((sheet.expenses as? Set<Expense>) ?? [])
@@ -83,6 +84,16 @@ struct BudgetyVisionSheetView: View {
         .sheet(item: $editingExpense) { e in
             VisionAddExpenseView(sheet: sheet, expense: e)
         }
+        .sheet(isPresented: $showingSettlement) {
+            NavigationStack {
+                SettlementView(record: sheet)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("閉じる") { showingSettlement = false }
+                        }
+                    }
+            }
+        }
         .sheet(item: $virtualEditor) { draft in
             VisionAddExpenseView(sheet: sheet, expense: draft.expense, isVirtualDraft: true)
         }
@@ -116,7 +127,8 @@ struct BudgetyVisionSheetView: View {
                             .foregroundStyle(.green)
                     }
                 }
-                SheetMemberAvatars(sheet: sheet).fixedSize()
+                SheetSettlementButton(sheet: sheet) { showingSettlement = true }
+                    .fixedSize()
             }
             HStack {
                 Text("今月")

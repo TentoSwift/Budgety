@@ -59,7 +59,7 @@ struct SiriExpensePayer {
         return Self(name: name, colorHex: color, photo: thumbnail(from: photoData))
     }
 
-    private static func thumbnail(from data: Data?) -> IntentFile? {
+    static func thumbnail(from data: Data?) -> IntentFile? {
         guard let data, !data.isEmpty,
               let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { return nil }

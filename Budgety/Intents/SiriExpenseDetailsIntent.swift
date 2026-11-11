@@ -39,8 +39,8 @@ struct SiriExpenseDetailsIntent: AppIntent {
 @available(iOS 27.3, *)
 @AppIntent(.tool)
 struct SiriFindExpenseCardsIntent: AppIntent {
-    static let title: LocalizedStringResource = "支出明細を検索してカードで表示"
-    static let description = IntentDescription("「今日の支出は？」なら今日1日だけ、「今月の支出は？」なら今月の支出を、明細カードと通貨別の金額で返します。「今月の食費」は今月とカテゴリ名「食費」を指定します。店名や支出名でも検索できます。")
+    static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
+    static let description = IntentDescription("シート全体の支出、収入、または両方を日付・月・カテゴリ・店名で検索します。「今月の収支は？」「収入と支出を見せて」では両方を指定し、同じカードに表示します。「今日の支出」は今日1日、「今月の食費」は今月の食費です。", searchKeywords: ["収支", "支出", "収入", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
@@ -49,6 +49,8 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     var expenseName: String?
     @Parameter(title: "カテゴリ名", description: "「今月の食費」なら「食費」。指定されたカテゴリに絞り、店名や日付の条件があれば併用します。")
     var categoryName: String?
+    @Parameter(title: "対象の収支", description: "支出・収入・両方から選びます。「収支」や「収入と支出」は両方。省略時は支出です。")
+    var kind: SiriTransactionSelection?
     @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
     @Parameter(title: "対象日", description: "11月11日など、特定の1日について尋ねられたときの日付。")
@@ -59,12 +61,13 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
         let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period)
-        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter) {
-            try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
+        let selection = kind ?? filter.spokenKind ?? .expense
+        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, kind: selection) {
+            try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を検索しますか？")
         }
         let supporting: LocalizedStringResource = result.card.count == 0
-            ? "該当する支出はありません" : "支出が見つかりました。"
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter)
+            ? "該当する明細はありません" : "明細が見つかりました。"
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
     }
@@ -78,6 +81,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     @Parameter(title: "シートの識別子") var sheetIdentifier: String
     @Parameter(title: "支出名・カテゴリ名") var expenseName: String?
     @Parameter(title: "カテゴリ名") var categoryName: String?
+    @Parameter(title: "対象の収支") var kind: SiriTransactionSelection?
     // Retained to decode snippets created before daily searches were supported.
     @Parameter(title: "対象月") var month: Date?
     @Parameter(title: "期間の開始") var intervalStart: Date?
@@ -86,7 +90,8 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     init() {}
 
-    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter) {
+    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense) {
+        self.kind = kind
         self.sheetIdentifier = sheetIdentifier
         self.expenseName = filter.name
         self.categoryName = filter.categoryName
@@ -113,7 +118,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label)
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label, kind: kind ?? .expense)
         return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
@@ -150,10 +155,10 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func run(sheet: ExpenseSheetEntity?, filter: SiriExpenseSearchFilter,
+    static func run(sheet: ExpenseSheetEntity?, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense,
                     choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
         let sheetID = try await sheetIdentifier(sheet: sheet, choosing: choosing)
-        return try search(sheetID: sheetID, expenseName: filter.name, categoryName: filter.categoryName, interval: filter.scope.interval, periodLabel: filter.scope.label)
+        return try search(sheetID: sheetID, expenseName: filter.name, categoryName: filter.categoryName, interval: filter.scope.interval, periodLabel: filter.scope.label, kind: kind)
     }
 
     @MainActor
@@ -172,69 +177,33 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func search(sheetID: String, expenseName: String?, categoryName: String? = nil, interval: DateInterval?, periodLabel period: String) throws -> Result {
+    static func search(sheetID: String, expenseName: String?, categoryName: String? = nil, interval: DateInterval?, periodLabel period: String,
+                       kind: SiriTransactionSelection = .expense) throws -> Result {
         // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
         let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
         let record = try access.resolve(sheetID)
-        let request = NSFetchRequest<Expense>(entityName: "Expense")
-        var filters = [NSPredicate(format: "sheet == %@", record)]
-        if let interval {
-            filters.append(NSPredicate(format: "date >= %@ AND date < %@", interval.start as NSDate, interval.end as NSDate))
-        }
-        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: filters)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \Expense.date, ascending: false),
-                                   NSSortDescriptor(keyPath: \Expense.createdAt, ascending: false)]
-        request.fetchBatchSize = 64
-
         let name = (expenseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = TransactionSearchTerm(name)
         let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let categoryTerm = TransactionSearchTerm(category)
-        var count = 0
-        var totals: [String: Decimal] = [:]
-        var latest: [LedgerItem] = []
-        func collect(_ item: LedgerItem) {
-            count += 1
-            totals[item.currencyCode.uppercased(), default: 0] += item.amountDecimal
-            // Only the five newest items need display snapshots, including avatar images.
-            if let index = latest.firstIndex(where: { Self.isNewer(item, than: $0) }) {
-                latest.insert(item, at: index)
-                if latest.count > 5 { latest.removeLast() }
-            } else if latest.count < 5 {
-                latest.append(item)
-            }
-        }
-        for expense in try access.context.fetch(request) where expense.kind == .expense && !expense.isSkipped {
-            guard categoryTerm.isEmpty || categoryTerm.matchesCategory(expense.categoryDisplayName),
-                  query.isEmpty || query.matchesNameOrCategory(of: expense) else { continue }
-            collect(.expense(expense))
-        }
-        for occurrence in dueExpenses(in: record, interval: interval) {
-            guard categoryTerm.isEmpty || categoryTerm.matchesCategory(occurrence.categoryDisplayName),
-                  query.isEmpty || query.matchesNameOrCategory(of: occurrence) else { continue }
-            collect(.occurrence(occurrence))
-        }
-        let backing = VirtualRowBacking()
-        lazy var isSoloSheet = !record.hasAcceptedOtherMembers()
-        let rows: [SiriExpenseCardRow] = latest.map { item in
-            switch item {
-            case .expense(let expense):
-                return .from(expense, in: record, isSoloSheet: isSoloSheet)
-            case .occurrence(let occurrence):
-                let display = backing.displayExpense(for: occurrence, sheet: record)
-                return .from(display, in: record, isSoloSheet: isSoloSheet,
-                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record))
-            }
-        }
-
+        let ledger = try SiriTransactionLedger.read(sheet: record, access: access, interval: interval,
+                                                    includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome,
+                                                    expenseName: name, categoryName: category)
+        let rows = ledger.rows
+        let count = ledger.count
         let periodScope = category.isEmpty ? period : String(localized: "\(period)のカテゴリ「\(category)」")
-        let scope = name.isEmpty ? String(localized: "「\(record.displayName)」の\(periodScope)の支出")
-            : String(localized: "「\(record.displayName)」の\(periodScope)で支出名またはカテゴリ名に「\(name)」を含む明細")
+        let scope: String
+        let amounts: String
+        switch kind {
+        case .expense:
+            scope = name.isEmpty ? String(localized: "「\(record.displayName)」の\(periodScope)の支出")
+                : String(localized: "「\(record.displayName)」の\(periodScope)で支出名またはカテゴリ名に「\(name)」を含む明細")
+            amounts = ledger.expenseTotal
+        case .income, .both:
+            let title = kind == .income ? String(localized: "収入") : String(localized: "収支")
+            scope = [record.displayName, periodScope, title, name].filter { !$0.isEmpty }.joined(separator: " · ")
+            amounts = kind == .income ? ledger.incomeTotal : String(localized: "収入 \(ledger.incomeTotal) ／ 支出 \(ledger.expenseTotal)")
+        }
         let summary: String
-        let amounts = totals.sorted { $0.key < $1.key }.map { currency, total in
-            total.formatted(.currency(code: currency).presentation(.isoCode))
-        }.formatted(.list(type: .and))
         var report: String
         if count == 0 {
             summary = String(localized: "\(scope)は見つかりませんでした。")
@@ -264,20 +233,5 @@ enum SiriExpenseLookup {
             occurrence.kind == .expense && (interval.map { occurrence.date < $0.end } ?? true)
         }
     }
-
-    private static func isNewer(_ item: LedgerItem, than other: LedgerItem) -> Bool {
-        if item.date != other.date { return item.date > other.date }
-        switch (item, other) {
-        case (.expense(let lhs), .expense(let rhs)):
-            let left = lhs.createdAt ?? .distantPast
-            let right = rhs.createdAt ?? .distantPast
-            if left != right { return left > right }
-        case (.expense, .occurrence): return true
-        case (.occurrence, .expense): return false
-        case (.occurrence, .occurrence): break
-        }
-        return item.id < other.id
-    }
-
 }
 #endif

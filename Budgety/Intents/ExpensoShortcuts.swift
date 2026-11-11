@@ -24,6 +24,15 @@ struct ExpensoShortcuts: AppShortcutsProvider {
         #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
         if #available(iOS 27.3, *) {
             AppShortcut(
+                intent: SiriFindMemberTransactionsIntent(),
+                phrases: [
+                    "\(.applicationName) でメンバーの収支を調べて",
+                    "Find a member’s income and expenses in \(.applicationName)"
+                ],
+                shortTitle: "メンバーの収支",
+                systemImageName: "person.crop.circle"
+            )
+            AppShortcut(
                 intent: SiriRecordIncomeIntent(),
                 phrases: [
                     "\(.applicationName) で収入を追加",

@@ -50,6 +50,7 @@ struct BudgetyMacSheetView: View {
     @State private var selectedCategory: ExpenseCategory?
     /// 「カテゴリなし」(= category == nil) でフィルタ中か。selectedCategory と相互排他。
     @State private var filterUncategorized: Bool = false
+    @State private var recurrenceFilter: ExpenseRecurrenceFilter = .all
     // 期間フィルタは端末に永続化する (再起動・シート切替後も保持)。
     @AppStorage("sheetDetailPeriod") private var period: Period = .thisMonth
     /// カテゴリフィルタのピル高さ。固定値にせず Dynamic Type に追従させる。
@@ -105,6 +106,7 @@ struct BudgetyMacSheetView: View {
         // date だけだと同日支出の並びが Set 由来でランダム & 再描画で入れ替わるので、
         // createdAt と objectID URI を tiebreaker に使い完全に決定的にする。
         ((sheet.expenses as? Set<Expense>) ?? [])
+            .filter { !$0.isSkipped && !$0.isDeleted }
             .sorted { lhs, rhs in
                 let ld = lhs.date ?? .distantPast
                 let rd = rhs.date ?? .distantPast
@@ -120,7 +122,7 @@ struct BudgetyMacSheetView: View {
     /// カテゴリ・検索クエリで絞り込む (期間は含めない)。
     /// 期間ピッカーは合計にのみ反映する仕様なので、期間の適用は呼び出し側で行う。
     private func applyNonPeriodFilters(_ input: [Expense]) -> [Expense] {
-        var list = input
+        var list = input.filter { recurrenceFilter.matches(isRecurring: $0.generatedFromRuleID != nil) }
         if let cat = selectedCategory {
             list = list.filter { $0.category?.objectID == cat.objectID }
         } else if filterUncategorized {
@@ -188,18 +190,20 @@ struct BudgetyMacSheetView: View {
 
     /// サマリー合計用の仮想 (期間 + フィルタ)。
     private var summaryVirtuals: [RecurringOccurrence] {
-        applyNonPeriodFiltersV(RecurringOccurrenceService.virtualOccurrences(for: sheet, in: effectivePeriod.occurrenceRange))
+        guard recurrenceFilter.matches(isRecurring: true) else { return [] }
+        return applyNonPeriodFiltersV(RecurringOccurrenceService.virtualOccurrences(for: sheet, in: effectivePeriod.occurrenceRange))
     }
 
     /// 一覧用の仮想 (検索中のみ期間を適用)。
     private var listVirtuals: [RecurringOccurrence] {
+        guard recurrenceFilter.matches(isRecurring: true) else { return [] }
         let range = isSearching ? effectivePeriod.occurrenceRange : nil
         return applyNonPeriodFiltersV(RecurringOccurrenceService.virtualOccurrences(for: sheet, in: range))
     }
 
     /// 絞り込みが有効か。
     private var isFiltering: Bool {
-        selectedCategory != nil || filterUncategorized
+        selectedCategory != nil || filterUncategorized || recurrenceFilter != .all
             || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
@@ -307,8 +311,12 @@ struct BudgetyMacSheetView: View {
         ScrollView {
             VStack(spacing: 20) {
                 summaryHero
-                if !usedCategories.isEmpty {
-                    categoryPills
+                HStack {
+                    recurrenceMenu
+                    if !usedCategories.isEmpty || hasUncategorizedExpenses {
+                        categoryPills
+                    }
+                    Spacer(minLength: 0)
                 }
                 expensesList
             }
@@ -474,6 +482,7 @@ struct BudgetyMacSheetView: View {
     }
 
     private func clearFilters() {
+        recurrenceFilter = .all
         searchText = ""
         selectedCategory = nil
         filterUncategorized = false
@@ -568,12 +577,13 @@ struct BudgetyMacSheetView: View {
                     Text(sheet.displayName).font(.title3.weight(.semibold))
                     Spacer()
                     if filtering {
-                        Text("\(listExpenses.count)件")
+                        Text("\(listExpenses.count + listVirtuals.count)件")
                             .font(.sheetNumber(.caption, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
-                SheetMemberAvatars(sheet: sheet).fixedSize()
+                SheetSettlementButton(sheet: sheet) { showingSettlement = true }
+                    .fixedSize()
             }
             periodMenu
             // 大型の収支 (収入 − 支出)。色分けはしない (primary)。
@@ -643,13 +653,11 @@ struct BudgetyMacSheetView: View {
         VStack(spacing: 8) {
             HStack {
                 Text("予算 \(CurrencyCatalog.format(budget, code: code))")
-                    .font(.sheetNumber(.caption))
-                    .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int((ratio * 100).rounded())) %")
-                    .font(.sheetNumber(.caption, weight: .semibold))
-                    .foregroundStyle(color)
             }
+            .font(.sheetNumber(.caption, weight: .semibold))
+            .foregroundStyle(color)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.15))
@@ -661,6 +669,23 @@ struct BudgetyMacSheetView: View {
             .frame(height: 4)
         }
         .padding(.top, 4)
+    }
+
+    private var recurrenceMenu: some View {
+        Menu {
+            Picker("繰り返し", selection: $recurrenceFilter) {
+                ForEach(ExpenseRecurrenceFilter.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(recurrenceFilter == .all ? String(localized: "繰り返し") : recurrenceFilter.label,
+                  systemImage: "repeat")
+        }
+        .fixedSize()
+        .accessibilityLabel("繰り返し")
+        .accessibilityValue(recurrenceFilter.label)
     }
 
     /// カテゴリ絞り込みのチップ列。macOS 26 のメール風に「非選択 = アイコンのみ /

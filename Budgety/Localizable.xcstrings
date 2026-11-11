@@ -1,6 +1,1618 @@
 {
   "sourceLanguage": "ja",
   "strings": {
+    "繰り返しのみ": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur wiederkehrende"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recurring only"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo recurrentes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Récurrentes uniquement"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "반복만"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente recorrentes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅重复项目"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只顯示重複項目"
+          }
+        }
+      }
+    },
+    "繰り返し以外": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur einmalige"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non-recurring only"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo no recurrentes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non récurrentes uniquement"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "반복 제외"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente não recorrentes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅非重复项目"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只顯示非重複項目"
+          }
+        }
+      }
+    },
+    "対象の収支": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buchungsart"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transaction type"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de transacción"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type d’opération"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "거래 유형"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de transação"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收支类型"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收支類型"
+          }
+        }
+      }
+    },
+    "収入と支出": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen und Ausgaben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income and expenses"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingresos y gastos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recettes et dépenses"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "수입과 지출"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receitas e despesas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收入与支出"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收入與支出"
+          }
+        }
+      }
+    },
+    "収支": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen und Ausgaben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income and expenses"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingresos y gastos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recettes et dépenses"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "수입과 지출"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receitas e despesas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收支"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收支"
+          }
+        }
+      }
+    },
+    "人別に収入と支出を検索": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen und Ausgaben nach Mitglied suchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find income and expenses by member"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar ingresos y gastos por miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher les recettes et dépenses par membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버별 수입 및 지출 검색"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar receitas e despesas por membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按成员查找收支"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "依成員查詢收支"
+          }
+        }
+      }
+    },
+    "メンバーの収支カードを表示": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karte mit Einnahmen und Ausgaben eines Mitglieds anzeigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a member’s income and expenses card"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar la tarjeta de ingresos y gastos de un miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la fiche des recettes et dépenses d’un membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버의 수입 및 지출 카드 표시"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar o cartão de receitas e despesas de um membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示成员收支卡片"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示成員收支卡片"
+          }
+        }
+      }
+    },
+    "メンバーの識別子": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitgliedskennung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member identifier"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identificador del miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiant du membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버 식별자"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identificador do membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成员标识符"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成員識別碼"
+          }
+        }
+      }
+    },
+    "シートの収入・支出を検索して表示": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen und Ausgaben in einem Blatt suchen und anzeigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find and show income and expenses in a sheet"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar y mostrar los ingresos y gastos de una hoja"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher et afficher les recettes et dépenses d’une feuille"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시트의 수입 및 지출 검색 및 표시"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar e mostrar receitas e despesas de uma planilha"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查找并显示账本收支"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查詢並顯示帳本收支"
+          }
+        }
+      }
+    },
+    "どのシートの明細を検索しますか？": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welches Blatt möchtest du durchsuchen?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which sheet would you like to search?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿En qué hoja quieres buscar transacciones?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dans quelle feuille voulez-vous rechercher des opérations ?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "어느 시트에서 거래 내역을 검색할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Em qual planilha você quer buscar as transações?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要在哪个账本中查找明细？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要在哪個帳本裡查詢明細？"
+          }
+        }
+      }
+    },
+    "明細が見つかりました。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passende Buchungen gefunden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Found matching transactions."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se encontraron transacciones coincidentes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des opérations correspondantes ont été trouvées."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "조건에 맞는 거래 내역을 찾았습니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foram encontradas transações correspondentes."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已找到符合条件的明细。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已找到符合條件的明細。"
+          }
+        }
+      }
+    },
+    "収入 %@ ／ 支出 %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen %1$@ · Ausgaben %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Income %1$@ · Expenses %2$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingresos %1$@ · Gastos %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recettes %1$@ · Dépenses %2$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "수입 %1$@ · 지출 %2$@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receitas %1$@ · Despesas %2$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收入 %1$@ · 支出 %2$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收入 %1$@ · 支出 %2$@"
+          }
+        }
+      }
+    },
+    "明細の検索結果": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchergebnisse für Buchungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transaction search results"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultados de búsqueda de transacciones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Résultats de la recherche d’opérations"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "거래 내역 검색 결과"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resultados da busca de transações"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明细搜索结果"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明細搜尋結果"
+          }
+        }
+      }
+    },
+    "検索した明細名": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesuchter Buchungsname"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transaction name searched for"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de la transacción buscada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de l’opération recherchée"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색한 거래명"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome da transação buscada"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索的明细名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋的明細名稱"
+          }
+        }
+      }
+    },
+    "シートのアイコン": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blattsymbol"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheet icon"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icono de la hoja"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icône de la feuille"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시트 아이콘"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ícone da planilha"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账本图标"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帳本圖示"
+          }
+        }
+      }
+    },
+    "シートの色": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blattfarbe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sheet color"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color de la hoja"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur de la feuille"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시트 색상"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cor da planilha"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账本颜色"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帳本顏色"
+          }
+        }
+      }
+    },
+    "該当件数": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anzahl der Treffer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Number of matches"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Número de coincidencias"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de résultats"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색 결과 수"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Número de resultados"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匹配条数"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "符合筆數"
+          }
+        }
+      }
+    },
+    "新しい順の明細": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buchungen, neueste zuerst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transactions, newest first"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transacciones más recientes primero"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opérations, de la plus récente à la plus ancienne"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신순 거래 내역"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transações, da mais recente à mais antiga"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明细（从新到旧）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明細（由新到舊）"
+          }
+        }
+      }
+    },
+    "発話で指定されたシート。省略時は選んだメンバーのシートを使います。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das in der Anfrage genannte Blatt. Ohne Angabe wird das Blatt des gewählten Mitglieds verwendet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sheet named in the request. If omitted, use the selected member’s sheet."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La hoja indicada en la solicitud. Si se omite, se usa la del miembro seleccionado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La feuille nommée dans la demande. Si elle est omise, utiliser celle du membre sélectionné."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청에서 지정한 시트입니다. 생략하면 선택한 멤버의 시트를 사용합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A planilha mencionada no pedido. Se omitida, use a planilha do membro selecionado."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请求中指定的账本。未指定时使用所选成员的账本。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要求中指定的帳本。未指定時使用所選成員的帳本。"
+          }
+        }
+      }
+    },
+    "指定した人。自分、共有メンバー、バーチャルメンバーから名前で選びます。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die in der Anfrage genannte Person. Wähle dich selbst, ein Mitglied eines geteilten Blatts oder ein virtuelles Mitglied anhand des Namens."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The person named in the request. Choose yourself, a shared member, or a virtual member by name."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La persona indicada. Elige por nombre entre tú, un miembro de una hoja compartida o un miembro virtual."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La personne désignée. Choisir par nom parmi vous-même, les membres du partage et les membres virtuels."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청에서 지정한 사람입니다. 본인, 공유 멤버 또는 가상 멤버 중 이름으로 선택합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pessoa indicada. Escolha pelo nome entre você, um membro de uma planilha compartilhada e um membro virtual."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请求中指定的人。可按名称选择自己、共享成员或虚拟成员。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要求中指定的人。可依名稱選擇自己、共享成員或虛擬成員。"
+          }
+        }
+      }
+    },
+    "支払った金額は支出、受け取った金額は収入。「収支」「収入と支出」や種別の指定がない質問は両方です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gezahlte Beträge sind Ausgaben, erhaltene Beträge sind Einnahmen. Bei „Einnahmen und Ausgaben“ oder ohne Angabe beide auswählen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amounts paid are expenses and amounts received are income. Include both for “income and expenses” or when no type is specified."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los importes pagados son gastos y los recibidos son ingresos. Incluye ambos si se piden «ingresos y gastos» o no se indica el tipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les sommes payées sont des dépenses, les sommes reçues des recettes. Inclure les deux pour « recettes et dépenses » ou si aucun type n’est précisé."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지불한 금액은 지출, 받은 금액은 수입입니다. «수입과 지출» 또는 유형이 지정되지 않은 질문에는 둘 다 포함합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valores pagos são despesas e valores recebidos são receitas. Inclua ambos em pedidos de “receitas e despesas” ou quando o tipo não for especificado."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支付的金额为支出，收到的金额为收入。询问“收支”“收入与支出”或未指定类型时，两者都包括。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支付的金額為支出，收到的金額為收入。詢問「收支」、「收入與支出」或未指定類型時，兩者都包含。"
+          }
+        }
+      }
+    },
+    "今日・昨日・今月・先月・全期間。省略時は今月です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heute, gestern, diesen Monat, letzten Monat oder der gesamte Zeitraum. Standard ist dieser Monat."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today, yesterday, this month, last month, or all time. Defaults to this month."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoy, ayer, este mes, el mes pasado o todo el período. Por omisión, este mes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aujourd’hui, hier, ce mois-ci, le mois dernier ou toute la période. Par défaut, le mois en cours."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘, 어제, 이번 달, 지난달 또는 전체 기간입니다. 기본값은 이번 달입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoje, ontem, este mês, mês passado ou todo o período. O padrão é este mês."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今天、昨天、本月、上月或全部时间。默认为本月。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今天、昨天、本月、上個月或全部期間。預設為本月。"
+          }
+        }
+      }
+    },
+    "特定の年月を指定したときの月。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Monat, wenn Monat und Jahr angegeben sind."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The month when a specific month and year are given."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El mes, si se especifican un mes y un año."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mois, si un mois et une année sont précisés."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연도와 월을 지정한 경우 해당 월입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O mês, quando o mês e o ano forem especificados."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定年月时对应的月份。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定年月時對應的月份。"
+          }
+        }
+      }
+    },
+    "特定の1日を指定したときの日付。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Datum, wenn ein einzelner Tag angegeben ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The date when a specific day is given."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La fecha, si se indica un día concreto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La date, si un jour particulier est précisé."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "특정한 하루를 지정한 경우 해당 날짜입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A data, quando um dia específico for indicado."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定某一天时对应的日期。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定某一天時對應的日期。"
+          }
+        }
+      }
+    },
+    "支出・収入・両方から選びます。「収支」や「収入と支出」は両方。省略時は支出です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgaben, Einnahmen oder beides wählen. Für „Einnahmen und Ausgaben“ beides wählen. Standard ist Ausgaben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose expenses, income, or both. For “income and expenses”, choose both. Defaults to expenses."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige gastos, ingresos o ambos. Para «ingresos y gastos», elige ambos. Por omisión se muestran los gastos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir les dépenses, les recettes ou les deux. Pour « recettes et dépenses », choisir les deux. Le choix par défaut est « dépenses »."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지출, 수입 또는 둘 다 선택합니다. «수입과 지출»은 둘 다 포함하며, 기본값은 지출입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha despesas, receitas ou ambos. Para “receitas e despesas”, escolha ambos. O padrão é despesas."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择支出、收入或两者。询问“收支”或“收入与支出”时选择两者。默认为支出。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇支出、收入或兩者。詢問「收支」或「收入與支出」時選擇兩者。預設為支出。"
+          }
+        }
+      }
+    },
+    "「はるさんの今月の支出は？」「私の収入は？」「はるさんの収入と支出を見せて」のように、家計簿のメンバー別に明細を検索し、写真と名前の付いたカードで返します。支出は支払った人、収入は受け取った人で検索します。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buchungen nach Mitglied suchen und auf einer Karte mit Foto und Namen anzeigen. Beispiele: „Wie viel hat Haru diesen Monat ausgegeben?“, „Wie hoch sind meine Einnahmen?“ oder „Zeige Harus Einnahmen und Ausgaben.“ Bei Ausgaben zählt die zahlende, bei Einnahmen die empfangende Person."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search transactions by member and show a card with their photo and name. Try “How much did Haru spend this month?”, “What was my income?”, or “Show Haru’s income and expenses.” Expenses match the payer and income matches the recipient."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busca transacciones por miembro y muestra una tarjeta con su foto y nombre. Prueba «¿Cuánto gastó Haru este mes?», «¿Cuáles son mis ingresos?» o «Muéstrame los ingresos y gastos de Haru». Los gastos se buscan por quien pagó y los ingresos por quien los recibió."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher les opérations par membre et afficher une fiche avec sa photo et son nom. Par exemple : « Combien Haru a-t-il dépensé ce mois-ci ? », « Quelles sont mes recettes ? » ou « Montre-moi les recettes et les dépenses de Haru ». Les dépenses sont attribuées à la personne qui a payé et les recettes à celle qui les a reçues."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버별로 거래를 찾아 사진과 이름이 담긴 카드로 표시합니다. “하루가 이번 달에 얼마 썼어?”, “내 수입은 얼마야?”, “하루의 수입과 지출을 보여 줘”처럼 물어보세요. 지출은 지불한 사람, 수입은 받은 사람을 기준으로 찾습니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busca transações por membro e mostra um cartão com foto e nome. Experimente “Quanto Haru gastou este mês?”, “Qual foi a minha receita?” ou “Mostre as receitas e despesas de Haru”. As despesas são buscadas por quem pagou e as receitas por quem recebeu."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按成员查找明细，并用带照片和姓名的卡片显示。可以问“阿春这个月花了多少钱？”“我的收入是多少？”或“看看阿春的收入和支出”。支出按付款人查找，收入按收款人查找。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "依成員查詢明細，並以附有照片和姓名的卡片顯示。可以問「小春這個月花了多少錢？」「我的收入是多少？」或「顯示小春的收入與支出」。支出依付款人查詢，收入依收款人查詢。"
+          }
+        }
+      }
+    },
+    "シート全体の支出、収入、または両方を日付・月・カテゴリ・店名で検索します。「今月の収支は？」「収入と支出を見せて」では両方を指定し、同じカードに表示します。「今日の支出」は今日1日、「今月の食費」は今月の食費です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgaben, Einnahmen oder beides in einem Blatt nach Datum, Monat, Kategorie oder Geschäft suchen. „Zeige meine Einnahmen und Ausgaben diesen Monat“ zeigt beides auf einer Karte. „Heutige Ausgaben“ umfasst nur heute, „Lebensmittel diesen Monat“ nur die passende Kategorie im laufenden Monat."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search a sheet’s expenses, income, or both by date, month, category, or merchant. “What were my income and expenses this month?” shows both in one card. “Today’s expenses” covers today only, and “food this month” filters this month by the food category."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busca en una hoja gastos, ingresos o ambos por fecha, mes, categoría o comercio. «Muéstrame los ingresos y gastos de este mes» muestra ambos en una tarjeta. «Gastos de hoy» abarca solo hoy y «comida este mes» filtra por esa categoría en el mes actual."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher les dépenses, les recettes ou les deux dans une feuille par date, mois, catégorie ou commerce. « Montre-moi les recettes et les dépenses de ce mois-ci » affiche les deux sur la même fiche. « Dépenses du jour » se limite à aujourd’hui et « alimentation ce mois-ci » filtre par catégorie pour le mois en cours."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시트 전체의 지출, 수입 또는 둘 다 날짜, 월, 카테고리, 상점명으로 검색합니다. “이번 달 수입과 지출을 보여 줘”는 둘 다 한 카드에 표시합니다. “오늘 지출”은 오늘 하루만, “이번 달 식비”는 이번 달의 식비만 찾습니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busca despesas, receitas ou ambas em uma planilha por data, mês, categoria ou estabelecimento. “Mostre as receitas e despesas deste mês” mostra ambas no mesmo cartão. “Despesas de hoje” abrange só o dia de hoje, e “alimentação neste mês” filtra pela categoria no mês atual."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按日期、月份、类别或商户名称查找整个账本的支出、收入或两者。询问“本月的收支是多少？”或“看看收入和支出”时，两者会显示在同一张卡片上。“今天的支出”只涵盖今天，“本月的餐费”只查找本月餐费。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "依日期、月份、類別或商家名稱查詢整個帳本的支出、收入或兩者。詢問「這個月的收支是多少？」或「顯示收入與支出」時，兩者會顯示在同一張卡片上。「今天的支出」只涵蓋今天，「本月的餐費」只查詢本月餐費。"
+          }
+        }
+      }
+    },
+    "メンバーの収支": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einnahmen und Ausgaben des Mitglieds"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member transactions"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingresos y gastos del miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recettes et dépenses du membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버의 수입 및 지출"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receitas e despesas do membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成员收支"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成員收支"
+          }
+        }
+      }
+    },
+    "該当する明細はありません": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine passenden Buchungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching transactions"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay transacciones coincidentes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune opération correspondante"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해당하는 거래 내역이 없습니다"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma transação correspondente"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有符合条件的明细"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有符合條件的明細"
+          }
+        }
+      }
+    },
+    "メンバーの写真": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foto des Mitglieds"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member photo"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foto del miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo du membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버 사진"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foto do membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成员照片"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成員照片"
+          }
+        }
+      }
+    },
+    "メンバーの色": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbe des Mitglieds"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member color"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color del miembro"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur du membre"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "멤버 색상"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cor do membro"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成员颜色"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "成員顏色"
+          }
+        }
+      }
+    },
     "": {},
     " ": {},
     " 提案": {

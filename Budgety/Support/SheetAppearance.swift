@@ -10,8 +10,9 @@ extension Font {
     }
 }
 
-struct SheetMemberAvatars: View {
+struct SheetSettlementButton: View {
     @ObservedObject var sheet: ExpenseSheet
+    let action: () -> Void
     @ObservedObject private var profiles = PublicProfileSync.shared
     @ObservedObject private var userProfile = UserProfileStore.shared
     @ScaledMetric(relativeTo: .body) private var overlap: CGFloat = 6
@@ -19,23 +20,29 @@ struct SheetMemberAvatars: View {
     var body: some View {
         let members = sheet.acceptedMemberProfileIDs()
         if members.count > 1 || members.contains(where: UserProfileStore.isVirtualRecordName) {
-            HStack(spacing: -overlap) {
-                ForEach(members.prefix(4), id: \.self) { id in
-                    let info = sheet.memberDisplayInfo(for: id)
-                    AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 28,
-                               isVirtual: UserProfileStore.isVirtualRecordName(id))
-                        .overlay { Circle().strokeBorder(.background, lineWidth: 1.5) }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(Text(verbatim: info.name))
+            let visible = members.prefix(4).map { (id: $0, info: sheet.memberDisplayInfo(for: $0)) }
+            Button(action: action) {
+                HStack(spacing: -overlap) {
+                    ForEach(visible, id: \.id) { member in
+                        AvatarView(photoData: member.info.photoData, displayName: member.info.name,
+                                   colorHex: member.info.colorHex, size: 28,
+                                   isVirtual: UserProfileStore.isVirtualRecordName(member.id))
+                            .overlay { Circle().strokeBorder(.background, lineWidth: 1.5) }
+                    }
+                    if members.count > visible.count {
+                        Text("+\(members.count - visible.count)")
+                            .font(.sheetNumber(.caption, weight: .semibold))
+                            .padding(5)
+                            .background(.background, in: Capsule())
+                    }
                 }
-                if members.count > 4 {
-                    Text("+\(members.count - 4)")
-                        .font(.sheetNumber(.caption, weight: .semibold))
-                        .padding(5)
-                        .background(.background, in: Capsule())
-                }
+                .frame(minWidth: 44, minHeight: 44, alignment: .topTrailing)
+                .contentShape(Rectangle())
             }
-            .accessibilityElement(children: .combine)
+            .buttonStyle(.plain)
+            .accessibilityLabel("精算")
+            .accessibilityValue(Text(verbatim: visible.map { $0.info.name }.formatted(.list(type: .and))))
+            .accessibilityIdentifier("sheetSettlementButton")
         }
     }
 }
