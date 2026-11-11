@@ -77,9 +77,9 @@ struct IntentSheetAccess {
     }
 }
 
-struct ExpenseSheetEntityQuery: EntityStringQuery {
+struct ExpenseSheetEntityQuery: EntityStringQuery, EnumerableEntityQuery {
     @MainActor
-    func suggestedEntities() async throws -> [ExpenseSheetEntity] {
+    func allEntities() async throws -> [ExpenseSheetEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         return try access.sheets().map(ExpenseSheetEntity.from)
     }
@@ -87,7 +87,7 @@ struct ExpenseSheetEntityQuery: EntityStringQuery {
     @MainActor
     func entities(matching string: String) async throws -> [ExpenseSheetEntity] {
         let search = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sheets = try await suggestedEntities()
+        let sheets = try await allEntities()
         return search.isEmpty ? sheets : sheets.filter { $0.name.localizedStandardContains(search) }
     }
 
