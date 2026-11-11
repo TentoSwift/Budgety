@@ -15,7 +15,7 @@ from uuid import uuid4
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INTENT = "SiriExpenseDetailsIntent"
+INTENT = "SiriFindExpenseCardsIntent"
 CONFIGURATIONS = {"development": "Debug", "production": "Release"}
 
 
@@ -54,7 +54,6 @@ def actions(app, ask_id, lookup_id):
         action("is.workflow.actions.ask", UUID=ask_id, WFAskActionPrompt="どの支出名を検索しますか？"),
         action(app["BundleIdentifier"] + "." + INTENT, UUID=lookup_id, AppIntentDescriptor=app,
                expenseName=output(ask_id, "入力を要求")),
-        action("is.workflow.actions.showresult", Text=output(lookup_id, "支出名で明細を確認")),
     ]
 
 
