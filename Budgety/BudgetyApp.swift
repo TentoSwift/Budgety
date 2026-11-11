@@ -107,8 +107,6 @@ struct BudgetyApp: App {
                         .displayFrequency(.daily),
                         .datastoreLocation(.applicationDefault)
                     ])
-                    // シートを Spotlight に索引し、以後の変更で自動更新する。
-                    SpotlightIndexer.start(context: persistenceController.container.viewContext)
                     // オンボーディングは初回起動時のみ表示。
                     if onboardingFlow == nil, !hasShownOnboarding {
                         onboardingFlow = .welcome

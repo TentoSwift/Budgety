@@ -63,6 +63,12 @@ final class SheetLockManager: ObservableObject {
         sheet.lockPasswordSalt = salt
         sheet.lockPasswordHash = hash
         sheet.lockBiometricEnabled = enableBiometric
+        #if !os(watchOS)
+        // Hide the sheet from search even if saving the new password fails.
+        if let context = sheet.managedObjectContext {
+            SpotlightIndexer.reindexAllSheets(in: context)
+        }
+        #endif
         saveContext(of: sheet)
         // 設定直後は当然解錠扱い
         unlockedSheetURIs.insert(uriString(for: sheet))

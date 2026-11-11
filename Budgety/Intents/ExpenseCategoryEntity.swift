@@ -19,6 +19,11 @@ import AppKit
 import SwiftUI
 
 struct ExpenseCategoryEntity: AppEntity {
+    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, *)
+    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
+    #endif
+
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "カテゴリ")
     }
@@ -47,7 +52,7 @@ struct ExpenseCategoryEntity: AppEntity {
     }
 }
 
-struct ExpenseCategoryEntityQuery: EntityQuery {
+struct ExpenseCategoryEntityQuery: EntityStringQuery {
     /// AddExpenseIntent で選択中のシートに依存する。シートが選ばれていれば、その
     /// シートのカテゴリだけを候補にする (シート間で同名カテゴリが重複しないように)。
     @IntentParameterDependency<AddExpenseIntent>(\.$sheet)
@@ -55,8 +60,7 @@ struct ExpenseCategoryEntityQuery: EntityQuery {
 
     @MainActor
     func suggestedEntities() async throws -> [ExpenseCategoryEntity] {
-        let pc = PersistenceController.shared
-        let ctx = pc.container.viewContext
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let req = NSFetchRequest<ExpenseCategory>(entityName: "ExpenseCategory")
         req.sortDescriptors = [
             NSSortDescriptor(keyPath: \ExpenseCategory.sortOrder, ascending: true),
@@ -66,25 +70,29 @@ struct ExpenseCategoryEntityQuery: EntityQuery {
         var predicates = [NSPredicate(format: "kindRaw == %@ OR kindRaw == nil OR kindRaw == ''",
                                       TransactionKind.expense.rawValue)]
         // シートが選択済みなら、そのシートのカテゴリだけに絞る。
-        if let sheetEntity = addExpense?.sheet,
-           let url = URL(string: sheetEntity.id),
-           let oid = pc.container.persistentStoreCoordinator
-            .managedObjectID(forURIRepresentation: url),
-           let sheet = try? ctx.existingObject(with: oid) as? ExpenseSheet {
+        if let selected = addExpense?.sheet {
+            guard let sheet = try? access.resolve(selected.id) else { return [] }
             predicates.append(NSPredicate(format: "sheet == %@", sheet))
         }
         req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
-        let cats = (try? ctx.fetch(req)) ?? []
-        // 先頭に「AI 提案」、末尾に「未分類」sentinel を追加 (どちらも選択肢として出す)
-        return [ExpenseCategoryEntity.aiSuggestionEntity()]
-            + cats.map { ExpenseCategoryEntity.from($0) }
-            + [ExpenseCategoryEntity.skipEntity()]
+        let categories = try access.context.fetch(req).filter { category in
+            category.sheet.map(access.allows) == true
+        }
+        return [ExpenseCategoryEntity.aiSuggestionEntity()] + categories.map(ExpenseCategoryEntity.from) +
+            [ExpenseCategoryEntity.skipEntity()]
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [ExpenseCategoryEntity] {
+        let search = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let categories = try await suggestedEntities()
+        return search.isEmpty ? categories : categories.filter { $0.name.localizedStandardContains(search) }
     }
 
     @MainActor
     func entities(for identifiers: [String]) async throws -> [ExpenseCategoryEntity] {
-        let pc = PersistenceController.shared
-        let ctx = pc.container.viewContext
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let ctx = access.context
         var result: [ExpenseCategoryEntity] = []
         for idStr in identifiers {
             // AI 提案 sentinel: そのまま返す
@@ -98,9 +106,9 @@ struct ExpenseCategoryEntityQuery: EntityQuery {
                 continue
             }
             guard let url = URL(string: idStr),
-                  let oid = pc.container.persistentStoreCoordinator
-                    .managedObjectID(forURIRepresentation: url),
-                  let cat = try? ctx.existingObject(with: oid) as? ExpenseCategory
+                  let oid = ctx.persistentStoreCoordinator?.managedObjectID(forURIRepresentation: url),
+                  let cat = try? ctx.existingObject(with: oid) as? ExpenseCategory,
+                  cat.sheet.map(access.allows) == true
             else { continue }
             result.append(ExpenseCategoryEntity.from(cat))
         }

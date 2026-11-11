@@ -80,6 +80,19 @@ struct SettingsView: View {
                     }
                 }
 
+                #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+                if #available(iOS 27.3, *) {
+                    Section {
+                        Text("「Budgetyの家計にランチ代800円を記録して」")
+                        Text("「Budgetyの家計で先月いくら使った？」")
+                    } header: {
+                        Text("Siri AI")
+                    } footer: {
+                        Text("「家計」を自分のシート名に置き換えて、Siriに話しかけてください。パスワード付きのシートは対象外です。")
+                    }
+                }
+                #endif
+
                 // Claude / MCP 連携は macOS 専用 (アプリ本体を MCP サーバーとして登録する方式)。
                 // iOS はバイナリを CLI 起動できないため、この導線は macOS のみに置く。
                 // iOS では設定できないため、案内のみ footer に表示する。

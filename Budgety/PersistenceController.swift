@@ -200,6 +200,8 @@ final class PersistenceController: ObservableObject {
         #endif
         #if os(iOS)
         if !inMemory {
+            // Siri can launch the app in the background without creating a SwiftUI scene.
+            SpotlightIndexer.start(context: container.viewContext)
             widgetPublisher = WidgetSnapshotPublisher(container: container)
         }
         #endif

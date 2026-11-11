@@ -16,6 +16,7 @@ import CoreData
 import SwiftUI
 
 #if canImport(CoreSpotlight)
+import AppIntents
 import CoreSpotlight
 import UniformTypeIdentifiers
 #endif
@@ -52,74 +53,73 @@ enum SpotlightIndexer {
 
     #if canImport(CoreSpotlight)
 
-    /// 保存/リモート変更が連続した時に索引を作り直しすぎないための debounce。
-    private static var pendingReindex: DispatchWorkItem?
-    private static var isObserving = false
+    @MainActor private static var pendingContext: NSManagedObjectContext?
+    @MainActor private static var isReindexing = false
+    @MainActor private static var isObserving = false
 
-    /// 起動時に一度呼ぶ。全シートを索引し、以後の保存/リモート変更で自動更新する。
     @MainActor
     static func start(context: NSManagedObjectContext) {
         reindexAllSheets(in: context)
         guard !isObserving else { return }
         isObserving = true
         let center = NotificationCenter.default
-        for name in [NSManagedObjectContext.didSaveObjectsNotification,
-                     Notification.Name.NSPersistentStoreRemoteChange] {
-            center.addObserver(forName: name, object: nil, queue: .main) { _ in
-                // queue: .main のため必ずメインスレッドで呼ばれる。
-                MainActor.assumeIsolated { scheduleReindex(context: context) }
+        center.addObserver(forName: NSManagedObjectContext.didSaveObjectIDsNotification,
+                           object: nil, queue: nil) { note in
+            let changedSheets = [NSInsertedObjectIDsKey, NSUpdatedObjectIDsKey, NSDeletedObjectIDsKey]
+                .contains { key in
+                    let ids = note.userInfo?[key] as? Set<NSManagedObjectID>
+                    return ids?.contains { $0.entity.name == "ExpenseSheet" } == true
+                }
+            if changedSheets {
+                Task { @MainActor in reindexAllSheets(in: context) }
+            }
+        }
+        var notifications: [Notification.Name] = [.NSPersistentStoreRemoteChange, .expensoStoreReset]
+        #if os(iOS)
+        notifications.append(UIApplication.didBecomeActiveNotification)
+        #endif
+        for name in notifications {
+            center.addObserver(forName: name, object: nil, queue: nil) { _ in
+                Task { @MainActor in reindexAllSheets(in: context) }
             }
         }
     }
 
-    @MainActor
-    private static func scheduleReindex(context: NSManagedObjectContext) {
-        pendingReindex?.cancel()
-        let work = DispatchWorkItem {
-            MainActor.assumeIsolated { reindexAllSheets(in: context) }
-        }
-        pendingReindex = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
-    }
-
-    /// 全シートを Spotlight に再登録する (ドメインを空にしてから入れ直すので
-    /// 削除・リネームも確実に反映される)。
+    /// 全世代でドメインを共有する。古いバージョンで登録された保護済みシートも消去する。
     @MainActor
     static func reindexAllSheets(in context: NSManagedObjectContext) {
-        let request = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-        let sheets = (try? context.fetch(request)) ?? []
-        let items: [CSSearchableItem] = sheets.compactMap { sheet in
-            sheet.objectID.isTemporaryID ? nil : makeItem(for: sheet)
-        }
-        #if DEBUG
-        NSLog("[Spotlight] reindex: %d sheets fetched, %d indexable (indexingAvailable=%@)",
-              sheets.count, items.count, CSSearchableIndex.isIndexingAvailable() ? "YES" : "NO")
-        #endif
-        let index = CSSearchableIndex.default()
-        index.deleteSearchableItems(withDomainIdentifiers: [sheetDomain]) { deleteError in
-            #if DEBUG
-            if let deleteError { NSLog("[Spotlight] delete error: %@", deleteError.localizedDescription) }
-            #endif
-            guard !items.isEmpty else { return }
-            index.indexSearchableItems(items) { indexError in
-                #if DEBUG
-                if let indexError {
-                    NSLog("[Spotlight] index error: %@", indexError.localizedDescription)
-                } else {
-                    NSLog("[Spotlight] indexed %d items OK", items.count)
+        pendingContext = context
+        guard !isReindexing else { return }
+        isReindexing = true
+        Task { @MainActor in
+            defer { isReindexing = false }
+            let index = CSSearchableIndex.default()
+            while let context = pendingContext {
+                pendingContext = nil
+                do {
+                    try await index.deleteSearchableItems(withDomainIdentifiers: [sheetDomain])
+                    // An update during deletion supersedes this snapshot. Keep all index
+                    // operations ordered so an older write cannot republish a locked sheet.
+                    if pendingContext != nil { continue }
+                    let access = try IntentSheetAccess(checking: context)
+                    let items = try access.sheets().map { makeItem(for: $0) }
+                    if !items.isEmpty {
+                        try await index.indexSearchableItems(items)
+                    }
+                } catch {
+                    #if DEBUG
+                    NSLog("[Spotlight] reindex failed: %@", error.localizedDescription)
+                    #endif
                 }
-                #endif
             }
         }
     }
 
     /// Spotlight の一意識別子 (= objectID URI) から ExpenseSheet の objectID を復元する。
+    @MainActor
     static func objectID(forIdentifier identifier: String,
                          in context: NSManagedObjectContext) -> NSManagedObjectID? {
-        guard let url = URL(string: identifier),
-              let coordinator = context.persistentStoreCoordinator,
-              let oid = coordinator.managedObjectID(forURIRepresentation: url) else { return nil }
-        return oid
+        try? IntentSheetAccess(checking: context).resolve(identifier).objectID
     }
 
     // MARK: - CSSearchableItem 生成
@@ -141,9 +141,10 @@ enum SpotlightIndexer {
         }
         #endif
         let identifier = sheet.objectID.uriRepresentation().absoluteString
-        return CSSearchableItem(uniqueIdentifier: identifier,
-                                domainIdentifier: sheetDomain,
-                                attributeSet: attributes)
+        let item = CSSearchableItem(uniqueIdentifier: identifier, domainIdentifier: sheetDomain,
+                                    attributeSet: attributes)
+        item.associateAppEntity(ExpenseSheetEntity.from(sheet))
+        return item
     }
 
     #if canImport(UIKit)
@@ -175,8 +176,13 @@ enum SpotlightIndexer {
 
     @MainActor static func start(context: NSManagedObjectContext) {}
     @MainActor static func reindexAllSheets(in context: NSManagedObjectContext) {}
+    @MainActor
     static func objectID(forIdentifier identifier: String,
                          in context: NSManagedObjectContext) -> NSManagedObjectID? { nil }
 
     #endif
 }
+
+#if canImport(CoreSpotlight)
+extension ExpenseSheetEntity: IndexedEntity {}
+#endif

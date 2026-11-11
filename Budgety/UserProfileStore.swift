@@ -700,7 +700,7 @@ final class UserProfileStore: ObservableObject {
     /// 1 シートに自分の ParticipantProfile が **無ければ** 直近の UserProfileStore 値で作成する。
     /// 既存 PP は触らない (シートごとに独立な per-sheet プロフィールを尊重するため)。
     /// 共有受諾後・新規シート作成直後の初期化に使う。
-    func ensureProfile(in sheet: ExpenseSheet, ctx: NSManagedObjectContext) {
+    func ensureProfile(in sheet: ExpenseSheet, ctx: NSManagedObjectContext, saveChanges: Bool = true) {
         guard let recordName = selfRecordNameForPP(in: sheet), !recordName.isEmpty else { return }
         if findSelfPP(in: sheet) != nil { return }
         writeParticipantProfile(
@@ -710,7 +710,7 @@ final class UserProfileStore: ObservableObject {
             photoData: photoData,
             ctx: ctx, now: Date()
         )
-        if ctx.hasChanges { try? ctx.save() }
+        if saveChanges && ctx.hasChanges { try? ctx.save() }
     }
 
     /// 自分の PP がまだ存在しないシートにだけ PP を作る (既存シートの値は上書きしない)。

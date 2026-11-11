@@ -1,0 +1,72 @@
+// The Siri AI tool trait was introduced in the iOS 27.3 App Intents SDK.
+#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+import AppIntents
+import CoreData
+import Foundation
+
+@available(iOS 27.3, *)
+@AppIntent(.tool)
+struct SiriRecordExpenseIntent: AppIntent {
+    static let title: LocalizedStringResource = "シートに支出を記録"
+    static let description = IntentDescription("指定したBudgetyのシートに支出を1件記録します。通貨を省略するとシートの既定通貨、日付を省略すると今日の日付を使います。")
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "シート", description: "この支出を記録する家計簿または旅行などのシート。")
+    var sheet: ExpenseSheetEntity
+
+    @Parameter(title: "金額", description: "実際に支払った、0より大きい金額。")
+    var amount: Double
+
+    @Parameter(title: "支払通貨", description: "通貨の指定があれば、日本円はJPY、米ドルはUSDのようにISO通貨コードで指定します。通貨の指定がない場合は省略します。")
+    var currencyCode: String?
+
+    @Parameter(title: "内容", description: "ランチや電車代など、この支出の内容。")
+    var expenseTitle: String?
+
+    @Parameter(title: "支払日", description: "支出の日付。省略すると今日になります。")
+    var date: Date?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let dialog = try await AddExpenseIntent.record(sheet: sheet, amount: amount,
+                                                       title: expenseTitle, date: date ?? .now, currencyCode: currencyCode)
+        return .result(dialog: dialog)
+    }
+}
+
+@available(iOS 27.3, *)
+@AppIntent(.tool)
+struct SiriMonthlySpendingIntent: AppIntent {
+    static let title: LocalizedStringResource = "シートの月間支出を確認"
+    static let description = IntentDescription("指定したシートに記録済みの支出を、指定月または今月について合計し、シートの既定通貨で返します。")
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "シート", description: "支出の合計を確認したい家計簿または旅行などのシート。")
+    var sheet: ExpenseSheetEntity
+
+    @Parameter(title: "対象月", description: "集計する月に含まれる日付。省略すると今月になります。")
+    var month: Date?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let record = try access.resolve(sheet.id)
+        let date = month ?? .now
+        let calendar = Calendar.current
+        let totals = record.convertedTotals { expense in
+            guard expense.kind == .expense, let paidOn = expense.date else { return false }
+            return calendar.isDate(paidOn, equalTo: date, toGranularity: .month)
+        }
+        let amount = CurrencyCatalog.format(totals.expense, code: record.resolvedDefaultCurrencyCode)
+        let period = date.formatted(.dateTime.year().month(.wide))
+        let report: LocalizedStringResource
+        if totals.missing.isEmpty {
+            report = "「\(record.displayName)」の\(period)の支出は\(amount)です。"
+        } else {
+            let currencies = totals.missing.sorted().joined(separator: ", ")
+            report = "「\(record.displayName)」の\(period)の支出は\(amount)です。為替レートを取得できない通貨（\(currencies)）の明細は合計に含まれていません。"
+        }
+        return .result(value: String(localized: report), dialog: IntentDialog(report))
+    }
+}
+#endif

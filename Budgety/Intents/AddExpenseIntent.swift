@@ -77,55 +77,49 @@ struct AddExpenseIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let pc = PersistenceController.shared
-        let ctx = pc.container.viewContext
-
-        // シート解決順位:
-        //   1) sheetName (文字列) で名前一致 → 見つかればそれ
-        //   2) sheet entity が指定されていればそれ
-        //   3) 一番古いシートをフォールバック (= MCP / Shortcuts の素朴呼び出し向け)
-        let coreSheet: ExpenseSheet
-        if let name = sheetName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !name.isEmpty {
-            // 全シートを取得して name で比較 (predicate より柔軟。
-            // CloudKit / 共有ストア越境や正規化差異にも強い)。
-            let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-            req.returnsObjectsAsFaults = false
-            let all = (try? ctx.fetch(req)) ?? []
-            if let found = all.first(where: { ($0.name ?? "") == name }) {
-                coreSheet = found
-            } else if let found = all.first(where: {
-                ($0.name ?? "").compare(name, options: .caseInsensitive) == .orderedSame
-            }) {
-                coreSheet = found
-            } else {
-                let availableNames = all.compactMap { $0.name }.joined(separator: ", ")
-                throw AppIntentError.sheetNotFoundWithList(
-                    requested: name,
-                    available: availableNames.isEmpty ? "(empty)" : availableNames
-                )
-            }
-        } else if let url = URL(string: sheet.id),
-                  let oid = pc.container.persistentStoreCoordinator
-                    .managedObjectID(forURIRepresentation: url),
-                  let resolved = try? ctx.existingObject(with: oid) as? ExpenseSheet {
-            coreSheet = resolved
-        } else {
-            let req = NSFetchRequest<ExpenseSheet>(entityName: "ExpenseSheet")
-            req.sortDescriptors = [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: true)]
-            req.fetchLimit = 1
-            guard let fallback = (try? ctx.fetch(req))?.first else {
+        let selected: ExpenseSheetEntity
+        if let name = sheetName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+            let sheets = try access.sheets()
+            guard let named = sheets.first(where: { $0.name == name }) ??
+                sheets.first(where: { $0.name?.caseInsensitiveCompare(name) == .orderedSame }) else {
                 throw AppIntentError.sheetNotFound
             }
-            coreSheet = fallback
+            selected = ExpenseSheetEntity.from(named)
+        } else {
+            selected = sheet
         }
+        let dialog = try await Self.record(sheet: selected, amount: amount, title: title,
+                                           date: Self.resolveDate(date: date, dateText: dateText),
+                                           category: category, note: note)
+        return .result(dialog: dialog)
+    }
 
-        // タイトルは任意。未入力なら表示名はカテゴリ名にフォールバックする (nil で保存)。
+    @MainActor
+    static func record(sheet selected: ExpenseSheetEntity, amount: Double, title: String? = nil,
+                       date: Date = .now, category: ExpenseCategoryEntity? = nil,
+                       note: String = "", currencyCode: String? = nil) async throws -> IntentDialog {
+        guard amount.isFinite, amount > 0 else { throw AppIntentError.invalidAmount }
+        let currency = currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if let currency, !CurrencyCatalog.all.contains(where: { $0.code == currency }) {
+            throw AppIntentError.unsupportedCurrency
+        }
+        let value = Decimal(amount)
+        guard !value.isNaN, value > 0 else { throw AppIntentError.invalidAmount }
         let trimmedTitle = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard amount > 0 else {
-            throw AppIntentError.invalidAmount
-        }
+        let viewContext = PersistenceController.shared.container.viewContext
+        let lookup = try IntentSheetAccess(checking: viewContext)
+        let selectedSheet = try lookup.resolve(selected.id)
+        let categoryID = await resolveCategory(chosen: category, sheet: selectedSheet,
+                                               title: trimmedTitle, ctx: lookup.context)?.objectID
 
+        // AI classification can suspend. Resolve the same ID again before making any changes.
+        try Task.checkCancellation()
+        let transaction = try IntentSheetAccess(checking: viewContext)
+        let ctx = transaction.context
+        let coreSheet = try transaction.resolve(selected.id)
+        let resolvedCategory = categoryID.flatMap { try? ctx.existingObject(with: $0) as? ExpenseCategory }
+            .flatMap { $0.sheet?.objectID == coreSheet.objectID ? $0 : nil }
         let expense = Expense(context: ctx)
         let sheetStore = coreSheet.objectID.persistentStore
         if let store = sheetStore {
@@ -133,20 +127,15 @@ struct AddExpenseIntent: AppIntent {
         }
 
         expense.title = trimmedTitle.isEmpty ? nil : trimmedTitle
-        expense.amount = NSDecimalNumber(decimal: Decimal(amount))
+        expense.amount = NSDecimalNumber(decimal: value)
         expense.kindRaw = TransactionKind.expense.rawValue
-        expense.currencyCode = coreSheet.resolvedDefaultCurrencyCode
-        expense.date = Self.resolveDate(date: date, dateText: dateText)
+        let recordedCurrency = currency ?? coreSheet.resolvedDefaultCurrencyCode
+        expense.currencyCode = recordedCurrency
+        expense.date = date
         expense.note = note
         expense.createdAt = .now
 
         // カテゴリ解決: 選択値 (AI 提案 / 未分類 / 実カテゴリ) をシート内へマップ
-        let resolvedCategory = await resolveCategory(
-            chosen: category,
-            sheet: coreSheet,
-            title: trimmedTitle,
-            ctx: ctx
-        )
         if let cat = resolvedCategory {
             expense.categoryRaw = cat.name
             if cat.objectID.persistentStore == sheetStore {
@@ -173,25 +162,21 @@ struct AddExpenseIntent: AppIntent {
         expense.captureFXSnapshot()
 
         // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
-        if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx) }
+        if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx, saveChanges: false) }
 
-        pc.save()
+        try ctx.save()
 
         let amountDisplay = CurrencyCatalog.format(
-            Decimal(amount),
-            code: coreSheet.resolvedDefaultCurrencyCode
+            value,
+            code: recordedCurrency
         )
         let categoryNote = resolvedCategory.map { " / \($0.displayName)" } ?? ""
         // タイトル未入力時はタイトルの引用を出さない。
         let body = trimmedTitle.isEmpty
             ? "\(amountDisplay)\(categoryNote)"
             : "「\(trimmedTitle)」(\(amountDisplay)\(categoryNote))"
-        return .result(
-            dialog: IntentDialog(
-                full: "「\(coreSheet.displayName)」に \(body) を追加しました",
-                supporting: "支出を追加しました"
-            )
-        )
+        return IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を追加しました",
+                            supporting: "支出を追加しました")
     }
 
     /// 選択されたカテゴリ entity → シート内の `ExpenseCategory` を返す。
@@ -199,8 +184,8 @@ struct AddExpenseIntent: AppIntent {
     /// - 「AI 提案」sentinel → FoundationModels でタイトルから推測
     /// - 実カテゴリ → objectID 一致 (同シート) / 名前一致でマップ
     @MainActor
-    private func resolveCategory(
-        chosen: ExpenseCategoryEntity,
+    private static func resolveCategory(
+        chosen: ExpenseCategoryEntity?,
         sheet: ExpenseSheet,
         title: String,
         ctx: NSManagedObjectContext
@@ -212,10 +197,10 @@ struct AddExpenseIntent: AppIntent {
         }
 
         // 「未分類」→ カテゴリなし
-        if chosen.id == Self.skipCategoryID { return nil }
+        if chosen?.id == Self.skipCategoryID { return nil }
 
         // 「AI 提案」→ ①過去の自分の分類履歴 → ②FoundationModels で推測
-        if chosen.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
+        if chosen == nil || chosen?.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
             if let hist = CategoryHistorySuggestor.suggest(title: title, kind: .expense, in: sheet) {
                 return hist
             }
@@ -230,6 +215,7 @@ struct AddExpenseIntent: AppIntent {
         }
 
         // 実カテゴリ: objectID 一致 (同シート) → 名前一致
+        guard let chosen else { return nil }
         if let url = URL(string: chosen.id),
            let oid = ctx.persistentStoreCoordinator?
             .managedObjectID(forURIRepresentation: url),
@@ -259,19 +245,18 @@ struct AddExpenseIntent: AppIntent {
 
 enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
     case sheetNotFound
-    case sheetNotFoundWithList(requested: String, available: String)
     case debugDump(message: String)
     case emptyTitle
     case invalidAmount
+    case unsupportedCurrency
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .sheetNotFound: "シートが見つかりませんでした。"
-        case .sheetNotFoundWithList(let req, let avail):
-            "シート \"\(req)\" が見つかりません。利用可能: \(avail)"
         case .debugDump(let msg):
             "DEBUG: \(msg)"
         case .emptyTitle:    "タイトルが空です。"
+        case .unsupportedCurrency: "この通貨はBudgetyで記録できません。"
         case .invalidAmount: "金額は 0 より大きい値を指定してください。"
         }
     }
