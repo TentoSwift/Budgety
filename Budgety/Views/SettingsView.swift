@@ -85,6 +85,8 @@ struct SettingsView: View {
                     Section {
                         Text("「Budgetyの家計にランチ代800円を記録して」")
                         Text("「Budgetyの家計で先月いくら使った？」")
+                        Text("「Budgetyの家計で最近の支出名と金額を教えて」")
+                        Text("「Budgetyの家計で先月のランチ代の明細を教えて」")
                     } header: {
                         Text("Siri AI")
                     } footer: {

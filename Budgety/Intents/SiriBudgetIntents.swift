@@ -20,7 +20,7 @@ struct SiriRecordExpenseIntent: AppIntent {
     @Parameter(title: "支払通貨", description: "通貨の指定があれば、日本円はJPY、米ドルはUSDのようにISO通貨コードで指定します。通貨の指定がない場合は省略します。")
     var currencyCode: String?
 
-    @Parameter(title: "内容", description: "ランチや電車代など、この支出の内容。")
+    @Parameter(title: "支出名", description: "「ランチ代」「駅までのバス代」など、利用者が話した支出の名前。指定された名前のまま記録します。")
     var expenseTitle: String?
 
     @Parameter(title: "支払日", description: "支出の日付。省略すると今日になります。")
@@ -38,7 +38,7 @@ struct SiriRecordExpenseIntent: AppIntent {
 @AppIntent(.tool)
 struct SiriMonthlySpendingIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの月間支出を確認"
-    static let description = IntentDescription("指定したシートに記録済みの支出を、指定月または今月について合計し、シートの既定通貨で返します。")
+    static let description = IntentDescription("シート全体の月間支出の合計を、シートの既定通貨で返します。個別の支出名や明細は含みません。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "支出の合計を確認したい家計簿または旅行などのシート。")
