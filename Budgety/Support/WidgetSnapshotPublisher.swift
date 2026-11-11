@@ -80,7 +80,8 @@ final class WidgetSnapshotPublisher {
             }
             guard UserDefaults.standard.object(forKey: SheetLockManager.legacyPrefix + uri) == nil else { return nil }
             let totals = sheet.convertedMonthlyTotals(month: now)
-            return WidgetSheetSnapshot(id: uri, name: sheet.displayName, monthStart: month.start,
+            return WidgetSheetSnapshot(id: uri, name: sheet.displayName,
+                                       symbol: sheet.displaySymbol, colorHex: sheet.displayColorHex, monthStart: month.start,
                                        expense: totals.expense, income: totals.income,
                                        currency: sheet.resolvedDefaultCurrencyCode,
                                        missingRates: !totals.missing.isEmpty)

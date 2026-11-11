@@ -110,12 +110,14 @@ enum SettlementCalculator {
         // ShareCalendarApp 方式: CKShare の participants から取れる URN を真実として
         // メンバーを構築する。email/phone ベースの旧 ID や PP.recordName の重複は
         // ここで全部 URN に畳む (= 同じ人が複数行に分裂しない)。
-        let selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
-        // selfCanonical は必ず URN を使う (PublicProfileSync のキーと一致するため)
-        let selfCanonical = UserProfileStore.shared.userRecordName
-            ?? UserProfileStore.shared.canonicalSelfID(forShare: share)
-            ?? ""
         let selfMemberID = UserProfileStore.shared.selfMemberID
+        var selfIDs = UserProfileStore.shared.canonicalSelfIDs(forShare: share)
+        if let selfMemberID { selfIDs.insert(selfMemberID.uuidString) }
+        // Virtual-only sheets can be used before iCloud setup. Keep that local identity
+        // in the same balance when an iCloud record name becomes available later.
+        let cloudID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+        let selfCanonical = cloudID.flatMap { $0.isEmpty || UserProfileStore.isSelfPlaceholderRecordName($0) ? nil : $0 }
+            ?? selfMemberID?.uuidString ?? ""
         let selfEmailID: String? = {
             if let e = UserProfileStore.shared.selfEmail?.lowercased(), !e.isEmpty {
                 return "email:" + e

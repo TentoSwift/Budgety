@@ -53,7 +53,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         let supporting: LocalizedStringResource = result.card.count == 0
-            ? "該当する支出はありません" : "\(result.card.count)件の支出が見つかりました。"
+            ? "該当する支出はありません" : "支出が見つかりました。"
         let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, expenseName: filter.name, month: filter.month)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
@@ -177,12 +177,14 @@ enum SiriExpenseLookup {
         let amounts = totals.sorted { $0.key < $1.key }.map { currency, total in
             total.formatted(.currency(code: currency).presentation(.isoCode))
         }.formatted(.list(type: .and))
+        var report: String
         if count == 0 {
             summary = String(localized: "\(scope)は見つかりませんでした。")
+            report = summary
         } else {
-            summary = String(localized: "\(scope)は\(count)件、合計は\(amounts)です。")
+            summary = String(localized: "\(scope)は\(amounts)です。")
+            report = String(localized: "\(scope)は\(count)件、合計は\(amounts)です。")
         }
-        var report = summary
         if count > rows.count {
             report += "\n" + String(localized: "新しい順に\(rows.count)件を表示します。")
         }
@@ -191,7 +193,8 @@ enum SiriExpenseLookup {
             report += "\n" + String(localized: "\(row.date)　\(label)　\(row.amount)")
         }
         let card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name,
-                                         count: count, total: amounts, rows: rows)
+                                         count: count, total: amounts, rows: rows,
+                                         sheetSymbol: record.displaySymbol, sheetColorHex: record.displayColorHex)
         return Result(sheetID: sheetID, report: report, summary: summary, card: card)
     }
 

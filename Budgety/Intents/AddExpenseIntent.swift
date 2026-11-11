@@ -63,6 +63,15 @@ struct AddExpenseIntent: AppIntent {
     )
     var sheetName: String?
 
+    @Parameter(title: "支払者", description: "このシートのメンバー。省略すると自分が支払者になります。")
+    var payer: SiriSheetMemberEntity?
+
+    @Parameter(title: "全員で割り勘", description: "このシートの現在のメンバー全員で均等に分けます。")
+    var splitAll: Bool?
+
+    @Parameter(title: "割り勘するメンバー", description: "金額を負担する人を選びます。選択したメンバーだけで均等に分けます。")
+    var beneficiaries: [SiriSheetMemberEntity]?
+
     // タイトルは入力させない (= 任意・詳細配下)。必須は シート → 金額 → カテゴリ の
     // 順に尋ね、カテゴリを最後に選ばせる。
     static var parameterSummary: some ParameterSummary {
@@ -72,6 +81,9 @@ struct AddExpenseIntent: AppIntent {
             \.$date
             \.$dateText
             \.$sheetName
+            \.$payer
+            \.$splitAll
+            \.$beneficiaries
         }
     }
 
@@ -109,7 +121,8 @@ struct AddExpenseIntent: AppIntent {
         }
         return try await Self.recordTransaction(sheet: selected, kind: .expense, amount: amount, title: title,
                                                 date: Self.resolveDate(date: date, dateText: dateText),
-                                                category: category, note: note)
+                                                category: category, note: note, payer: payer,
+                                                splitAll: splitAll ?? false, beneficiaries: beneficiaries ?? [])
     }
 
     @MainActor
@@ -131,7 +144,8 @@ struct AddExpenseIntent: AppIntent {
     @MainActor
     static func recordTransaction(sheet selected: ExpenseSheetEntity, kind: TransactionKind, amount: Double,
                                   title: String? = nil, date: Date = .now, category: ExpenseCategoryEntity? = nil,
-                                  note: String = "", currencyCode: String? = nil) async throws -> RecordedTransaction {
+                                  note: String = "", currencyCode: String? = nil, payer: SiriSheetMemberEntity? = nil,
+                                  splitAll: Bool = false, beneficiaries: [SiriSheetMemberEntity] = []) async throws -> RecordedTransaction {
         guard amount.isFinite, amount > 0 else { throw AppIntentError.invalidAmount }
         let currency = currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if let currency, !CurrencyCatalog.all.contains(where: { $0.code == currency }) {
@@ -176,20 +190,9 @@ struct AddExpenseIntent: AppIntent {
             }
         }
 
-        // 支払者: 自分。共有シートの場合は canonical (= owner/userRecordName または email)
-        // を、非共有シートは userRecordName を payerProfileID として保存。paidBy は廃止。
         let profile = UserProfileStore.shared
-        let share = ShareCoordinator.shared.existingShare(for: coreSheet)
-        if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
-            expense.payerProfileID = pid
-        }
-        // ショートカット / MCP からの追加は割り勘にしない (受益者未設定 = 支払者単独負担)。
-        // beneficiaryProfileIDs は明示的にセットしない (resolvedBeneficiaryIDs() で
-        // 空のままになり、SettlementCalculator では残高変動なしの扱い)。
-        if let memberID = profile.selfMemberID {
-            expense.payerMemberID = memberID
-        }
-
+        try assignParticipants(to: expense, sheet: coreSheet, access: transaction, payer: payer,
+                               splitAll: splitAll, beneficiaries: beneficiaries)
         expense.sheet = coreSheet
         // FX スナップショット (Shortcut 経由でも current FX で凍結)
         expense.captureFXSnapshot()
@@ -216,6 +219,36 @@ struct AddExpenseIntent: AppIntent {
             dialog = IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を収入として追加しました", supporting: "収入を追加しました")
         }
         return RecordedTransaction(transaction: expense, sheet: coreSheet, dialog: dialog, context: ctx)
+    }
+
+    @MainActor
+    private static func assignParticipants(to transaction: Expense, sheet: ExpenseSheet, access: IntentSheetAccess,
+                                           payer: SiriSheetMemberEntity?, splitAll: Bool,
+                                           beneficiaries: [SiriSheetMemberEntity]) throws {
+        let profile = UserProfileStore.shared
+        let splitting = splitAll || !beneficiaries.isEmpty
+        guard payer != nil || splitting else {
+            // Preserve the original shortcuts' default, including sheets without an iCloud identity.
+            let share = ShareCoordinator.shared.existingShare(for: sheet)
+            if let id = profile.canonicalSelfID(forShare: share), !id.isEmpty { transaction.payerProfileID = id }
+            transaction.payerMemberID = profile.selfMemberID
+            return
+        }
+        if splitting, transaction.kind != .expense { throw AppIntentError.incomeCannotSplit }
+        let roster = try SiriSheetMemberRoster(sheet: sheet, access: access, preparingToSave: true)
+        guard let party = try payer.map(roster.resolve) ?? roster.members.first(where: \.isSelf) else {
+            throw AppIntentError.missingPayer
+        }
+        transaction.payerProfileID = party.profileID
+        transaction.payerMemberID = party.memberID
+        guard splitting else { return }
+        let all = Set(roster.members.map(\.profileID))
+        guard all.count > 1 else { throw AppIntentError.noSplitMembers }
+        let selected = Set(try beneficiaries.map { try roster.resolve($0).profileID })
+        if splitAll, !selected.isEmpty, selected != all { throw AppIntentError.conflictingSplitMembers }
+        let ids = splitAll ? all : selected
+        guard ids.allSatisfy({ !$0.isEmpty && !$0.contains(",") }) else { throw AppIntentError.invalidSplitMembers }
+        transaction.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
     }
 
     private static func matchesKind(_ category: ExpenseCategory, _ kind: TransactionKind) -> Bool {
@@ -292,6 +325,7 @@ enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
     case emptyTitle
     case invalidAmount
     case unsupportedCurrency
+    case missingPayer, incomeCannotSplit, noSplitMembers, conflictingSplitMembers, invalidSplitMembers
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -302,6 +336,11 @@ enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
         case .emptyTitle:    "タイトルが空です。"
         case .unsupportedCurrency: "この通貨はBudgetyで記録できません。"
         case .invalidAmount: "金額は 0 より大きい値を指定してください。"
+        case .missingPayer: "このシートの支払者を選んでください。"
+        case .incomeCannotSplit: "割り勘は支出に設定できます。"
+        case .noSplitMembers: "割り勘にはシートに2人以上のメンバーが必要です。"
+        case .conflictingSplitMembers: "全員で割り勘するか、割り勘するメンバーを指定してください。"
+        case .invalidSplitMembers: "選択したメンバーで割り勘を保存できません。"
         }
     }
 }

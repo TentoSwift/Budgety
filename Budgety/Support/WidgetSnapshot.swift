@@ -5,6 +5,9 @@ import Security
 nonisolated struct WidgetSheetSnapshot: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let name: String
+    // Optional so selections cached by earlier releases remain readable until the app next publishes.
+    let symbol: String?
+    let colorHex: String?
     let monthStart: Date
     let expense: Decimal
     let income: Decimal

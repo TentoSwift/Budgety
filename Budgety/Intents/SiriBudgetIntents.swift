@@ -9,7 +9,7 @@ import SwiftUI
 @AppIntent(.tool)
 struct SiriRecordExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "シートに支出を記録"
-    static let description = IntentDescription("支払った金額を指定したBudgetyのシートに支出として1件記録し、その明細を表示します。通貨を省略するとシートの既定通貨、日付を省略すると今日の日付を使います。")
+    static let description = IntentDescription("シートに支出を記録して明細を表示します。共有メンバーやバーチャルメンバーがいるときは、支払った人と、全員または指定した人での均等割りを設定できます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "この支出を記録する家計簿または旅行などのシート。")
@@ -27,10 +27,31 @@ struct SiriRecordExpenseIntent: AppIntent {
     @Parameter(title: "支払日", description: "支出の日付。省略すると今日になります。")
     var date: Date?
 
+    @Parameter(title: "支払者", description: "このシートで実際に支払ったメンバー。省略すると自分になります。",
+               optionsProvider: SiriRecordingMemberQuery())
+    var payer: SiriSheetMemberEntity?
+    @Parameter(title: "全員で割り勘", description: "全員で均等に負担する場合にオンにします。対象を個別指定する場合は省略します。")
+    var splitAll: Bool?
+    @Parameter(title: "割り勘の対象", description: "費用を負担する全メンバー。「自分とあかりで半分ずつ」の場合は両者を指定します。省略して全員で割り勘もオフなら支払者だけが負担します。",
+               optionsProvider: SiriRecordingMemberQuery())
+    var beneficiaries: [SiriSheetMemberEntity]?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("\(\.$sheet) に \(\.$amount) の支出を追加") {
+            \.$expenseTitle
+            \.$date
+            \.$currencyCode
+            \.$payer
+            \.$splitAll
+            \.$beneficiaries
+        }
+    }
+
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriRecordedTransaction> & ProvidesDialog & ShowsSnippetIntent {
         try await SiriTransactionRecording.record(.expense, sheet: sheet, amount: amount, title: expenseTitle,
-                                                  date: date, currencyCode: currencyCode)
+                                                  date: date, currencyCode: currencyCode, payer: payer, splitAll: splitAll ?? false,
+                                                  beneficiaries: beneficiaries ?? [])
     }
 }
 
@@ -51,11 +72,23 @@ struct SiriRecordIncomeIntent: AppIntent {
     var incomeTitle: String?
     @Parameter(title: "受取日", description: "収入を受け取った日。省略時は今日の日付を使います。")
     var date: Date?
+    @Parameter(title: "受取者", description: "このシートで収入を受け取ったメンバー。省略すると自分になります。",
+               optionsProvider: SiriRecordingMemberQuery())
+    var recipient: SiriSheetMemberEntity?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("\(\.$sheet) に \(\.$amount) の収入を追加") {
+            \.$incomeTitle
+            \.$date
+            \.$currencyCode
+            \.$recipient
+        }
+    }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriRecordedTransaction> & ProvidesDialog & ShowsSnippetIntent {
         try await SiriTransactionRecording.record(.income, sheet: sheet, amount: amount, title: incomeTitle,
-                                                  date: date, currencyCode: currencyCode)
+                                                  date: date, currencyCode: currencyCode, payer: recipient)
     }
 }
 
@@ -63,10 +96,12 @@ struct SiriRecordIncomeIntent: AppIntent {
 private enum SiriTransactionRecording {
     @MainActor
     static func record(_ kind: TransactionKind, sheet: ExpenseSheetEntity, amount: Double, title: String?,
-                       date: Date?, currencyCode: String?) async throws
+                       date: Date?, currencyCode: String?, payer: SiriSheetMemberEntity?,
+                       splitAll: Bool = false, beneficiaries: [SiriSheetMemberEntity] = []) async throws
         -> some IntentResult & ReturnsValue<SiriRecordedTransaction> & ProvidesDialog & ShowsSnippetIntent {
         let saved = try await AddExpenseIntent.recordTransaction(sheet: sheet, kind: kind, amount: amount,
-                                                                 title: title, date: date ?? .now, currencyCode: currencyCode)
+                                                                 title: title, date: date ?? .now, currencyCode: currencyCode,
+                                                                 payer: payer, splitAll: splitAll, beneficiaries: beneficiaries)
         let receipt = SiriRecordedTransaction(transaction: saved.transaction, sheet: saved.sheet)
         let identifier = saved.transaction.objectID.uriRepresentation().absoluteString
         return .result(value: receipt, dialog: saved.dialog,
@@ -78,9 +113,13 @@ private enum SiriTransactionRecording {
 private extension SiriRecordedTransaction {
     @MainActor
     init(transaction: Expense, sheet: ExpenseSheet) {
+        let ids = transaction.beneficiaryIDList
+        let isSplit = transaction.kind == .expense && !ids.isEmpty && !(ids.count == 1 && ids.first == transaction.payerProfileID)
+        let names = isSplit ? ids.map { sheet.memberDisplayInfo(for: $0).name } : []
         self.init(sheetName: sheet.displayName,
                   row: .from(transaction, in: sheet, isSoloSheet: !sheet.hasAcceptedOtherMembers()),
-                  kindName: transaction.kind.label)
+                  kindName: transaction.kind.label, sheetSymbol: sheet.displaySymbol, sheetColorHex: sheet.displayColorHex,
+                  splitMemberNames: names.isEmpty ? nil : names)
     }
 }
 

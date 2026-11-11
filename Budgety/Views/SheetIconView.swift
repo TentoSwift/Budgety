@@ -35,14 +35,7 @@ struct SheetIconView: View {
     /// シート用のベースアイコン (角丸正方形 + 白いシンボル)。
     /// AddSheetView / EditSheetView のプレビューからも使えるよう static にする。
     static func baseIcon(symbol: String, tint: Color, size: CGFloat) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .fill(tint.gradient)
-            Image(systemName: symbol)
-                .foregroundStyle(.white)
-                .font(.system(size: size * 0.46, weight: .semibold))
-        }
-        .frame(width: size, height: size)
+        SheetSymbolIcon(symbol: symbol, tint: tint, size: size)
     }
 
     @ViewBuilder

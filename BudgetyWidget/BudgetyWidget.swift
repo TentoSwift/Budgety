@@ -40,7 +40,7 @@ struct SelectWidgetSheet: WidgetConfigurationIntent {
 }
 
 private enum SheetWidgetContent {
-    case spending(name: String, amount: Decimal, currency: String, missingRates: Bool)
+    case spending(WidgetSheetSnapshot)
     case selectSheet
     case unavailable
     case needsRefresh
@@ -53,7 +53,10 @@ private struct SheetWidgetEntry: TimelineEntry {
 
 private struct SheetWidgetProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> SheetWidgetEntry {
-        SheetWidgetEntry(date: .now, content: .spending(name: String(localized: "家計"), amount: 28400, currency: "JPY", missingRates: false))
+        let sample = WidgetSheetSnapshot(id: "preview", name: String(localized: "家計"), symbol: "house.fill",
+                                         colorHex: "#AF52DE", monthStart: .now, expense: 28400, income: 0,
+                                         currency: "JPY", missingRates: false)
+        return SheetWidgetEntry(date: .now, content: .spending(sample))
     }
 
     func snapshot(for configuration: SelectWidgetSheet, in context: Context) async -> SheetWidgetEntry {
@@ -83,32 +86,38 @@ private struct SheetWidgetProvider: AppIntentTimelineProvider {
         guard Calendar.current.isDate(sheet.monthStart, equalTo: date, toGranularity: .month) else {
             return SheetWidgetEntry(date: date, content: .needsRefresh)
         }
-        return SheetWidgetEntry(date: date, content: .spending(
-            name: sheet.name, amount: sheet.expense, currency: sheet.currency, missingRates: sheet.missingRates
-        ))
+        return SheetWidgetEntry(date: date, content: .spending(sheet))
     }
 }
 
 private struct SheetWidgetView: View {
     let entry: SheetWidgetEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch entry.content {
-            case let .spending(name, amount, currency, missingRates):
-                Label(name, systemImage: "list.bullet.rectangle")
+            case let .spending(sheet):
+                Label {
+                    Text(verbatim: sheet.name)
+                } icon: {
+                    SheetSymbolIcon(symbol: sheet.symbol ?? "person.2.fill",
+                                    tint: Color(hex: sheet.colorHex ?? "#5B8DEF") ?? .indigo,
+                                    size: 24, cutsOutSymbol: renderingMode != .fullColor)
+                        .accessibilityHidden(true)
+                }
                     .font(.headline)
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Text("今月の支出")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(amount, format: .currency(code: currency))
+                Text(sheet.expense, format: .currency(code: sheet.currency))
                     .font(.title.bold())
                     .monospacedDigit()
                     .minimumScaleFactor(0.55)
                     .lineLimit(1)
-                if missingRates {
+                if sheet.missingRates {
                     Text("為替レート未取得の明細を除く")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

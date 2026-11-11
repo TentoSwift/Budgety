@@ -307,6 +307,7 @@ extension ExpenseSheet {
         }()
         let isSelf = selfIDs.contains(profileID)
             || (selfEmailID != nil && profileID == selfEmailID)
+            || profileID == UserProfileStore.shared.selfMemberID?.uuidString
         if isSelf {
             let store = UserProfileStore.shared
             return (

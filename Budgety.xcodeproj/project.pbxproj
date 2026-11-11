@@ -115,6 +115,7 @@
 				Intents/AddExpenseIntent.swift,
 				Intents/ExpenseCategoryEntity.swift,
 				Intents/ExpenseSheetEntity.swift,
+				Intents/SiriSheetMemberEntity.swift,
 				Intents/ExpensoShortcuts.swift,
 				Intents/QuickBudgetIntent.swift,
 				"Intents/QuickIntentLogic+Recurring.swift",
@@ -205,6 +206,7 @@
 				Views/SheetDetailView.swift,
 				Views/SheetIconPickerView.swift,
 				Views/SheetIconView.swift,
+				Views/SheetSymbolIcon.swift,
 				Views/SheetListView.swift,
 				Views/SheetLockCover.swift,
 				Views/SheetLockView.swift,
@@ -234,6 +236,7 @@
 				Intents/AddExpenseIntent.swift,
 				Intents/ExpenseCategoryEntity.swift,
 				Intents/ExpenseSheetEntity.swift,
+				Intents/SiriSheetMemberEntity.swift,
 				Intents/ExpensoShortcuts.swift,
 				Intents/QuickBudgetIntent.swift,
 				Intents/QuickIntentLogic.swift,
@@ -304,6 +307,7 @@
 				Views/SheetAIChatView.swift,
 				Views/SheetIconPickerView.swift,
 				Views/SheetIconView.swift,
+				Views/SheetSymbolIcon.swift,
 				Views/SheetLockView.swift,
 				Views/StatsView.swift,
 				Views/VirtualMemberEditView.swift,
@@ -321,7 +325,9 @@
 		73EDD147DB1A59FAAC6BC5BF /* Exceptions for "Budgety" folder in "BudgetyWidget" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				"Support/Color+Hex.swift",
 				Support/WidgetSnapshot.swift,
+				Views/SheetSymbolIcon.swift,
 			);
 			target = D9893FE67C4D579B8AB5E8AB /* BudgetyWidget */;
 		};

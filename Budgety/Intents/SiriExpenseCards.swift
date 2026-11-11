@@ -72,6 +72,8 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "対象期間") var period: String
     @Property(title: "検索した支出名") var expenseName: String
     @Property(title: "該当件数") var count: Int
@@ -81,8 +83,10 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
     init() {}
 
     init(sheetName: String, period: String, expenseName: String, count: Int, total: String,
-         rows: [SiriExpenseCardRow]) {
+         rows: [SiriExpenseCardRow], sheetSymbol: String? = nil, sheetColorHex: String? = nil) {
         self.sheetName = sheetName
+        self.sheetSymbol = sheetSymbol
+        self.sheetColorHex = sheetColorHex
         self.period = period
         self.expenseName = expenseName
         self.count = count
@@ -91,7 +95,7 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(sheetName)", subtitle: "\(period) · \(count)件")
+        DisplayRepresentation(title: "\(sheetName)", subtitle: "\(period)")
     }
 
     static var snippet: some EntitySnippetContent<Self> {
@@ -107,15 +111,22 @@ struct SiriRecordedTransaction: TransientAppEntity, SnippetRepresentableEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "明細") var row: SiriExpenseCardRow
     @Property(title: "取引の種類") var kindName: String
+    @Property(title: "割り勘の対象") var splitMemberNames: [String]?
 
     init() {}
 
-    init(sheetName: String, row: SiriExpenseCardRow, kindName: String) {
+    init(sheetName: String, row: SiriExpenseCardRow, kindName: String,
+         sheetSymbol: String? = nil, sheetColorHex: String? = nil, splitMemberNames: [String]? = nil) {
         self.sheetName = sheetName
+        self.sheetSymbol = sheetSymbol
+        self.sheetColorHex = sheetColorHex
         self.row = row
         self.kindName = kindName
+        self.splitMemberNames = splitMemberNames
     }
 
     var displayRepresentation: DisplayRepresentation {
@@ -172,10 +183,14 @@ struct SiriExpenseCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             switch content {
             case .recorded(let recorded):
-                Text("\(recorded.sheetName) · \(recorded.row.date)")
-                    .font(.subheadline)
-                    .foregroundStyle(secondaryInk)
+                sheetHeader(name: recorded.sheetName, detail: recorded.row.date,
+                           symbol: recorded.sheetSymbol, colorHex: recorded.sheetColorHex)
                 row(recorded.row)
+                if let names = recorded.splitMemberNames, !names.isEmpty {
+                    Text("割り勘　\(names.formatted(.list(type: .and)))")
+                        .font(.caption)
+                        .foregroundStyle(secondaryInk)
+                }
             case .search(let result):
                 searchContent(result)
             }
@@ -195,23 +210,33 @@ struct SiriExpenseCardView: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
             }
-            Text("\(result.sheetName) · \(result.period)")
-                .font(.subheadline)
-                .foregroundStyle(secondaryInk)
+            sheetHeader(name: result.sheetName, detail: result.period,
+                       symbol: result.sheetSymbol, colorHex: result.sheetColorHex)
         }
 
         if result.rows.isEmpty {
             Text("該当する支出はありません")
                 .font(.body)
         } else {
-            Text("合計 \(result.total)")
+            Text(verbatim: result.total)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
             ViewThatFits(in: .vertical) {
-                list(result, limit: result.rows.count)
-                if result.rows.count > 2 { list(result, limit: 2) }
-                if result.rows.count > 1 { list(result, limit: 1) }
+                ForEach((0...result.rows.count).reversed(), id: \.self) { visibleCount in
+                    list(result, limit: visibleCount)
+                }
             }
+        }
+    }
+
+    private func sheetHeader(name: String, detail: String, symbol: String?, colorHex: String?) -> some View {
+        HStack(spacing: 8) {
+            SheetIconView.baseIcon(symbol: symbol ?? "person.2.fill",
+                                  tint: Color(hex: colorHex ?? "#5B8DEF") ?? .indigo, size: 24)
+                .accessibilityHidden(true)
+            Text("\(name) · \(detail)")
+                .font(.subheadline)
+                .foregroundStyle(secondaryInk)
         }
     }
 
@@ -232,12 +257,9 @@ struct SiriExpenseCardView: View {
                     row(item)
                 }
             }
-            if result.count > limit {
-                Text("全\(result.count)件のうち最新\(limit)件")
-                    .font(.caption)
-                    .foregroundStyle(secondaryInk)
-            } else {
-                Text("\(result.count)件")
+            let hiddenCount = result.count - limit
+            if hiddenCount > 0 {
+                Text("+\(hiddenCount)件")
                     .font(.caption)
                     .foregroundStyle(secondaryInk)
             }
