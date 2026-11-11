@@ -9,6 +9,9 @@ import CloudKit
 import UIKit
 import TipKit
 import CustomPicker
+#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+import AppIntents
+#endif
 #if os(iOS)
 #if canImport(CustomNavigationTitle)
 import CustomNavigationTitle
@@ -445,6 +448,9 @@ struct SheetDetailView: View {
                 }
         }
         .listStyle(.plain)
+        #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+        .appEntityUIElements(siriSheetElements(in:))
+        #endif
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
         // Reduce Motion 時はアニメーションしない。
         .animation(reduceMotion ? nil : .default,
@@ -820,6 +826,28 @@ struct SheetDetailView: View {
                 .sheetLockCover(record)
         }
     }
+
+    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+    private func siriSheetElements(in context: AppEntityUIElementsContext) -> [AppEntityUIElement] {
+        guard #available(iOS 27.3, *), !isPreview, record.managedObjectContext === viewContext,
+              !record.objectID.isTemporaryID, !record.isDeleted else { return [] }
+        let requested = context.requests.contains { request in
+            switch request {
+            case .selected: true
+            case .visible(let rect): context.bounds.intersects(rect)
+            @unknown default: false
+            }
+        }
+        guard requested else { return [] }
+
+        // Siri requests context on demand. Use the same lock checks as the lookup itself.
+        let id = record.objectID.uriRepresentation().absoluteString
+        guard let access = try? IntentSheetAccess(checking: viewContext),
+              (try? access.resolve(id)) != nil else { return [] }
+        return [AppEntityUIElement(identifier: EntityIdentifier(for: ExpenseSheetEntity.self, identifier: id),
+                                   bounds: context.bounds, state: .init(isSelected: true))]
+    }
+    #endif
 
     // MARK: - Components
 

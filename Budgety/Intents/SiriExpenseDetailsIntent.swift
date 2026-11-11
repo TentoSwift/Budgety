@@ -10,8 +10,8 @@ struct SiriExpenseDetailsIntent: AppIntent {
     static let description = IntentDescription("指定したシートの支出を名前や対象月で探し、件数、通貨別の合計、最新5件までの支出名・日付・金額・カテゴリを返します。支出名と対象月を省略すると最近の支出を確認できます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
-    @Parameter(title: "シート", description: "支出を探したいシート。")
-    var sheet: ExpenseSheetEntity
+    @Parameter(title: "シート", description: "シート名を指定された場合だけ設定します。省略時は最後に開いたシートを使い、特定できなければ選択を求めます。")
+    var sheet: ExpenseSheetEntity?
 
     @Parameter(title: "支出名", description: "「ランチ」や店名など、支出の名前に含まれる言葉。省略するとすべての支出名が対象になります。")
     var expenseName: String?
@@ -21,8 +21,25 @@ struct SiriExpenseDetailsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
-        let record = try access.resolve(sheet.id)
+        let viewContext = PersistenceController.shared.container.viewContext
+        let sheetID: String
+        if let sheet {
+            sheetID = sheet.id
+        } else if let lastID = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"), !lastID.isEmpty {
+            sheetID = lastID
+        } else {
+            let candidates = try IntentSheetAccess(checking: viewContext).sheets().map(ExpenseSheetEntity.from)
+            guard let first = candidates.first else { throw AppIntentError.sheetNotFound }
+            if candidates.count == 1 {
+                sheetID = first.id
+            } else {
+                let choice = try await $sheet.requestDisambiguation(among: candidates, dialog: "どのシートで支出を検索しますか？")
+                sheetID = choice.id
+            }
+        }
+        // Validate even a remembered or just-confirmed sheet in case its lock changed.
+        let access = try IntentSheetAccess(checking: viewContext)
+        let record = try access.resolve(sheetID)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
         var filters = [NSPredicate(format: "sheet == %@", record)]
         if let month, let interval = Calendar.current.dateInterval(of: .month, for: month) {

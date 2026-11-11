@@ -5,6 +5,60 @@
 
 import SwiftUI
 import SwiftData
+#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+import CoreTransferable
+import UniformTypeIdentifiers
+
+private struct SiriSearchShortcut: Transferable {
+    let url: URL
+    static let contentType = UTType(filenameExtension: "shortcut") ?? .data
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: contentType) { SentTransferredFile($0.url) }
+    }
+
+    static let bundled: Self? = {
+        let variant: String
+        switch Bundle.main.bundleIdentifier {
+        case "com.tento.budgety.dev": variant = "development"
+        case "com.tento.budgety": variant = "production"
+        default: return nil
+        }
+        return Bundle.main.url(forResource: "SiriExpenseSearch-" + variant, withExtension: "shortcut").map(Self.init(url:))
+    }()
+}
+
+private struct SiriSearchShortcutSection: View {
+    @State private var exporting = false
+    @State private var exportFailed = false
+
+    var body: some View {
+        Section {
+            if let shortcut = SiriSearchShortcut.bundled {
+                Button { exporting = true } label: {
+                    Label("「支出を検索」をファイルに保存", systemImage: "square.and.arrow.down")
+                }
+                .fileExporter(isPresented: $exporting, item: shortcut, contentTypes: [SiriSearchShortcut.contentType],
+                              defaultFilename: "支出を検索") { result in
+                    if case .failure = result { exportFailed = true }
+                }
+                .alert("ショートカットを保存できませんでした", isPresented: $exportFailed) {
+                    Button("閉じる", role: .cancel) {}
+                }
+            } else {
+                Link("ショートカットを作成", destination: URL(string: "shortcuts://create-shortcut")!)
+            }
+        } header: {
+            Text("ホーム画面から「支出を検索」と頼む")
+        } footer: {
+            if SiriSearchShortcut.bundled != nil {
+                Text("初回だけ、保存したファイルを「ファイル」アプリで開き、「ショートカットを追加」をタップしてください。次からはSiriに「支出を検索」と言い、続けて支出名を答えます。")
+            } else {
+                Text("Budgetyの「支出名で明細を確認」を追加し、支出名を「毎回尋ねる」に設定します。「支出を検索」という名前で保存すると、Siriにその名前を言うだけで使えます。")
+            }
+        }
+    }
+}
+#endif
 
 struct SettingsView: View {
     @StateObject private var fx = FXRatesService.shared
@@ -83,15 +137,16 @@ struct SettingsView: View {
                 #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
                 if #available(iOS 27.3, *) {
                     Section {
-                        Text("「Budgetyの家計にランチ代800円を記録して」")
-                        Text("「Budgetyの家計で先月いくら使った？」")
-                        Text("「Budgetyの家計で最近の支出名と金額を教えて」")
-                        Text("「Budgetyの家計で先月のランチ代の明細を教えて」")
+                        Text("「先月のランチ代の明細を教えて」")
+                        Text("「このシートの最近の支出名と金額を教えて」")
+                        Text("「家計にランチ代800円を記録して」")
+                        Text("「家計で先月いくら使った？」")
                     } header: {
                         Text("Siri AI")
                     } footer: {
-                        Text("「家計」を自分のシート名に置き換えて、Siriに話しかけてください。パスワード付きのシートは対象外です。")
+                        Text("Budgetyを開いていればアプリ名は不要です。「家計」は自分のシート名に置き換えてください。パスワード付きのシートは対象外です。")
                     }
+                    SiriSearchShortcutSection()
                 }
                 #endif
 
