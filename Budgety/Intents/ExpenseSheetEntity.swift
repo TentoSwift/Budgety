@@ -62,6 +62,19 @@ struct IntentSheetAccess {
         return sheet
     }
 
+    func expenseForDisplay(identifier: String) throws -> Expense {
+        guard let url = URL(string: identifier), url.scheme == "x-coredata",
+              let id = context.persistentStoreCoordinator?.managedObjectID(forURIRepresentation: url),
+              id.entity.name == "Expense",
+              let stored = try? context.existingObject(with: id) as? Expense,
+              stored.kind == .expense, !stored.isSkipped,
+              let sheet = stored.sheet, allows(sheet),
+              let expense = try? viewContext.existingObject(with: id) as? Expense,
+              !expense.isDeleted, expense.kind == .expense, !expense.isSkipped,
+              expense.sheet?.objectID == sheet.objectID else { throw AppIntentError.expenseUnavailable }
+        return expense
+    }
+
     func allows(_ sheet: ExpenseSheet) -> Bool {
         let oid = sheet.objectID
         guard !oid.isTemporaryID, !isProtectedOrDeleted(sheet) else { return false }

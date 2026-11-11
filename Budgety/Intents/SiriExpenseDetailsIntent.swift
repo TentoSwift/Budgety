@@ -44,21 +44,76 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     var month: Date?
 
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetView {
+    func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
         let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: expenseName, month: month) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
-        return .result(value: result.card, dialog: IntentDialog("\(result.summary)"),
-                       view: SiriExpenseCardView(result: result.card))
+        let supporting: LocalizedStringResource = result.card.count == 0
+            ? "該当する支出はありません" : "\(result.card.count)件の支出が見つかりました。"
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, expenseName: expenseName, month: month)
+        return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
+                       snippetIntent: snippet)
+    }
+}
+
+@available(iOS 27.3, *)
+struct SiriExpenseResultsSnippetIntent: SnippetIntent {
+    static let title: LocalizedStringResource = "支出明細のカードを表示"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "シートの識別子") var sheetIdentifier: String
+    @Parameter(title: "支出名") var expenseName: String?
+    @Parameter(title: "対象月") var month: Date?
+
+    init() {}
+
+    init(sheetIdentifier: String, expenseName: String?, month: Date?) {
+        self.sheetIdentifier = sheetIdentifier
+        self.expenseName = expenseName
+        self.month = month
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ShowsSnippetView {
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, month: month)
+        return .result(view: SiriExpenseCardView(result: result.card))
+    }
+}
+
+@available(iOS 27.3, *)
+struct SiriOpenExpenseIntent: AppIntent {
+    static let title: LocalizedStringResource = "支出明細を開く"
+    static let isDiscoverable = false
+    static let supportedModes: IntentModes = .foreground(.immediate)
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "明細の識別子") var expenseIdentifier: String
+
+    init() {}
+
+    init(expenseIdentifier: String) {
+        self.expenseIdentifier = expenseIdentifier
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try DeepLinkRouter.shared.requestOpenExpense(identifier: expenseIdentifier)
+        return .result()
     }
 }
 
 @available(iOS 27.3, *)
 private enum SiriExpenseLookup {
+    struct Result {
+        let sheetID: String
+        let report: String
+        let summary: String
+        let card: SiriExpenseCardResult
+    }
+
     @MainActor
     static func run(sheet: ExpenseSheetEntity?, expenseName: String?, month: Date?,
-                    choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws
-        -> (report: String, summary: String, card: SiriExpenseCardResult) {
+                    choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
         let viewContext = PersistenceController.shared.container.viewContext
         let sheetID: String
         if let sheet {
@@ -75,7 +130,13 @@ private enum SiriExpenseLookup {
                 sheetID = choice.id
             }
         }
-        // Validate even a remembered or just-confirmed sheet in case its lock changed.
+        return try search(sheetID: sheetID, expenseName: expenseName, month: month)
+    }
+
+    @MainActor
+    static func search(sheetID: String, expenseName: String?, month: Date?) throws -> Result {
+        // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
+        let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
         let record = try access.resolve(sheetID)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
@@ -111,7 +172,8 @@ private enum SiriExpenseLookup {
                                                signedAmount: expense.formattedSignedAmount,
                                                payerName: payer?.name, payerColorHex: payer?.colorHex ?? "",
                                                payerPhoto: payer?.photo,
-                                               foreignCurrencyCode: currency == record.resolvedDefaultCurrencyCode ? nil : currency))
+                                               foreignCurrencyCode: currency == record.resolvedDefaultCurrencyCode ? nil : currency,
+                                               expenseIdentifier: expense.objectID.uriRepresentation().absoluteString))
             }
         }
 
@@ -135,8 +197,9 @@ private enum SiriExpenseLookup {
             let label = row.title == row.category ? row.title : String(localized: "\(row.title)（\(row.category)）")
             report += "\n" + String(localized: "\(row.date)　\(label)　\(row.amount)")
         }
-        return (report, summary, SiriExpenseCardResult(sheetName: record.displayName, period: period,
-                                                      expenseName: name, count: count, total: amounts, rows: rows))
+        let card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name,
+                                         count: count, total: amounts, rows: rows)
+        return Result(sheetID: sheetID, report: report, summary: summary, card: card)
     }
 
     private static func searchKey(_ title: String) -> String {

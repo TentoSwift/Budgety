@@ -245,6 +245,7 @@ struct AddExpenseIntent: AppIntent {
 
 enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
     case sheetNotFound
+    case expenseUnavailable
     case debugDump(message: String)
     case emptyTitle
     case invalidAmount
@@ -253,6 +254,7 @@ enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .sheetNotFound: "シートが見つかりませんでした。"
+        case .expenseUnavailable: "この支出明細は現在表示できません。"
         case .debugDump(let msg):
             "DEBUG: \(msg)"
         case .emptyTitle:    "タイトルが空です。"

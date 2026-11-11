@@ -7,6 +7,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "支出明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
+    @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
     @Property(title: "支出名") var title: String
     @Property(title: "支払日") var date: String
     @Property(title: "カテゴリ") var category: String
@@ -25,7 +26,8 @@ struct SiriExpenseCardRow: TransientAppEntity {
          categoryColorHex: String = "", categorySymbol: String = "tag",
          signedAmount: String? = nil, payerName: String? = nil,
          payerColorHex: String = "", payerPhoto: IntentFile? = nil,
-         foreignCurrencyCode: String? = nil) {
+         foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil) {
+        self.expenseIdentifier = expenseIdentifier
         self.title = title
         self.date = date
         self.category = category
@@ -84,7 +86,28 @@ struct SiriExpenseCardView: View {
     let result: SiriExpenseCardResult
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    // Siri can composite the snippet over any app. Resolve the text and its opaque
+    // surface together so their contrast survives a different host appearance.
+    private var surface: Color { Color(white: colorScheme == .dark ? 0.10 : 0.98) }
+    private var primaryInk: Color { Color(white: colorScheme == .dark ? 1 : 0.08) }
+    private var secondaryInk: Color { Color(white: colorScheme == .dark ? 0.82 : 0.30) }
+
     var body: some View {
+        if let onlyExpenseIdentifier {
+            openButton(identifier: onlyExpenseIdentifier) { card }
+                .accessibilityIdentifier("siriExpenseRow_0")
+        } else {
+            card
+        }
+    }
+
+    private var onlyExpenseIdentifier: String? {
+        result.count == 1 && result.rows.count == 1 ? result.rows.first?.expenseIdentifier : nil
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.expenseName.isEmpty ? String(localized: "支出明細") : result.expenseName)
@@ -92,7 +115,7 @@ struct SiriExpenseCardView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text("\(result.sheetName) · \(result.period)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryInk)
             }
 
             if result.rows.isEmpty {
@@ -111,6 +134,8 @@ struct SiriExpenseCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
+        .foregroundStyle(primaryInk)
+        .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .privacySensitive()
     }
 
@@ -121,22 +146,37 @@ struct SiriExpenseCardView: View {
                 if index == 0 || result.rows[index - 1].date != item.date {
                     Text(verbatim: item.date)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryInk)
                         .accessibilityAddTraits(.isHeader)
                 }
-                row(item)
+                if onlyExpenseIdentifier == nil, let identifier = item.expenseIdentifier {
+                    openButton(identifier: identifier) { row(item) }
+                        .accessibilityIdentifier("siriExpenseRow_\(index)")
+                } else {
+                    row(item)
+                }
             }
             if result.count > limit {
                 Text("全\(result.count)件のうち最新\(limit)件")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryInk)
             } else {
                 Text("\(result.count)件")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryInk)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func openButton<Label: View>(identifier: String, @ViewBuilder label: () -> Label) -> some View {
+        Button(intent: SiriOpenExpenseIntent(expenseIdentifier: identifier)) {
+            label()
+                .foregroundStyle(primaryInk)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Budgetyでこの支出の詳細を開きます")
     }
 
     private func row(_ item: SiriExpenseCardRow) -> some View {
@@ -146,7 +186,7 @@ struct SiriExpenseCardView: View {
             if let code = item.foreignCurrencyCode {
                 Text(verbatim: code)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(secondaryInk)
             }
         }
         return Group {
@@ -170,6 +210,7 @@ struct SiriExpenseCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
     }
 
@@ -180,7 +221,7 @@ struct SiriExpenseCardView: View {
             if let payerName = item.payerName {
                 AvatarView(photoData: item.payerPhoto?.data, displayName: payerName,
                            colorHex: item.payerColorHex ?? "", size: 18)
-                    .background(Circle().fill(Color.platformSystemBackground).padding(-2))
+                    .background(Circle().fill(surface).padding(-2))
                     .offset(x: 5, y: 5)
             }
         }
@@ -194,12 +235,12 @@ struct SiriExpenseCardView: View {
             if !item.title.isEmpty, item.title != item.category {
                 Text(verbatim: item.title)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryInk)
             }
             if let payerName = item.payerName, !payerName.isEmpty {
                 Text(verbatim: payerName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryInk)
             }
         }
     }

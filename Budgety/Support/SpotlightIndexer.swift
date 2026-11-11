@@ -32,6 +32,9 @@ final class DeepLinkRouter {
     private init() {}
 
     private var pendingSheetIdentifier: String?
+    #if os(iOS)
+    @MainActor var pendingExpenseIdentifier: String?
+    #endif
 
     /// Spotlight から「このシートを開いて」と要求された時に呼ぶ。
     func requestOpenSheet(identifier: String) {
