@@ -50,7 +50,7 @@ struct SiriEditTransactionIntent: AppIntent {
             .joined(separator: "\n")
         let prompt = IntentDialog("「\(prepared.sheetName)」の「\(prepared.transactionTitle)」を変更しますか？\n\(changes)")
         try await requestConfirmation(actionName: .custom(acceptLabel: "アップデート", acceptAlternatives: ["変更を保存"],
-                                                          denyLabel: "キャンセル", denyAlternatives: []),
+                                                          denyLabel: "キャンセル", denyAlternatives: [], destructive: true),
                                       dialog: prompt, showDialogAsPrompt: true) {
             SiriExpenseCardView(recorded: prepared.originalReceipt, allowsOpening: false)
         }
