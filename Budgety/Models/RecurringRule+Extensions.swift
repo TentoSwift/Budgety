@@ -7,7 +7,7 @@ import Foundation
 import CoreData
 import CloudKit
 
-enum RecurrenceFrequency: String, CaseIterable, Identifiable {
+enum RecurrenceFrequency: String, CaseIterable, Identifiable, Sendable {
     case daily, weekly, monthly, yearly
 
     var id: String { rawValue }
@@ -91,15 +91,10 @@ extension RecurringRule {
         CurrencyCatalog.format(amountDecimal, code: resolvedCurrencyCode)
     }
 
-    /// 次回予定日を計算する。`lastGeneratedDate` があれば次の occurrence、無ければ `startDate`。
     var nextOccurrence: Date? {
-        let cal = Calendar.current
-        let component = resolvedFrequency.calendarComponent
-        let n = resolvedInterval
-        if let last = lastGeneratedDate {
-            return cal.date(byAdding: component, value: n, to: last)
-        }
-        return startDate
+        guard let startDate else { return nil }
+        return RecurringOccurrenceService.nextOccurrenceDay(start: startDate, frequency: resolvedFrequency,
+                                                           interval: resolvedInterval, endDate: endDate, skipping: skippedDaySet)
     }
 
     /// 支払者の Member を引く (Expense.resolvedPayer と同じ解決ロジック)。

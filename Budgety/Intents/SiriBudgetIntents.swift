@@ -154,11 +154,14 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
 @AppIntent(.tool)
 struct SiriMonthlySpendingIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの支出額を確認"
-    static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。明細カードは含みません。")
+    static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。「今月の食費はいくら？」では食費カテゴリだけを集計します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "集計したいシート。省略すると最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
+
+    @Parameter(title: "カテゴリ名", description: "「今月の食費」なら「食費」。指定しない場合はすべてのカテゴリを集計します。")
+    var categoryName: String?
 
     @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
@@ -175,14 +178,26 @@ struct SiriMonthlySpendingIntent: AppIntent {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let record = try access.resolve(sheetID)
         let scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period).scope
-        let totals = record.convertedTotals { expense in
-            guard expense.kind == .expense, !expense.isSkipped else { return false }
+        let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let term = TransactionSearchTerm(category)
+        var totals = record.convertedTotals { expense in
+            guard expense.kind == .expense, !expense.isSkipped,
+                  term.isEmpty || term.matchesCategory(expense.categoryDisplayName) else { return false }
             guard let interval = scope.interval else { return true }
             guard let paidOn = expense.date else { return false }
             return interval.start <= paidOn && paidOn < interval.end
         }
-        let amount = CurrencyCatalog.format(totals.expense, code: record.resolvedDefaultCurrencyCode)
-        let periodLabel = scope.label
+        let target = record.resolvedDefaultCurrencyCode
+        for occurrence in SiriExpenseLookup.dueExpenses(in: record, interval: scope.interval)
+            where term.isEmpty || term.matchesCategory(occurrence.categoryDisplayName) {
+            if let amount = FXRatesService.shared.convert(occurrence.amount, from: occurrence.currencyCode, to: target) {
+                totals.expense += amount
+            } else {
+                totals.missing.insert(occurrence.currencyCode)
+            }
+        }
+        let amount = CurrencyCatalog.format(totals.expense, code: target)
+        let periodLabel = category.isEmpty ? scope.label : String(localized: "\(scope.label)のカテゴリ「\(category)」")
         let report: LocalizedStringResource
         if totals.missing.isEmpty {
             report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。"

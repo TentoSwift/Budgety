@@ -39,10 +39,9 @@ struct EditRecurringRuleView: View {
     @State private var selectedBeneficiaries: Set<String> = []
     /// 割り勘トグル。オフ = この定期項目は支払者のみの負担。
     @State private var splitEnabled: Bool = false
-    /// バーチャルメンバー追加 (Premium 機能)。
+    /// バーチャルメンバー追加。
     @State private var showAddMemberPrompt = false
     @State private var newMemberName = ""
-    @State private var memberPaywall = false
 
     private var contextSheet: ExpenseSheet? {
         switch mode {
@@ -136,17 +135,6 @@ struct EditRecurringRuleView: View {
 
     // MARK: - Sharing / split visibility
 
-    /// シートに自分以外の参加者が居るか (= 共有中)。
-    private var hasOtherParticipants: Bool {
-        guard let sheet = contextSheet,
-              let profiles = sheet.participantProfiles as? Set<ParticipantProfile> else { return false }
-        let myRN = profile.userRecordName ?? ""
-        return profiles.contains { p in
-            let rn = p.recordName ?? ""
-            return !rn.isEmpty && rn != myRN
-        }
-    }
-
     /// 編集中の定期項目に既に支払者 / 受益者の情報が入っているか。
     private var existingSharingInfo: Bool {
         guard case .edit(let rule) = mode else { return false }
@@ -156,12 +144,7 @@ struct EditRecurringRuleView: View {
         return false
     }
 
-    /// 支払者 / 割り勘セクションを表示するか。共有中・既存共有データあり・Premium なら表示。
-    private var shouldShowSharingFields: Bool {
-        if hasOtherParticipants || existingSharingInfo { return true }
-        if let sheet = contextSheet, PurchaseManager.hasPremiumAccess(to: sheet) { return true }
-        return false
-    }
+    private var shouldShowSharingFields: Bool { contextSheet != nil || existingSharingInfo }
 
     /// 現時点で payer が「未選択」として扱われているか。
     @MainActor
@@ -282,11 +265,12 @@ struct EditRecurringRuleView: View {
                     TextField(kind == .expense ? "タイトル (例: Netflix, 家賃)" : "タイトル (例: 給料)", text: $title)
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
                         TextField("0", text: $amountText)
                             .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .font(.title3.monospacedDigit())
+                            .font(.sheetNumber(.title3))
                             .onChange(of: amountText) { _, new in
                                 let allowed = decimalKeypadNeeded
                                     ? new.filter { $0.isNumber || $0 == "." }
@@ -317,13 +301,16 @@ struct EditRecurringRuleView: View {
                             Text("間隔")
                             Spacer()
                             Text(frequency.summary(interval: interval))
+                                .font(.sheetNumber(.body))
                                 .foregroundStyle(.secondary)
                         }
                     }
                     DatePicker("開始日", selection: $startDate, displayedComponents: [.date])
+                        .font(.sheetNumber(.body))
                     Toggle("終了日を設定", isOn: $hasEndDate)
                     if hasEndDate {
                         DatePicker("終了日", selection: $endDate, in: startDate..., displayedComponents: [.date])
+                            .font(.sheetNumber(.body))
                     }
                 } header: {
                     Text("繰り返し")
@@ -373,11 +360,7 @@ struct EditRecurringRuleView: View {
                                 beneficiaryInlineRow(id, sheet: sheet)
                             }
                             Button {
-                                if PurchaseManager.hasPremiumAccess(to: sheet) {
-                                    showAddMemberPrompt = true
-                                } else {
-                                    memberPaywall = true
-                                }
+                                showAddMemberPrompt = true
                             } label: {
                                 Label("メンバーを追加", systemImage: "person.badge.plus")
                             }
@@ -414,7 +397,7 @@ struct EditRecurringRuleView: View {
                 if case .edit(let rule) = mode {
                     Section {
                         Button(role: .destructive) {
-                            viewContext.delete(rule)
+                            RecurringExpenseGenerator.deleteRule(rule, in: viewContext)
                             PersistenceController.shared.save()
                             Haptics.warning()
                             dismiss()
@@ -446,7 +429,6 @@ struct EditRecurringRuleView: View {
                     #endif
                 }
             }
-            .sheet(isPresented: $memberPaywall) { PaywallView() }
             .alert("メンバーを追加", isPresented: $showAddMemberPrompt) {
                 TextField("名前", text: $newMemberName)
                 Button("追加") {

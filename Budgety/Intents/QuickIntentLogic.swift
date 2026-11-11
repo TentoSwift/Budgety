@@ -98,19 +98,6 @@ enum QuickIntentLogic {
             sheet = first
         }
 
-        // Premium 制限: 自分がオーナーのシートへの MCP 経由追加は Premium 必須。
-        // 共有シート (= 他人がオーナーで Premium 提供してくれている) は無料で追加可能。
-        // Intent では同期で isPremiumCached (UserDefaults) を使う。
-        // .isPremium (instance) は StoreKit refresh 完了前は false 固定なので不可。
-        if !PurchaseManager.isPremiumCached && sheet.isOwnedByCurrentUser {
-            return [
-                "ok": false,
-                "error": "Premium 限定機能です。自分がオーナーのシート「\(sheet.displayName)」への MCP 経由の追加には Budgety Premium が必要です。他の Premium ユーザーが共有してくれているシートには無料で追加できます。",
-                "sheet": sheet.displayName,
-                "premiumRequired": true
-            ]
-        }
-
         // パスワードロック判定
         let lock = SheetLockManager.shared
         if lock.hasPassword(for: sheet) {
@@ -340,22 +327,11 @@ enum QuickIntentLogic {
 
         let allExpenses = (try? ctx.fetch(req)) ?? []
 
-        // Premium 制限 + ロックの扱い:
-        // - 非 Premium + 自分がオーナーのシート → 除外 (Premium 必須)
-        // - 共有シート (他人がオーナー) → 無料で取得可能
-        // - ロック済シート → password 一致なら通す、それ以外は除外
         let lock = SheetLockManager.shared
-        let isPremium = PurchaseManager.isPremiumCached
         let providedPassword = (parsed["password"] as? String) ?? ""
-        var omittedPremiumCount = 0
         var omittedLockedCount = 0
         let expenses = allExpenses.filter { e in
             guard let s = e.sheet else { return false }
-            // Premium 制限
-            if !isPremium && s.isOwnedByCurrentUser {
-                omittedPremiumCount += 1
-                return false
-            }
             // ロック
             if lock.hasPassword(for: s) {
                 if providedPassword.isEmpty || !lock.unlock(s, withPassword: providedPassword) {
@@ -412,7 +388,6 @@ enum QuickIntentLogic {
             let range = dateRange.start...dateRange.end
             for sheet in (try? ctx.fetch(sheetReq)) ?? [] {
                 // Premium / ロックは Expense と同じ基準で gate する。
-                if !isPremium && sheet.isOwnedByCurrentUser { continue }
                 if lock.hasPassword(for: sheet) {
                     if providedPassword.isEmpty || !lock.unlock(sheet, withPassword: providedPassword) { continue }
                 }
@@ -459,18 +434,9 @@ enum QuickIntentLogic {
             "count": combinedPayload.count,
             "expenses": combinedPayload
         ]
-        var warnings: [String] = []
-        if omittedPremiumCount > 0 {
-            result["premiumOmitted"] = omittedPremiumCount
-            result["premiumRequired"] = true
-            warnings.append("Omitted \(omittedPremiumCount) entries from sheets you own. MCP access to your own sheets requires Budgety Premium. Sheets shared by other Premium users are accessible for free.")
-        }
         if omittedLockedCount > 0 {
             result["lockedOmitted"] = omittedLockedCount
-            warnings.append("Omitted \(omittedLockedCount) entries from locked sheets. Provide `password` to include them.")
-        }
-        if !warnings.isEmpty {
-            result["warning"] = warnings.joined(separator: " ")
+            result["warning"] = "Omitted \(omittedLockedCount) entries from locked sheets. Provide `password` to include them."
         }
         return result
     }

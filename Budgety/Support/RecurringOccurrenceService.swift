@@ -24,6 +24,7 @@ struct RecurringOccurrence: Identifiable {
     let currencyCode: String
     let kind: TransactionKind
     let categoryRaw: String
+    var categoryDisplayName: String { categoryRaw.isEmpty ? String(localized: "カテゴリなし") : categoryRaw }
     let payerProfileID: String?
     let beneficiaryProfileIDs: String   // CSV (空 = 割り勘オフ)
     var id: String { "\(ruleID.uuidString)#\(Int(date.timeIntervalSince1970))" }
@@ -72,18 +73,12 @@ enum LedgerItem: Identifiable {
 
 enum RecurringOccurrenceService {
 
-    /// 定期項目 (繰り返し / RecurringRule) 機能のマスタースイッチ。
-    /// 2026-07 に一度再有効化したが、プロダクト判断で定期項目は当面提供しない
-    /// ことになったため再びオフ。コードとデータは温存し、true に戻せば復活する。
-    /// (技術的には完全仮想化 `virtualizationEnabled` 既定 ON で CloudKit 重複の
-    /// 経路は塞がっており、オフの理由は同期問題ではなくプロダクト判断。)
-    /// 全ターゲット (iOS/macOS/visionOS/watchOS) 共通で参照するためここに置く (BuildInfo は watch 等に未収録のため)。
-    static let featureEnabled: Bool = false
+    private static let maximumSlotsPerRule = 200_000
 
-    /// 完全仮想化のフィーチャーフラグ (既定 OFF)。
-    /// ON で「定期 occurrence を保存せず表示時に算出」へ切替: generator は実体化を止め、
-    /// 各 consumer は仮想 occurrence を合流する。OFF の間は従来のハイブリッド (生成して保存)。
-    /// デバッグ設定からトグルして検証し、全プラットフォーム対応後に既定 ON にする。
+    /// アプリ、Siri、ショートカットで同じ定期項目を使う。
+    static let featureEnabled = true
+
+    /// 既定は仮想表示。以前の実体化モードを明示した端末はその設定を引き継ぐ。
     static let virtualizationKey = "expensoRecurringVirtualization"
     static var virtualizationEnabled: Bool {
         // 既定 ON (常に仮想モード)。デバッグで明示的に OFF にした時だけ false。
@@ -116,54 +111,51 @@ enum RecurringOccurrenceService {
         let step = max(1, interval)
         let anchor = calendar.startOfDay(for: start)
         let limitDay = calendar.startOfDay(for: limit)
-        guard anchor <= limitDay else { return [] }
-        // `after` 以下の日付はスキップする (= 生成済み / 削除済みの過去を再生成しない下限)。
+        guard anchor.compare(limitDay) != .orderedDescending else { return [] }
         let afterDay = lowerBound.map { calendar.startOfDay(for: $0) }
+        if let afterDay, afterDay.compare(limitDay) != .orderedAscending { return [] }
+
+        // Count from the original anchor even when the query begins years later.
+        // A clamped month/year end can differ by one from Calendar's whole-unit distance.
+        let span = calendar.dateComponents([component], from: anchor, to: limitDay).value(for: component) ?? 0
+        let maxOffset = span == .max ? span : span + 1
+        var first = 0
+        if let afterDay, afterDay.compare(anchor) != .orderedAscending {
+            let elapsed = calendar.dateComponents([component], from: anchor, to: afterDay).value(for: component) ?? 0
+            first = max(0, max(0, elapsed) / step - 1)
+        }
 
         var result: [Date] = []
-        var n = 0
-        // 安全上限: 通常は day > limitDay で break するが、after で大量スキップする
-        // 極端なケース (古い daily ルール等) の無駄反復を抑える保険。
-        let safetyMax = 200_000
-        while result.count < cap && n < safetyMax {
-            guard let raw = calendar.date(byAdding: component, value: n * step, to: anchor) else { break }
+        // Keep the existing safety limit consistent between all-time, bounded and persisted history.
+        for index in min(first, maximumSlotsPerRule)..<maximumSlotsPerRule {
+            let (offset, overflow) = index.multipliedReportingOverflow(by: step)
+            guard result.count < cap, !overflow, offset <= maxOffset,
+                  let raw = calendar.date(byAdding: component, value: offset, to: anchor) else { break }
             let day = calendar.startOfDay(for: raw)
-            n += 1
-            if day > limitDay { break }
-            if let afterDay, day <= afterDay { continue }
+            if day.compare(limitDay) == .orderedDescending { break }
+            if let afterDay, day.compare(afterDay) != .orderedDescending { continue }
             result.append(day)
         }
         return result
     }
 
-    /// `lastGeneratedDate` / `startDate` を起点に、次に来る (今日以降の) occurrence 日付を返す。
-    /// 表示用 (「次回 X月Y日」)。endDate を超える場合は nil。
+    /// Inclusive ledger date range for a calendar month or year.
+    static func calendarDays(in component: Calendar.Component, containing date: Date, calendar: Calendar = .current) -> ClosedRange<Date>? {
+        guard let interval = calendar.dateInterval(of: component, for: date),
+              let last = calendar.date(byAdding: .day, value: -1, to: interval.end) else { return nil }
+        return interval.start...last
+    }
+
+    /// 表示用の「次回」。月末を含む予定日は開始日を基準にし、今日・終了日の両方を含める。
     static func nextOccurrenceDay(
-        start: Date,
-        after reference: Date?,
-        frequency: RecurrenceFrequency,
-        interval: Int,
-        endDate: Date?,
-        calendar: Calendar = .current
+        start: Date, onOrAfter reference: Date = .now, frequency: RecurrenceFrequency,
+        interval: Int, endDate: Date?, skipping skipped: Set<Date>, calendar: Calendar = .current
     ) -> Date? {
-        let limit = endDate ?? .distantFuture
-        // reference 以降 (なければ今日以降) の最初の occurrence を探す。
-        let floor = calendar.startOfDay(for: reference ?? Date())
-        let component = frequency.calendarComponent
-        let step = max(1, interval)
-        let anchor = calendar.startOfDay(for: start)
-        let limitDay = calendar.startOfDay(for: limit)
-        var n = 0
-        // 暴走防止に十分大きい安全上限。
-        let safetyCap = 100_000
-        while n < safetyCap {
-            guard let raw = calendar.date(byAdding: component, value: n * step, to: anchor) else { return nil }
-            let day = calendar.startOfDay(for: raw)
-            if day > limitDay { return nil }
-            if day > floor { return day }
-            n += 1
-        }
-        return nil
+        let today = calendar.startOfDay(for: reference)
+        guard let previousDay = calendar.date(byAdding: .day, value: -1, to: today) else { return nil }
+        return occurrenceDays(start: start, frequency: frequency, interval: interval, after: previousDay,
+                              until: endDate ?? .distantFuture, cap: skipped.count + 1, calendar: calendar)
+            .first { !skipped.contains($0) }
     }
 
     /// シート配下の全ルールから、まだ実体化されていない occurrence を算出して返す (完全仮想化用)。
@@ -197,26 +189,21 @@ enum RecurringOccurrenceService {
         var result: [RecurringOccurrence] = []
         for rule in rules {
             guard let start = rule.startDate, let ruleID = rule.id else { continue }
-            let ruleEnd = rule.endDate.map { calendar.startOfDay(for: $0) } ?? .distantFuture
-            let upper: Date = {
-                let base = includeFuture ? (futureHorizon ?? today) : today
-                return min(base, ruleEnd)
-            }()
-            // range の上限も尊重 (先読みしすぎない)
-            let limit = range.map { min(upper, calendar.startOfDay(for: $0.upperBound)) } ?? upper
-            guard calendar.startOfDay(for: start) <= limit else { continue }
+            var limit = includeFuture ? (futureHorizon ?? today) : today
+            if let end = rule.endDate, end.compare(limit) == .orderedAscending { limit = end }
+            if let end = range?.upperBound, end.compare(limit) == .orderedAscending { limit = end }
 
             let days = occurrenceDays(
                 start: start,
                 frequency: rule.resolvedFrequency,
                 interval: rule.resolvedInterval,
+                after: range.flatMap { calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: $0.lowerBound)) },
                 until: limit,
-                cap: 600,
                 calendar: calendar
             )
             let skipped = rule.skippedDaySet   // 「この回だけ削除」された日付
             for day in days {
-                if let range, !(range ~= day) { continue }
+                if let range, day.compare(range.lowerBound) == .orderedAscending { continue }
                 if skipped.contains(day) { continue }         // スキップ (削除) 済み → 出さない
                 let key = "\(ruleID.uuidString)#\(Int(day.timeIntervalSince1970))"
                 if materialized.contains(key) { continue }   // 実在行あり → 仮想は出さない

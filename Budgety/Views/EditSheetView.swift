@@ -28,6 +28,7 @@ struct EditSheetView: View {
     @State private var selectedSymbol: String = "person.2.fill"
     @State private var defaultCurrencyCode: String = CurrencyCatalog.defaultCode
     @State private var budgetText: String = ""
+    @State private var budgetCurrencyChange: SheetBudgetCurrencyChange?
     @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
     @State private var showDeleteConfirm: Bool = false
@@ -131,17 +132,17 @@ struct EditSheetView: View {
                 Section {
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: defaultCurrencyCode).symbol)
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
-                        TextField("0 (未設定)", text: $budgetText)
-                            .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .monospacedDigit()
-                            .onChange(of: budgetText) { _, new in
-                                let allowed = decimalKeypadNeeded
-                                    ? new.filter { $0.isNumber || $0 == "." }
-                                    : new.filter { $0.isNumber }
-                                if allowed != new { budgetText = allowed }
+                        TextField("0 (未設定)", text: Binding(
+                            get: { budgetText },
+                            set: { input in
+                                budgetText = input.filter { $0.isNumber || ($0 == "." && (decimalKeypadNeeded || budgetText.contains("."))) }
                             }
+                        ))
+                        .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
+                        .font(.sheetNumber(.body))
                     }
                 } header: {
                     Text("月予算 (任意)")
@@ -197,6 +198,7 @@ struct EditSheetView: View {
                 }
             }
             .onAppear { loadIfNeeded() }
+            .sheetBudgetCurrencyAlert($budgetCurrencyChange) { save(approval: $0) }
             .confirmationDialog(
                 record.isOwnedByCurrentUser
                     ? "「\(record.displayName)」を削除しますか?"
@@ -468,16 +470,22 @@ struct EditSheetView: View {
         }
     }
 
-    private func save() {
+    private func save(approval: SheetBudgetCurrencyChange.Approval? = nil) {
         // 差分のみ書き戻し (= ユーザーが変更したフィールドのみ)
         viewContext.refresh(record, mergeChanges: true)
+        if let change = SheetBudgetCurrencyChange.apply(
+            to: record, initialCurrency: origCurrencyCode, currency: defaultCurrencyCode,
+            initialBudget: origBudgetText, budget: budgetText, approval: approval
+        ) {
+            // Let the previous alert finish dismissing if a shared sheet changed during confirmation.
+            Task { @MainActor in budgetCurrencyChange = change }
+            return
+        }
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if trimmed != origName { record.name = trimmed }
         if note != origNote { record.note = note }
         if selectedColor != origColor { record.colorHex = selectedColor }
         if selectedSymbol != origSymbol { record.symbol = selectedSymbol }
-        if defaultCurrencyCode != origCurrencyCode { record.defaultCurrencyCode = defaultCurrencyCode }
-        if budgetText != origBudgetText { record.monthlyBudgetDecimal = Decimal(string: budgetText) }
         if archivedDraft != origArchived { record.archived = archivedDraft }
         PersistenceController.shared.save()
         Haptics.success()

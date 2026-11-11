@@ -49,13 +49,21 @@ extension SiriExpenseScope {
 @available(iOS 27.3, *)
 struct SiriExpenseSearchFilter {
     let name: String?
+    let categoryName: String?
     let scope: SiriExpenseScope
 
-    init(expenseName: String?, month: Date?, day: Date? = nil, period: SiriExpensePeriod?,
+    init(expenseName: String?, categoryName: String? = nil, month: Date?, day: Date? = nil, period: SiriExpensePeriod?,
          unnamedPeriod: SiriExpensePeriod = .thisMonth, now: Date = .now, calendar: Calendar = .current) {
         let text = (expenseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let spokenPeriod = Self.periodInQuestion(text)
-        name = text.isEmpty || spokenPeriod != nil ? nil : text
+        let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        self.categoryName = category.isEmpty ? nil : category
+        let question = Self.searchQuestion(text)
+        let spokenPeriod = question?.period
+        if let question {
+            name = question.term
+        } else {
+            name = text.isEmpty ? nil : text
+        }
         if let day {
             scope = SiriExpenseScope(containing: day, isDay: true, calendar: calendar)
         } else if let daily = [period, spokenPeriod].compactMap({ $0 }).first(where: \.isDay) {
@@ -64,27 +72,34 @@ struct SiriExpenseSearchFilter {
         } else if let month {
             scope = SiriExpenseScope(containing: month, isDay: false, calendar: calendar)
         } else {
-            let relative = period ?? spokenPeriod ?? (name == nil ? unnamedPeriod : .allTime)
+            let relative = period ?? spokenPeriod ?? (name == nil && self.categoryName == nil ? unnamedPeriod : .allTime)
             scope = SiriExpenseScope(period: relative, now: now, calendar: calendar)
         }
     }
 
     // The Home Screen shortcut passes its entire text field as expenseName. Only consume
     // complete questions so names containing a period, such as 「今日のランチ」, remain searchable.
-    private static func periodInQuestion(_ text: String) -> SiriExpensePeriod? {
-        let question = text.filter { !$0.isWhitespace }
-            .trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
-            .replacingOccurrences(of: "ししゅつ", with: "支出")
+    private static func searchQuestion(_ text: String) -> (period: SiriExpensePeriod, term: String?)? {
+        let question = text.trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
         let phrases: [(String, SiriExpensePeriod)] = [
             ("今日", .today), ("きょう", .today), ("本日", .today),
             ("昨日", .yesterday), ("きのう", .yesterday),
             ("今月", .thisMonth), ("先月", .lastMonth), ("全期間", .allTime)
         ]
         for (prefix, period) in phrases where question.hasPrefix(prefix) {
-            switch question.dropFirst(prefix.count) {
-            case "の支出", "の支出は", "の支出はいくら", "の支出はいくらですか", "の支出を教えて", "の支出を見せて":
-                return period
+            let rest = question.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard rest.hasPrefix("の") else { continue }
+            let subject = rest.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+            let compact = subject.filter { !$0.isWhitespace }.replacingOccurrences(of: "ししゅつ", with: "支出")
+            switch compact {
+            case "支出", "支出は", "支出はいくら", "支出はいくらですか", "支出を教えて", "支出を見せて":
+                return (period, nil)
             default: break
+            }
+            // Preserve the literal merchant name and spaces within it unless a question was asked.
+            for suffix in ["はいくらですか", "はいくら", "を教えて", "を見せて", "は"] where subject.hasSuffix(suffix) {
+                let term = subject.dropLast(suffix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !term.isEmpty { return (period, term) }
             }
         }
         return nil

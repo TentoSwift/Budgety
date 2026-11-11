@@ -7,14 +7,16 @@ import SwiftUI
 @available(iOS 27.3, *)
 struct SiriExpenseDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出名で明細を確認"
-    static let description = IntentDescription("指定したシートの支出を名前、日付、月で探し、件数、通貨別の合計と最新5件までの明細をテキストで返します。")
+    static let description = IntentDescription("指定したシートの支出を支出名、カテゴリ名、日付、月で探し、件数、通貨別の合計と最新5件までの明細をテキストで返します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "シート名を指定された場合だけ設定します。省略時は最後に開いたシートを使い、特定できなければ選択を求めます。")
     var sheet: ExpenseSheetEntity?
 
-    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出の名前に含まれる言葉。省略するとすべての支出名が対象になります。")
+    @Parameter(title: "支出名・カテゴリ名", description: "店名や支出名の検索語。カテゴリを明示した質問にはカテゴリ名を設定します。")
     var expenseName: String?
+    @Parameter(title: "カテゴリ名", description: "「今月の食費」なら「食費」。指定されたカテゴリに絞り、店名や日付の条件があれば併用します。")
+    var categoryName: String?
 
     @Parameter(title: "対象月", description: "年月だけが指定されたときの月。「今日」や特定の日付は対象月に設定しません。")
     var month: Date?
@@ -26,7 +28,7 @@ struct SiriExpenseDetailsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         // Existing personal shortcuts consume this action's text output.
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, day: day, period: period, unnamedPeriod: .allTime)
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period, unnamedPeriod: .allTime)
         let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
@@ -38,13 +40,15 @@ struct SiriExpenseDetailsIntent: AppIntent {
 @AppIntent(.tool)
 struct SiriFindExpenseCardsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出明細を検索してカードで表示"
-    static let description = IntentDescription("「今日の支出は？」なら今日1日だけ、「今月の支出は？」なら今月の支出を、明細カードと通貨別の金額で返します。日付と店名を組み合わせて検索することもできます。")
+    static let description = IntentDescription("「今日の支出は？」なら今日1日だけ、「今月の支出は？」なら今月の支出を、明細カードと通貨別の金額で返します。「今月の食費」は今月とカテゴリ名「食費」を指定します。店名や支出名でも検索できます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
-    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出名に含まれる言葉。「今日の支出は？」など一覧を求められたら省略します。")
+    @Parameter(title: "支出名・カテゴリ名", description: "店名や支出名の検索語。カテゴリだけを尋ねられた場合や全件表示では省略します。")
     var expenseName: String?
+    @Parameter(title: "カテゴリ名", description: "「今月の食費」なら「食費」。指定されたカテゴリに絞り、店名や日付の条件があれば併用します。")
+    var categoryName: String?
     @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
     @Parameter(title: "対象日", description: "11月11日など、特定の1日について尋ねられたときの日付。")
@@ -54,7 +58,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, day: day, period: period)
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period)
         let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
@@ -72,7 +76,8 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シートの識別子") var sheetIdentifier: String
-    @Parameter(title: "支出名") var expenseName: String?
+    @Parameter(title: "支出名・カテゴリ名") var expenseName: String?
+    @Parameter(title: "カテゴリ名") var categoryName: String?
     // Retained to decode snippets created before daily searches were supported.
     @Parameter(title: "対象月") var month: Date?
     @Parameter(title: "期間の開始") var intervalStart: Date?
@@ -84,6 +89,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     init(sheetIdentifier: String, filter: SiriExpenseSearchFilter) {
         self.sheetIdentifier = sheetIdentifier
         self.expenseName = filter.name
+        self.categoryName = filter.categoryName
         self.intervalStart = filter.scope.interval?.start
         self.intervalEnd = filter.scope.interval?.end
         self.periodLabel = filter.scope.label
@@ -107,7 +113,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, interval: interval, periodLabel: label)
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label)
         return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
@@ -147,7 +153,7 @@ enum SiriExpenseLookup {
     static func run(sheet: ExpenseSheetEntity?, filter: SiriExpenseSearchFilter,
                     choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
         let sheetID = try await sheetIdentifier(sheet: sheet, choosing: choosing)
-        return try search(sheetID: sheetID, expenseName: filter.name, interval: filter.scope.interval, periodLabel: filter.scope.label)
+        return try search(sheetID: sheetID, expenseName: filter.name, categoryName: filter.categoryName, interval: filter.scope.interval, periodLabel: filter.scope.label)
     }
 
     @MainActor
@@ -166,7 +172,7 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func search(sheetID: String, expenseName: String?, interval: DateInterval?, periodLabel period: String) throws -> Result {
+    static func search(sheetID: String, expenseName: String?, categoryName: String? = nil, interval: DateInterval?, periodLabel period: String) throws -> Result {
         // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
         let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
@@ -182,24 +188,49 @@ enum SiriExpenseLookup {
         request.fetchBatchSize = 64
 
         let name = (expenseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = Self.searchKey(name)
+        let query = TransactionSearchTerm(name)
+        let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let categoryTerm = TransactionSearchTerm(category)
         var count = 0
         var totals: [String: Decimal] = [:]
-        var rows: [SiriExpenseCardRow] = []
-        lazy var isSoloSheet = !record.hasAcceptedOtherMembers()
-        for expense in try access.context.fetch(request) where expense.kind == .expense && !expense.isSkipped {
-            let title = expense.displayTitle.isEmpty ? expense.categoryDisplayName : expense.displayTitle
-            guard query.isEmpty || Self.searchKey(title).contains(query) else { continue }
+        var latest: [LedgerItem] = []
+        func collect(_ item: LedgerItem) {
             count += 1
-            let currency = expense.resolvedCurrencyCode.uppercased()
-            totals[currency, default: 0] += expense.amountDecimal
-            if rows.count < 5 {
-                rows.append(.from(expense, in: record, isSoloSheet: isSoloSheet))
+            totals[item.currencyCode.uppercased(), default: 0] += item.amountDecimal
+            // Only the five newest items need display snapshots, including avatar images.
+            if let index = latest.firstIndex(where: { Self.isNewer(item, than: $0) }) {
+                latest.insert(item, at: index)
+                if latest.count > 5 { latest.removeLast() }
+            } else if latest.count < 5 {
+                latest.append(item)
+            }
+        }
+        for expense in try access.context.fetch(request) where expense.kind == .expense && !expense.isSkipped {
+            guard categoryTerm.isEmpty || categoryTerm.matchesCategory(expense.categoryDisplayName),
+                  query.isEmpty || query.matchesNameOrCategory(of: expense) else { continue }
+            collect(.expense(expense))
+        }
+        for occurrence in dueExpenses(in: record, interval: interval) {
+            guard categoryTerm.isEmpty || categoryTerm.matchesCategory(occurrence.categoryDisplayName),
+                  query.isEmpty || query.matchesNameOrCategory(of: occurrence) else { continue }
+            collect(.occurrence(occurrence))
+        }
+        let backing = VirtualRowBacking()
+        lazy var isSoloSheet = !record.hasAcceptedOtherMembers()
+        let rows: [SiriExpenseCardRow] = latest.map { item in
+            switch item {
+            case .expense(let expense):
+                return .from(expense, in: record, isSoloSheet: isSoloSheet)
+            case .occurrence(let occurrence):
+                let display = backing.displayExpense(for: occurrence, sheet: record)
+                return .from(display, in: record, isSoloSheet: isSoloSheet,
+                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record))
             }
         }
 
-        let scope = name.isEmpty ? String(localized: "「\(record.displayName)」の\(period)の支出")
-            : String(localized: "「\(record.displayName)」の\(period)で支出名に「\(name)」を含む明細")
+        let periodScope = category.isEmpty ? period : String(localized: "\(period)のカテゴリ「\(category)」")
+        let scope = name.isEmpty ? String(localized: "「\(record.displayName)」の\(periodScope)の支出")
+            : String(localized: "「\(record.displayName)」の\(periodScope)で支出名またはカテゴリ名に「\(name)」を含む明細")
         let summary: String
         let amounts = totals.sorted { $0.key < $1.key }.map { currency, total in
             total.formatted(.currency(code: currency).presentation(.isoCode))
@@ -219,15 +250,34 @@ enum SiriExpenseLookup {
             let label = row.title == row.category ? row.title : String(localized: "\(row.title)（\(row.category)）")
             report += "\n" + String(localized: "\(row.date)　\(label)　\(row.amount)")
         }
-        let card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name,
+        let card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name.isEmpty ? category : name,
                                          count: count, total: amounts, rows: rows,
                                          sheetSymbol: record.displaySymbol, sheetColorHex: record.displayColorHex)
         return Result(sheetID: sheetID, report: report, summary: summary, card: card)
     }
 
-    private static func searchKey(_ title: String) -> String {
-        let folded = title.folding(options: [.caseInsensitive, .widthInsensitive], locale: .current)
-        return folded.applyingTransform(.hiraganaToKatakana, reverse: false) ?? folded
+    @MainActor
+    static func dueExpenses(in sheet: ExpenseSheet, interval: DateInterval?) -> [RecurringOccurrence] {
+        let range = interval.map { $0.start...$0.end }
+        // The ledger excludes materialized, skipped and future slots. Its range includes both ends.
+        return RecurringOccurrenceService.virtualOccurrences(for: sheet, in: range, includeFuture: false).filter { occurrence in
+            occurrence.kind == .expense && (interval.map { occurrence.date < $0.end } ?? true)
+        }
     }
+
+    private static func isNewer(_ item: LedgerItem, than other: LedgerItem) -> Bool {
+        if item.date != other.date { return item.date > other.date }
+        switch (item, other) {
+        case (.expense(let lhs), .expense(let rhs)):
+            let left = lhs.createdAt ?? .distantPast
+            let right = rhs.createdAt ?? .distantPast
+            if left != right { return left > right }
+        case (.expense, .occurrence): return true
+        case (.occurrence, .expense): return false
+        case (.occurrence, .occurrence): break
+        }
+        return item.id < other.id
+    }
+
 }
 #endif

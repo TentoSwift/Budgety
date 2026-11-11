@@ -41,6 +41,7 @@ struct RecurringSettingsView: View {
                             Text("間隔")
                             Spacer()
                             Text(frequency.summary(interval: interval))
+                                .font(.sheetNumber(.body))
                                 .foregroundStyle(.secondary)
                         }
                     }

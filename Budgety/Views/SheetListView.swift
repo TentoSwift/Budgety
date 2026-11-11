@@ -74,6 +74,8 @@ struct SettingsAvatarButton: View {
 struct SheetListView: View {
     var showsQuickExpense = false
     var sharedPath: Binding<[NSManagedObjectID]>? = nil
+    var usesDuoSidebar = false
+    var showDuoSidebar: (() -> Void)? = nil
     @State private var quickExpenseSheet: ExpenseSheet?
 
     @Environment(\.managedObjectContext) private var viewContext
@@ -86,8 +88,6 @@ struct SheetListView: View {
     @State private var showingAddSheet = false
     @State private var showingSettings = false
     @State private var showingPaywall = false
-    @State private var showSyncWaitingAlert = false
-    @State private var showOfflineAlert = false
     @State private var showNotSignedInAlert = false
     @State private var localPath: [NSManagedObjectID] = []
     private var navigationPath: Binding<[NSManagedObjectID]> { sharedPath ?? $localPath }
@@ -213,6 +213,14 @@ struct SheetListView: View {
                     LockedSheetGate(record: sheet) {
                         SheetDetailView(record: sheet)
                     }
+                    .navigationBarBackButtonHidden(usesDuoSidebar)
+                    .toolbar {
+                        if usesDuoSidebar, let showDuoSidebar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("サイドバーを表示", systemImage: "sidebar.left", action: showDuoSidebar)
+                            }
+                        }
+                    }
                 }
             }
             // SheetDetailView と同じく、検索バーは bottomBar の DefaultToolbarItem に置き、
@@ -317,16 +325,6 @@ struct SheetListView: View {
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
-            .alert("同期完了を待っています", isPresented: $showSyncWaitingAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("iCloud から既存のシートを取得中です。少し待ってからもう一度お試しください。")
-            }
-            .alert("インターネット接続が必要です", isPresented: $showOfflineAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("シートの新規作成には iCloud との同期が必要です。Wi-Fi またはモバイル通信に接続してから再度お試しください。")
-            }
             .alert("iCloud にサインインしてください", isPresented: $showNotSignedInAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -339,25 +337,25 @@ struct SheetListView: View {
             .onChange(of: sheets.count) { _, _ in
                 restoreLastOpenedSheetIfNeeded()
             }
-            .onChange(of: path) { oldPath, newPath in
-                // 末尾のシート URI を覚えておき、次回起動時に復元する
-                lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
-                // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
-                // 精算/詳細などの子画面 push は label ベースで path を変えないため、
-                // ここは「シートそのものを離脱した時」だけ発火する。
-                let removed = Set(oldPath).subtracting(newPath)
-                for id in removed {
-                    guard let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
-                          lockManager.hasPassword(for: sheet) else { continue }
-                    // pop アニメーション完了後に再ロックする。pop の最中に再ロックすると、
-                    // まだ階層に残っている LockedSheetGate の fullScreenCover (パスワード画面)
-                    // が一覧の上に出てしまう (= 「一覧に戻るとパスワード画面が表示される」)。
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        // 0.5s 以内に同じシートを開き直していた (= path に戻っている) 場合は、
-                        // 表示中のシートを誤ってロックしないようにスキップする。
-                        guard !path.contains(id) else { return }
-                        lockManager.lock(sheet)
-                    }
+        }
+        .onChange(of: path) { oldPath, newPath in
+            // 末尾のシート URI を覚えておき、次回起動時に復元する
+            lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
+            // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
+            // 精算/詳細などの子画面 push は label ベースで path を変えないため、
+            // ここは「シートそのものを離脱した時」だけ発火する。
+            let removed = Set(oldPath).subtracting(newPath)
+            for id in removed {
+                guard let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
+                      lockManager.hasPassword(for: sheet) else { continue }
+                // pop アニメーション完了後に再ロックする。pop の最中に再ロックすると、
+                // まだ階層に残っている LockedSheetGate の fullScreenCover (パスワード画面)
+                // が一覧の上に出てしまう (= 「一覧に戻るとパスワード画面が表示される」)。
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // 0.5s 以内に同じシートを開き直していた (= path に戻っている) 場合は、
+                    // 表示中のシートを誤ってロックしないようにスキップする。
+                    guard !path.contains(id) else { return }
+                    lockManager.lock(sheet)
                 }
             }
         }
@@ -405,7 +403,7 @@ struct SheetListView: View {
     /// ロック中 (パスワードあり & 未解錠) のシートは中身を出さない。
     private var expenseMatchGroups: [ExpenseMatchGroup] {
         // クエリが空 (フォーカスのみ) のときは 0 件。
-        let q = trimmedQuery.lowercased()
+        let q = TransactionSearchTerm(trimmedQuery)
         guard !q.isEmpty else { return [] }
         let lock = SheetLockManager.shared
         let fx = FXRatesService.shared
@@ -420,8 +418,8 @@ struct SheetListView: View {
                 }
             }
             // 仮想 occurrence (完全仮想化)。表示は子コンテキストの transient (never save)。
-            for occ in RecurringOccurrenceService.virtualOccurrences(for: sheet, includeFuture: false)
-            where searchPeriod.contains(occ.date) && matchesOccurrence(occ, query: q, sheet: sheet) {
+            for occ in RecurringOccurrenceService.virtualOccurrences(for: sheet, in: searchPeriod.occurrenceRange())
+            where matchesOccurrence(occ, query: q, sheet: sheet) {
                 let display = searchVirtualBacking.displayExpense(for: occ, sheet: sheet)
                 items.append(SearchItem(display: display, occurrence: occ))
             }
@@ -440,27 +438,17 @@ struct SheetListView: View {
     }
 
     /// 支出 1 件が (シート名以外の) クエリにマッチするか。
-    private func matchesExpense(_ e: Expense, query q: String) -> Bool {
-        let fields: [String] = [
-            e.displayTitle.lowercased(),
-            e.categoryDisplayName.lowercased(),
-            e.displayPaidBy.lowercased(),
-            e.formattedSignedAmount.lowercased(),
-            (e.note ?? "").lowercased()
-        ]
-        return fields.contains { $0.contains(q) }
+    private func matchesExpense(_ e: Expense, query q: TransactionSearchTerm) -> Bool {
+        q.matchesNameOrCategory(of: e) || q.matches(e.displayPaidBy)
+            || q.matches(e.formattedSignedAmount) || q.matches(e.note ?? "")
     }
 
     /// 仮想 occurrence 1 件がクエリにマッチするか (matchesExpense と同じフィールド。note は無し)。
-    private func matchesOccurrence(_ occ: RecurringOccurrence, query q: String, sheet: ExpenseSheet) -> Bool {
-        let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
-        let catName = cats.first { $0.name == occ.categoryRaw }?.displayName
-            ?? (occ.categoryRaw.isEmpty ? "" : occ.categoryRaw)
-        let payerName = (occ.payerProfileID.flatMap { $0.isEmpty ? nil : sheet.memberDisplayInfo(for: $0).name }) ?? ""
-        let amountStr = ((occ.kind == .expense ? "-" : "+")
-            + CurrencyCatalog.format(occ.amount, code: occ.currencyCode)).lowercased()
-        let fields = [occ.title.lowercased(), catName.lowercased(), payerName.lowercased(), amountStr]
-        return fields.contains { $0.contains(q) }
+    private func matchesOccurrence(_ occ: RecurringOccurrence, query q: TransactionSearchTerm, sheet: ExpenseSheet) -> Bool {
+        if q.matchesNameOrCategory(of: occ) { return true }
+        let payerName = occ.payerProfileID.flatMap { $0.isEmpty ? nil : sheet.memberDisplayInfo(for: $0).name } ?? ""
+        let amount = (occ.kind == .expense ? "-" : "+") + CurrencyCatalog.format(occ.amount, code: occ.currencyCode)
+        return q.matches(payerName) || q.matches(amount)
     }
 
     /// 仮想 occurrence をタップ編集するため viewContext へ materialize (未保存)。
@@ -880,27 +868,13 @@ struct SheetListView: View {
         didRestorePath = true
     }
 
-    /// 新しいシートを追加しようとした時のゲート。3 値で分岐:
-    /// - `.allowed`: そのまま追加画面を出す
-    /// - `.waitingForSync`: CloudKit 初回 import 完了待ち → アラートで「同期待ち」を案内
-    /// - `.overLimit`: Free 上限到達 → Paywall を提示
     private func tryShowAddSheet() {
-        switch PurchaseManager.sheetCreationGate() {
-        case .allowed:
-            showingAddSheet = true
-        case .notSignedIn:
+        guard PersistenceController.shared.iCloudAccountAvailable else {
             showNotSignedInAlert = true
             Haptics.warning()
-        case .waitingForSync:
-            showSyncWaitingAlert = true
-            Haptics.warning()
-        case .offline:
-            showOfflineAlert = true
-            Haptics.warning()
-        case .overLimit:
-            showingPaywall = true
-            Haptics.warning()
+            return
         }
+        showingAddSheet = true
     }
 
     private func applyDemoLaunch() {
@@ -966,7 +940,7 @@ private struct SearchTotalCard: View {
                 periodMenuLabel
                 Spacer()
                 Text("\(count)件")
-                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .font(.sheetNumber(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
 
@@ -992,7 +966,7 @@ private struct SearchTotalCard: View {
                 Text("- \(CurrencyCatalog.format(expense, code: currency))")
                     .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
             }
-            .font(.subheadline.monospacedDigit().weight(.medium))
+            .font(.sheetNumber(.subheadline, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(reduceMotion ? nil : .snappy, value: income)
@@ -1001,7 +975,7 @@ private struct SearchTotalCard: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(Color.accentColor.opacity(0.12))
         )
     }
@@ -1046,7 +1020,7 @@ private struct SearchTotalCard: View {
         } label: {
             HStack(spacing: 6) {
                 Text(period.headerLabel)
-                    .font(.title3.weight(.semibold))
+                    .font(.sheetNumber(.title3, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.bold))
@@ -1087,7 +1061,7 @@ private struct SearchSheetHeader: View {
 
     private var netPill: some View {
         Text(formattedNet)
-            .font(.caption.weight(.semibold).monospacedDigit())
+            .font(.sheetNumber(.caption, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -1127,6 +1101,7 @@ private struct SearchResultRow: View {
                     }
                     if let d = expense.date {
                         Text(d, format: .dateTime.year().month().day())
+                            .font(.sheetNumber(.caption))
                     }
                 }
                 .font(.caption)
@@ -1135,7 +1110,7 @@ private struct SearchResultRow: View {
             }
             Spacer()
             Text(expense.formattedSignedAmount)
-                .font(.callout.monospacedDigit())
+                .font(.sheetNumber(.callout))
                 .foregroundStyle(.primary)
         }
         .padding(.vertical, 4)
@@ -1201,6 +1176,7 @@ struct ArchivedSheetsHeader: View {
             HStack(spacing: 6) {
                 Label("アーカイブ済み", systemImage: "archivebox")
                 Text("\(count)")
+                    .fontDesign(.rounded)
                     .monospacedDigit()
                 Spacer()
                 Image(systemName: "chevron.right")

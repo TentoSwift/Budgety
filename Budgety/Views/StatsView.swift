@@ -198,6 +198,7 @@ struct StatsView: View {
                     AxisGridLine()
                     AxisTick()
                     AxisValueLabel(format: .dateTime.day())
+                        .font(.sheetNumber(.caption2))
                 }
             }
             .chartYAxis {
@@ -237,7 +238,7 @@ struct StatsView: View {
             Spacer()
             VStack(spacing: 2) {
                 Text(monthLabel)
-                    .font(.headline)
+                    .font(.sheetNumber(.headline))
                 if let relative = relativeMonthLabel {
                     Text(relative)
                         .font(.caption2)
@@ -287,14 +288,14 @@ struct StatsView: View {
                 }
             }
             Text(CurrencyCatalog.format(totalAmount, code: primaryCurrencyCode))
-                .font(.largeTitle.bold().monospacedDigit())
+                .font(.sheetNumber(.largeTitle, weight: .bold))
             HStack(spacing: 8) {
                 Text(String(localized: "\(monthlyExpenses.count) 件"))
-                    .font(.caption)
+                    .font(.sheetNumber(.caption))
                     .foregroundStyle(.secondary)
                 if previousMonthTotal > 0 {
                     Text(String(localized: "先月: \(CurrencyCatalog.format(previousMonthTotal, code: primaryCurrencyCode))"))
-                        .font(.caption)
+                        .font(.sheetNumber(.caption))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -302,7 +303,7 @@ struct StatsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(.thinMaterial)
         }
     }
@@ -319,7 +320,7 @@ struct StatsView: View {
                 .font(.caption2.weight(.bold))
             if let pct = monthOverMonthPercent {
                 Text(String(format: "%+.1f%%", pct))
-                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .font(.sheetNumber(.caption2, weight: .semibold))
             }
         }
         .foregroundStyle(color)
@@ -369,10 +370,9 @@ struct StatsView: View {
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(CurrencyCatalog.format(item.total, code: primaryCurrencyCode))
-                            .monospacedDigit()
-                            .font(.subheadline)
+                            .font(.sheetNumber(.subheadline))
                         Text("\(item.count) 件")
-                            .font(.caption2)
+                            .font(.sheetNumber(.caption2))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -392,8 +392,7 @@ struct StatsView: View {
                     Text(item.name)
                     Spacer()
                     Text(CurrencyCatalog.format(item.total, code: primaryCurrencyCode))
-                        .monospacedDigit()
-                        .font(.subheadline)
+                        .font(.sheetNumber(.subheadline))
                 }
                 .padding(.vertical, 6)
                 Divider()

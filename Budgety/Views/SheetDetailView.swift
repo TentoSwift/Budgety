@@ -108,6 +108,24 @@ struct SheetDetailView: View {
             return headerLabel
         }
 
+        func occurrenceRange(customStart: Date? = nil, customEnd: Date? = nil) -> ClosedRange<Date>? {
+            let calendar = Calendar.current
+            let now = Date.now
+            switch self {
+            case .all: return nil
+            case .thisMonth: return RecurringOccurrenceService.calendarDays(in: .month, containing: now)
+            case .lastMonth:
+                guard let last = calendar.date(byAdding: .month, value: -1, to: now) else { return nil }
+                return RecurringOccurrenceService.calendarDays(in: .month, containing: last)
+            case .thisYear: return RecurringOccurrenceService.calendarDays(in: .year, containing: now)
+            case .custom:
+                guard let customStart, let customEnd else { return nil }
+                let start = calendar.startOfDay(for: customStart)
+                let end = calendar.startOfDay(for: customEnd)
+                return start.compare(end) == .orderedDescending ? end...start : start...end
+            }
+        }
+
         /// 指定日がこの期間に含まれるか。`.all` は常に true。
         /// `.custom` は `customStart`/`customEnd` の閉区間 (日単位) で判定する。
         /// custom 範囲が未指定 (nil) のときは全件通す。
@@ -131,9 +149,9 @@ struct SheetDetailView: View {
                 let lo = calendar.startOfDay(for: min(s, e))
                 let hiDay = calendar.startOfDay(for: max(s, e))
                 guard let hiExclusive = calendar.date(byAdding: .day, value: 1, to: hiDay) else {
-                    return d >= lo
+                    return d.compare(lo) != .orderedAscending
                 }
-                return d >= lo && d < hiExclusive
+                return d.compare(lo) != .orderedAscending && d.compare(hiExclusive) == .orderedAscending
             }
         }
     }
@@ -331,12 +349,10 @@ struct SheetDetailView: View {
         if isSearchActive {
             list = list.filter { searchPeriod.contains($0.date) }
         }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
             list = list.filter {
-                $0.displayTitle.lowercased().contains(q)
-                    || $0.displayPaidBy.lowercased().contains(q)
-                    || ($0.note ?? "").lowercased().contains(q)
+                q.matchesNameOrCategory(of: $0) || q.matches($0.displayPaidBy) || q.matches($0.note ?? "")
             }
         }
         switch (sortField, sortAscending) {
@@ -351,7 +367,8 @@ struct SheetDetailView: View {
     /// 一覧に混ぜる仮想 occurrence (完全仮想化フラグ OFF なら空)。
     /// `filteredExpenses` と同じ条件 (カテゴリ/支払者/検索/検索期間) で絞り込む。
     private var filteredVirtuals: [RecurringOccurrence] {
-        var list = RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
+        let range = isSearchActive ? searchPeriod.occurrenceRange() : nil
+        var list = RecurringOccurrenceService.virtualOccurrences(for: record, in: range)
         guard !list.isEmpty else { return [] }
         if let cat = selectedCategory {
             let name = cat.name ?? ""
@@ -381,12 +398,9 @@ struct SheetDetailView: View {
                 )
             }
         }
-        if isSearchActive {
-            list = list.filter { searchPeriod.contains($0.date) }
-        }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
-            list = list.filter { $0.title.lowercased().contains(q) }
+            list = list.filter { q.matchesNameOrCategory(of: $0) }
         }
         return list
     }
@@ -448,6 +462,9 @@ struct SheetDetailView: View {
                 }
         }
         .listStyle(.plain)
+        #if os(iOS)
+        .modifier(DuoListScrollRestoration(lastRowID: { groupedByDay().last?.value.last?.id }))
+        #endif
         #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
         .appEntityUIElements(siriSheetElements(in:))
         #endif
@@ -1299,15 +1316,7 @@ struct SheetDetailView: View {
     /// 指定 expense を削除する。確認ダイアログ経由でのみ呼ばれる。
     @MainActor
     private func deleteExpense(_ expense: Expense) {
-        // 定期由来の occurrence (生成/override/過去凍結) を削除する場合、完全仮想化では
-        // 行を消すだけだと仮想で復活してしまうので、ルール側に skip を記録してから削除する。
-        if RecurringOccurrenceService.virtualizationEnabled,
-           let ruleID = expense.generatedFromRuleID,
-           let rule = (record.recurringRules as? Set<RecurringRule>)?.first(where: { $0.id == ruleID }),
-           let day = expense.scheduledDate ?? expense.date {
-            rule.addSkippedDay(day)
-        }
-        viewContext.delete(expense)
+        RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
         PersistenceController.shared.save()
         Haptics.warning()
     }
@@ -1483,7 +1492,7 @@ private struct SummaryCard: View {
         // 期間ピッカーは常に合計に反映する (検索中も「その期間のみ」集計)。
         let categoryID = selectedCategory?.objectID
         let target = code
-        let q = searchQuery.lowercased()
+        let q = TransactionSearchTerm(searchQuery)
         let selfIDs: Set<String> = (selectedPayerID == nil && selectedBeneficiaryID == nil) ? [] :
             UserProfileStore.shared.canonicalSelfIDs(forShare: ShareCoordinator.shared.existingShare(for: record))
         var expenseSum: Decimal = 0
@@ -1496,9 +1505,7 @@ private struct SummaryCard: View {
             if let benID = selectedBeneficiaryID, !beneficiaryMatches(e.beneficiaryIDList, beneficiaryID: benID, selfIDs: selfIDs) { continue }
             if !splitFilter.matches(beneficiaryIDs: e.beneficiaryIDList, payerID: e.payerProfileID) { continue }
             if !q.isEmpty {
-                let matches = e.displayTitle.lowercased().contains(q)
-                    || e.displayPaidBy.lowercased().contains(q)
-                    || (e.note ?? "").lowercased().contains(q)
+                let matches = q.matchesNameOrCategory(of: e) || q.matches(e.displayPaidBy) || q.matches(e.note ?? "")
                 if !matches { continue }
             }
             hitCount += 1
@@ -1513,8 +1520,8 @@ private struct SummaryCard: View {
             }
         }
         // 仮想 occurrence (完全仮想化 ON 時のみ非空) も同条件で合計に反映する。
-        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, includeFuture: false)
-            where period.contains(occ.date, customStart: customStart, customEnd: customEnd) {
+        let range = period.occurrenceRange(customStart: customStart, customEnd: customEnd)
+        for occ in RecurringOccurrenceService.virtualOccurrences(for: record, in: range) {
             if let cat = selectedCategory, occ.categoryRaw != (cat.name ?? "") { continue }
             if let payerID = selectedPayerID,
                !payerMatches(occ.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) { continue }
@@ -1525,7 +1532,7 @@ private struct SummaryCard: View {
                 beneficiaryIDs: occ.beneficiaryProfileIDs.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) },
                 payerID: occ.payerProfileID
             ) { continue }
-            if !q.isEmpty, !occ.title.lowercased().contains(q) { continue }
+            if !q.isEmpty, !q.matchesNameOrCategory(of: occ) { continue }
             hitCount += 1
             guard let converted = fx.convert(occ.amount, from: occ.currencyCode, to: target) else {
                 missing.insert(occ.currencyCode)
@@ -1584,7 +1591,7 @@ private struct SummaryCard: View {
                 Spacer()
                 if isSearching {
                     Text("\(t.hitCount)件")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(.sheetNumber(.caption, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1617,7 +1624,7 @@ private struct SummaryCard: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(record.tint.opacity(0.12))
         )
         // フィルタが変わった更新ではアニメーションを無効化 (数値ロール・残予算/バーの
@@ -1680,7 +1687,7 @@ private struct SummaryCard: View {
         } label: {
             HStack(spacing: 6) {
                 Text(periodHeaderLabel)
-                    .font(.title3.weight(.semibold))
+                    .font(.sheetNumber(.title3, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.bold))
@@ -1710,7 +1717,7 @@ private struct SummaryCard: View {
     private func mainExpense(_ expense: Decimal) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CurrencyCatalog.format(expense, code: code))
-                .font(.system(size: 56, weight: .bold, design: .default).monospacedDigit())
+                .font(.system(size: 56, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
@@ -1758,7 +1765,7 @@ private struct SummaryCard: View {
                     .foregroundStyle(.secondary)
             }
             Text(value)
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(.sheetNumber(.subheadline, weight: .semibold))
                 .foregroundStyle(valueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -1786,11 +1793,11 @@ private struct SummaryCard: View {
         VStack(spacing: 8) {
             HStack {
                 Text("予算 \(CurrencyCatalog.format(budget, code: code))")
-                    .font(.caption.monospacedDigit())
+                    .font(.sheetNumber(.caption))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int((ratio * 100).rounded())) %")
-                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .font(.sheetNumber(.caption, weight: .semibold))
                     .foregroundStyle(color)
             }
             GeometryReader { geo in
@@ -1841,7 +1848,7 @@ private struct SummaryCard: View {
             Image(systemName: "magnifyingglass")
                 .font(.caption.weight(.bold))
             Text("\"\(searchQuery)\" • \(count) 件")
-                .font(.subheadline.weight(.semibold))
+                .font(.sheetNumber(.subheadline, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -1904,7 +1911,7 @@ private struct SummaryCard: View {
             Text("- \(CurrencyCatalog.format(expense, code: code))")
                 .contentTransition(reduceMotion ? .identity : .numericText(value: doubleValue(expense)))
         }
-        .font(.subheadline.monospacedDigit().weight(.medium))
+        .font(.sheetNumber(.subheadline, weight: .medium))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(reduceMotion ? nil : .snappy, value: income)
@@ -1935,11 +1942,11 @@ private struct SummaryCard: View {
                 Spacer()
                 if isOver {
                     Text("超過 \(CurrencyCatalog.format(-remaining, code: code))")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(.sheetNumber(.caption, weight: .semibold))
                         .foregroundStyle(.red)
                 } else {
                     Text("残り \(CurrencyCatalog.format(remaining, code: code))")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(.sheetNumber(.caption, weight: .semibold))
                         .foregroundStyle(color)
                 }
             }
@@ -1955,11 +1962,11 @@ private struct SummaryCard: View {
             .frame(height: 8)
             HStack {
                 Text("\(CurrencyCatalog.format(spent, code: code)) / \(CurrencyCatalog.format(budget, code: code))")
-                    .font(.caption2.monospacedDigit())
+                    .font(.sheetNumber(.caption2))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int((ratio * 100).rounded()))%")
-                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .font(.sheetNumber(.caption2, weight: .semibold))
                     .foregroundStyle(color)
             }
         }
@@ -2003,6 +2010,7 @@ private struct CustomPeriodSheet: View {
                     )
                 } footer: {
                     Text(SheetDetailView.Period.customRangeLabel(start: draftStart, end: draftEnd))
+                        .font(.sheetNumber(.body))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2059,7 +2067,7 @@ private struct DateHeaderView: View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.sheetNumber(.subheadline, weight: .semibold))
                     .foregroundStyle(tint)
                 HStack {
                     Spacer()
@@ -2069,7 +2077,7 @@ private struct DateHeaderView: View {
         } else {
             HStack {
                 Text(label)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.sheetNumber(.subheadline, weight: .semibold))
                     .foregroundStyle(tint)
                 Spacer()
                 netPill
@@ -2079,7 +2087,7 @@ private struct DateHeaderView: View {
 
     private var netPill: some View {
         Text(formattedNet)
-            .font(.caption.weight(.semibold).monospacedDigit())
+            .font(.sheetNumber(.caption, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -2235,7 +2243,7 @@ final class VirtualRowBacking {
 
     func displayExpense(for occ: RecurringOccurrence, sheet: ExpenseSheet) -> Expense {
         let ctx = ensureContext(parent: sheet.managedObjectContext)
-        let key = signature(occ)
+        let key = sheet.objectID.uriRepresentation().absoluteString + "|" + signature(occ)
         if let cached = cache[key] { return cached }
         // 暴走防止: 長期スクロール等でキャッシュが膨らんだら一旦クリアする。
         if cache.count > 400 {
@@ -2247,7 +2255,7 @@ final class VirtualRowBacking {
             e.sheet = childSheet
             if !occ.categoryRaw.isEmpty,
                let cats = childSheet.categories as? Set<ExpenseCategory>,
-               let cat = cats.first(where: { $0.name == occ.categoryRaw }) {
+               let cat = cats.first(where: { $0.kind == occ.kind && $0.name == occ.categoryRaw }) {
                 e.category = cat
             }
         }
@@ -2376,7 +2384,7 @@ private struct ExpenseRowView: View {
                         .foregroundStyle(.secondary)
                 }
                 Text(expense.formattedSignedAmount)
-                    .font(.subheadline.monospacedDigit())
+                    .font(.sheetNumber(.subheadline))
                     .foregroundStyle(.primary)
             }
             if expense.resolvedCurrencyCode != (expense.sheet?.resolvedDefaultCurrencyCode ?? "JPY") {
@@ -2764,3 +2772,61 @@ private struct FilterOptionList: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
+
+#if os(iOS)
+/// Restore the last visible ledger row if the other display temporarily clipped a user scroll to the bottom.
+private struct DuoListScrollRestoration: ViewModifier {
+    @Environment(\.duoExpanded) private var expanded
+    let lastRowID: () -> String?
+
+    private struct BottomPosition {
+        let expanded: Bool
+        let rowID: String
+        let offset: CGFloat
+        var wasClamped = false
+    }
+
+    @State private var bottomPosition: BottomPosition?
+    @State private var userIsScrolling = false
+
+    func body(content: Content) -> some View {
+        if let expanded, #available(iOS 27.0, *) {
+            ScrollViewReader { proxy in
+                content
+                    #if canImport(SwiftUI, _version: 8.0)
+                    .toolbarMinimizationSafeAreaAdjustment(.disabled, for: .navigationBar)
+                    #endif
+                    .onScrollPhaseChange { _, phase, context in
+                        if phase == .interacting {
+                            userIsScrolling = true
+                            bottomPosition = nil
+                        } else if phase == .idle && userIsScrolling {
+                            userIsScrolling = false
+                            let geometry = context.geometry
+                            let bottom = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height
+                            if abs(geometry.contentOffset.y - bottom) < 1, let rowID = lastRowID() {
+                                bottomPosition = BottomPosition(expanded: expanded, rowID: rowID, offset: geometry.contentOffset.y)
+                            }
+                        }
+                    }
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height
+                    } action: { _, availableOffset in
+                        if let saved = bottomPosition, saved.expanded != expanded,
+                           !saved.wasClamped, saved.offset > availableOffset + 1 {
+                            bottomPosition?.wasClamped = true
+                        }
+                    }
+                    .onChange(of: expanded) { _, newPose in
+                        guard let saved = bottomPosition, saved.expanded == newPose,
+                              saved.wasClamped, saved.rowID == lastRowID() else { return }
+                        bottomPosition?.wasClamped = false
+                        proxy.scrollTo(saved.rowID, anchor: .bottom)
+                    }
+            }
+        } else {
+            content
+        }
+    }
+}
+#endif

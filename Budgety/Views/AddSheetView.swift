@@ -71,11 +71,12 @@ struct AddSheetView: View {
                 Section {
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: defaultCurrencyCode).symbol)
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
                         TextField("0 (未設定)", text: $budgetText)
                             .keyboardType(decimalKeypadNeeded ? .decimalPad : .numberPad)
-                            .monospacedDigit()
+                            .font(.sheetNumber(.body))
                             .onChange(of: budgetText) { _, new in
                                 let allowed = decimalKeypadNeeded
                                     ? new.filter { $0.isNumber || $0 == "." }

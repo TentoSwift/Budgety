@@ -96,7 +96,7 @@ struct SiriEditableTransactionQuery: EntityStringQuery {
     static func candidates(in sheet: ExpenseSheet, matching string: String,
                            access: IntentSheetAccess) throws -> [SiriEditableTransactionEntity] {
         guard access.allows(sheet) else { throw AppIntentError.sheetNotFound }
-        let query = searchKey(string)
+        let query = TransactionSearchTerm(string)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
         request.predicate = NSPredicate(format: "sheet == %@ AND (isSkipped == NO OR isSkipped == nil)", sheet)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Expense.date, ascending: false),
@@ -106,8 +106,7 @@ struct SiriEditableTransactionQuery: EntityStringQuery {
         for expense in try access.context.fetch(request) {
             if let live = access.viewContext.registeredObject(for: expense.objectID) as? Expense,
                live.hasPersistentChangedValues || live.isDeleted || live.isSkipped || live.sheet?.objectID != sheet.objectID { continue }
-            let title = expense.displayTitle.isEmpty ? expense.categoryDisplayName : expense.displayTitle
-            guard query.isEmpty || searchKey(title).contains(query),
+            guard query.isEmpty || query.matchesNameOrCategory(of: expense),
                   PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: expense.objectID) else { continue }
             matches.append(.from(expense))
             // A blank picker shows recent transactions. A named search includes older matches and namesakes.
@@ -116,11 +115,6 @@ struct SiriEditableTransactionQuery: EntityStringQuery {
         return matches
     }
 
-    private static func searchKey(_ value: String) -> String {
-        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .widthInsensitive], locale: .current)
-        return text.applyingTransform(.hiraganaToKatakana, reverse: false) ?? text
-    }
 
     private enum SelectionError: Error, CustomLocalizedStringResourceConvertible {
         case sheetRequired

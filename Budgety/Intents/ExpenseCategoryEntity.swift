@@ -86,7 +86,10 @@ struct ExpenseCategoryEntityQuery: EntityStringQuery {
     func entities(matching string: String) async throws -> [ExpenseCategoryEntity] {
         let search = string.trimmingCharacters(in: .whitespacesAndNewlines)
         let categories = try await suggestedEntities()
-        return search.isEmpty ? categories : categories.filter { $0.name.localizedStandardContains(search) }
+        let term = TransactionSearchTerm(search)
+        return term.isEmpty ? categories : categories.filter {
+            term.matches($0.name) || $0.name.localizedStandardContains(search)
+        }
     }
 
     @MainActor

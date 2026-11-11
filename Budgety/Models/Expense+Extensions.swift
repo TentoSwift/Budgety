@@ -344,3 +344,34 @@ extension Expense {
         resolvedCategory?.displaySymbol ?? "tag.slash"
     }
 }
+
+/// The same typed or spoken term matches titles and the category currently shown on a transaction.
+struct TransactionSearchTerm {
+    private let key: String
+    var isEmpty: Bool { key.isEmpty }
+
+    init(_ text: String) {
+        key = Self.normalized(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    func matches(_ value: String) -> Bool {
+        Self.normalized(value).contains(key)
+    }
+
+    func matchesCategory(_ name: String) -> Bool {
+        Self.normalized(name) == key
+    }
+
+    func matchesNameOrCategory(of expense: Expense) -> Bool {
+        matches(expense.displayTitle) || matches(expense.categoryDisplayName)
+    }
+
+    func matchesNameOrCategory(of occurrence: RecurringOccurrence) -> Bool {
+        matches(occurrence.title) || matches(occurrence.categoryDisplayName)
+    }
+
+    private static func normalized(_ text: String) -> String {
+        let folded = text.folding(options: [.caseInsensitive, .widthInsensitive], locale: .current)
+        return folded.applyingTransform(.hiraganaToKatakana, reverse: false) ?? folded
+    }
+}

@@ -577,7 +577,7 @@ final class UserProfileStore: ObservableObject {
     /// MemberPicker で「自分」を表示できるよう、ローカル Member を 1 つ確保する。
     /// 表示用フィールド (name / colorHex / photoData) も最新の UserProfileStore 値で同期する。
     /// recordName / updatedAt は触らない (cross-device 同期は ParticipantProfile に集約)。
-    func ensureSelfMemberExists(in ctx: NSManagedObjectContext) {
+    func ensureSelfMemberExists(in ctx: NSManagedObjectContext, saveChanges: Bool = true) {
         let req = NSFetchRequest<Member>(entityName: "Member")
         req.fetchLimit = 1
         if let id = selfMemberID {
@@ -603,7 +603,7 @@ final class UserProfileStore: ObservableObject {
         if member.colorHex != newColor { member.colorHex = newColor }
         if member.photoData != photoData { member.photoData = photoData }
 
-        if ctx.hasChanges { try? ctx.save() }
+        if saveChanges, ctx.hasChanges { try? ctx.save() }
     }
 
     // MARK: - Hydrate from ParticipantProfile (cross-device)

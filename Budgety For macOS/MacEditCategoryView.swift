@@ -31,11 +31,8 @@ struct MacEditCategoryView: View {
     @State private var showingDeleteConfirm: Bool = false
 
     @State private var origColor: String = ""
-    @State private var origSymbol: String = ""
 
     @State private var showingSymbolPicker: Bool = false
-    @State private var showingPaywall: Bool = false
-    @StateObject private var pm = PurchaseManager.shared
 
     private var isEditing: Bool {
         if case .edit = mode { return true }
@@ -146,7 +143,6 @@ struct MacEditCategoryView: View {
         .frame(minHeight: 260, maxHeight: 720)
         .tint(sheetTint)
         .onAppear { loadIfNeeded() }
-        .sheet(isPresented: $showingPaywall) { PaywallView() }
         .confirmationDialog(
             "「\(name)」を削除しますか？",
             isPresented: $showingDeleteConfirm,
@@ -284,16 +280,9 @@ struct MacEditCategoryView: View {
     @ViewBuilder
     private func symbolButton(_ sym: String) -> some View {
         let isSelected = (selectedSymbol == sym)
-        let isLocked = CategoryDefaults.isPremiumSymbol(sym)
-            && !pm.isPremium
-            && sym != origSymbol
         Button {
-            if isLocked {
-                showingPaywall = true
-            } else {
-                selectedSymbol = sym
-                showingSymbolPicker = false
-            }
+            selectedSymbol = sym
+            showingSymbolPicker = false
         } label: {
             ZStack {
                 Circle()
@@ -309,15 +298,6 @@ struct MacEditCategoryView: View {
                 Image(systemName: sym)
                     .font(.callout)
                     .foregroundStyle(isSelected ? .white : .primary)
-                    .opacity(isLocked ? 0.45 : 1)
-                if isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(3)
-                        .background(Circle().fill(Color.accentColor))
-                        .offset(x: 13, y: 13)
-                }
             }
             .frame(width: 40, height: 40)
         }
@@ -342,7 +322,6 @@ struct MacEditCategoryView: View {
             selectedSymbol = category.displaySymbol
             kind = category.kind
             origColor = selectedColor
-            origSymbol = selectedSymbol
         }
     }
 

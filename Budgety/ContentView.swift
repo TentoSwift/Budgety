@@ -29,8 +29,9 @@ struct ContentView: View {
                 let width = geometry.size.width + insets.leading + insets.trailing
                 let height = geometry.size.height + insets.top + insets.bottom
                 let expanded = width > height && height >= 600
-                DuoSheetsView(compact: !expanded)
+                DuoSheetsView(compact: !expanded, sidebarWidth: min(320, max(260, geometry.size.width * 0.4)))
                     .environment(\.horizontalSizeClass, expanded ? .regular : .compact)
+                    .environment(\.duoExpanded, expanded)
             }
             .ignoresSafeArea(.keyboard)
         } else {
@@ -43,8 +44,13 @@ struct ContentView: View {
 }
 
 #if os(iOS)
+extension EnvironmentValues {
+    @Entry var duoExpanded: Bool? = nil
+}
+
 private struct DuoSheetsView: View {
     let compact: Bool
+    let sidebarWidth: CGFloat
     @State private var sheetPath: [NSManagedObjectID] = []
     @State private var restoredSelection = false
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: false)])
@@ -52,78 +58,74 @@ private struct DuoSheetsView: View {
     @AppStorage("lastOpenedSheetURI") private var lastOpenedSheetURI = ""
     @AppStorage("iosArchivedSectionExpanded") private var archivedExpanded = false
     @State private var showingSettings = false
-
-    private var selected: ExpenseSheet? {
-        sheets.first { $0.objectID == sheetPath.last }
-            ?? sheets.first { !$0.archived }
-            ?? (archivedExpanded ? sheets.first : nil)
-    }
+    @State private var sidebarHidden = false
+    private var showsSidebar: Bool { !compact && !sidebarHidden && !sheetPath.isEmpty }
 
     var body: some View {
-        Group {
-        if sheets.isEmpty {
-            SheetListView()
-        } else if compact {
-            SheetListView(showsQuickExpense: true, sharedPath: $sheetPath)
-        } else {
-            NavigationSplitView {
-                let archived = sheets.filter { $0.archived }
-                List(selection: Binding<NSManagedObjectID?>(
-                    get: { selected?.objectID },
-                    set: { id in
-                        if let id { sheetPath = [id] }
-                    }
-                )) {
-                    ForEach(sheets.filter { !$0.archived }) { sheet in
-                        SheetRowView(record: sheet).tag(sheet.objectID)
-                    }
-                    if !archived.isEmpty {
-                        Section {
-                            if archivedExpanded {
-                                ForEach(archived) { sheet in
-                                    SheetRowView(record: sheet).tag(sheet.objectID)
-                                }
-                            }
-                        } header: {
-                            ArchivedSheetsHeader(count: archived.count, archivedExpanded: $archivedExpanded)
-                        }
-                    }
-                }
-                .listStyle(.plain)
-                .animation(.easeInOut(duration: 0.25), value: archivedExpanded)
-                .navigationTitle("シート")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        SettingsAvatarButton { showingSettings = true }
-                    }
-                }
-            } detail: {
-                if let selected {
-                    NavigationStack { SheetDetailView(record: selected).sheetLockCover(selected) }
-                        .id(selected.objectID)
-                }
-            }
-            .navigationSplitViewStyle(.balanced)
-        }
+        // The main stack owns the list, pushed detail and any presented editor on both displays.
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: sidebarWidth)
+                .overlay(alignment: .trailing) { Divider() }
+                .frame(width: showsSidebar ? sidebarWidth : 0, alignment: .leading)
+                .clipped()
+                .allowsHitTesting(showsSidebar)
+                .accessibilityHidden(!showsSidebar)
+            SheetListView(showsQuickExpense: compact, sharedPath: $sheetPath,
+                          usesDuoSidebar: !compact, showDuoSidebar: sidebarHidden ? { sidebarHidden = false } : nil)
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
-        .animation(nil, value: compact)
         .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
-            guard !ids.isEmpty else { return }
-            if !restoredSelection {
+            if !restoredSelection && !ids.isEmpty {
                 restoredSelection = true
-                if let id = ids.first(where: { $0.uriRepresentation().absoluteString == lastOpenedSheetURI }) {
-                    sheetPath = [id]
+                let restored = ids.first { $0.uriRepresentation().absoluteString == lastOpenedSheetURI }
+                if let id = restored ?? (compact ? nil : firstSidebarSheetID) { sheetPath = [id] }
+            } else if let id = sheetPath.last, !ids.contains(id) {
+                sheetPath = compact ? [] : firstSidebarSheetID.map { [$0] } ?? []
+            }
+        }
+    }
+
+    private var firstSidebarSheetID: NSManagedObjectID? {
+        (sheets.first { !$0.archived } ?? (archivedExpanded ? sheets.first : nil))?.objectID
+    }
+
+    private var sidebar: some View {
+        NavigationStack {
+            let archived = sheets.filter { $0.archived }
+            List(selection: Binding<NSManagedObjectID?>(
+                get: { sheetPath.last },
+                set: { id in
+                    if let id, id != sheetPath.last { sheetPath = [id] }
+                }
+            )) {
+                ForEach(sheets.filter { !$0.archived }) { sheet in
+                    SheetRowView(record: sheet).tag(sheet.objectID)
+                }
+                if !archived.isEmpty {
+                    Section {
+                        if archivedExpanded {
+                            ForEach(archived) { sheet in
+                                SheetRowView(record: sheet).tag(sheet.objectID)
+                            }
+                        }
+                    } header: {
+                        ArchivedSheetsHeader(count: archived.count, archivedExpanded: $archivedExpanded)
+                    }
                 }
             }
-            sheetPath = sheetPath.filter { ids.contains($0) }
-            if !compact, sheetPath.isEmpty, let id = selected?.objectID { sheetPath = [id] }
-        }
-        .onChange(of: compact) { _, compact in
-            if !compact, sheetPath.isEmpty, let id = selected?.objectID { sheetPath = [id] }
-        }
-        .onChange(of: sheetPath) { _, path in
-            lastOpenedSheetURI = path.last?.uriRepresentation().absoluteString ?? ""
+            .listStyle(.plain)
+            .animation(.easeInOut(duration: 0.25), value: archivedExpanded)
+            .navigationTitle("シート")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    SettingsAvatarButton { showingSettings = true }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("サイドバーを閉じる", systemImage: "sidebar.left") { sidebarHidden = true }
+                }
+            }
         }
     }
 }

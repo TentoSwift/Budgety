@@ -53,6 +53,58 @@
         }
       }
     },
+    "%@から%@への為替レートがないため、月予算を換算できません。数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für %1$@ in %2$@ ist kein Wechselkurs verfügbar. Das Monatsbudget kann daher nicht umgerechnet werden. Mit unverändertem Zahlenwert beträgt es %3$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No exchange rate is available from %1$@ to %2$@. Keeping the same number sets the monthly budget to %3$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay un tipo de cambio disponible de %1$@ a %2$@. Si conservas el valor numérico, el presupuesto mensual será de %3$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun taux de change de %1$@ vers %2$@ n’est disponible. Si vous gardez la même valeur numérique, le budget mensuel sera de %3$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@에서 %2$@(으)로 환산할 환율이 없습니다. 숫자를 유지하면 월 예산은 %3$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não há taxa de câmbio disponível de %1$@ para %2$@. Se você mantiver o valor numérico, o orçamento mensal será de %3$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有从%1$@到%2$@的汇率，无法换算每月预算。保留原数值后，预算为%3$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有從%1$@到%2$@的匯率，無法換算每月預算。保留原數值後，預算為%3$@。"
+          }
+        }
+      }
+    },
     "%@を選択": {
       "localizations": {
         "de": {
@@ -5094,6 +5146,110 @@
         }
       }
     },
+    "換算して保存": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umrechnen und sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convert and Save"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir y guardar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir et enregistrer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환산하여 저장"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Converter e salvar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换算并保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換算並儲存"
+          }
+        }
+      }
+    },
+    "換算後の月予算は%@の最小単位未満です。数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das umgerechnete Monatsbudget liegt unter der kleinsten Einheit von %1$@. Mit unverändertem Zahlenwert beträgt es %2$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The converted monthly budget is less than the smallest unit of %1$@. Keeping the same number sets it to %2$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El presupuesto mensual convertido es inferior a la unidad mínima de %1$@. Si conservas el valor numérico, será de %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Après conversion, le budget mensuel est inférieur à la plus petite unité de %1$@. Si vous gardez la même valeur numérique, il sera de %2$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환산한 월 예산이 %1$@의 최소 단위보다 작습니다. 숫자를 유지하면 월 예산은 %2$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O orçamento mensal convertido é menor que a menor unidade de %1$@. Se você mantiver o valor numérico, ele será de %2$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换算后的每月预算小于%1$@的最小单位。保留原数值后，预算为%2$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換算後的每月預算小於%1$@的最小單位。保留原數值後，預算為%2$@。"
+          }
+        }
+      }
+    },
     "支出": {
       "localizations": {
         "de": {
@@ -5458,6 +5614,58 @@
         }
       }
     },
+    "数値を維持して保存": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zahlenwert beibehalten und sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the Number and Save"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar el valor numérico y guardar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder la valeur numérique et enregistrer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "금액 숫자를 그대로 저장"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter o valor numérico e salvar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留数值并保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留數值並儲存"
+          }
+        }
+      }
+    },
     "新しいシート": {
       "localizations": {
         "de": {
@@ -5766,6 +5974,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "日圓"
+          }
+        }
+      }
+    },
+    "月予算も換算しますか？": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monatsbudget ebenfalls umrechnen?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convert the monthly budget too?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Convertir también el presupuesto mensual?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir aussi le budget mensuel ?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "월 예산도 환산할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Converter também o orçamento mensal?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也要换算每月预算吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也要換算每月預算嗎？"
           }
         }
       }
@@ -6130,6 +6390,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "取得匯率失敗：%@"
+          }
+        }
+      }
+    },
+    "現在の月予算は%@です。換算すると%@、数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Monatsbudget beträgt derzeit %1$@. Umgerechnet sind das %2$@. Behältst du den Zahlenwert bei, beträgt es %3$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your monthly budget is %1$@. Converting it gives %2$@. Keeping the same number gives %3$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El presupuesto mensual actual es de %1$@. Si lo conviertes, será de %2$@. Si conservas el valor numérico, será de %3$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le budget mensuel actuel est de %1$@. Après conversion, il sera de %2$@. Si vous gardez la même valeur numérique, il sera de %3$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 월 예산은 %1$@입니다. 환산하면 %2$@, 숫자를 유지하면 %3$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu orçamento mensal atual é de %1$@. Se você converter, ele será de %2$@. Se mantiver o valor numérico, será de %3$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前每月预算为%1$@。换算后为%2$@，保留原数值则为%3$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前的每月預算為%1$@。換算後為%2$@，保留原數值則為%3$@。"
           }
         }
       }

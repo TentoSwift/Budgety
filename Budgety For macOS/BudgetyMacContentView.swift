@@ -24,9 +24,6 @@ struct BudgetyMacContentView: View {
     @State private var showingAddSheet: Bool = false
     @State private var showSettingsView: Bool = false
     @State private var showingProfileEdit: Bool = false
-    @State private var showingPaywall: Bool = false
-    @State private var showSyncWaitingAlert: Bool = false
-    @State private var showOfflineAlert: Bool = false
     @State private var showNotSignedInAlert: Bool = false
     /// サイドバーの横断検索クエリ。空でなければ detail に検索結果を出す。
     @State private var searchText: String = ""
@@ -80,9 +77,6 @@ struct BudgetyMacContentView: View {
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
         }
-        .sheet(isPresented: $showingPaywall) {
-            MacModalSheet { PaywallView() }
-        }
         .sheet(item: $unlockingSheet) { sheet in
             // 検索結果からロック中シートを解錠するモーダル。解錠すると
             // lockManager の更新で検索結果に含まれる (検索からは離れない)。
@@ -92,16 +86,6 @@ struct BudgetyMacContentView: View {
                 onCancel: { unlockingSheet = nil }
             )
             .frame(width: 420, height: 460)
-        }
-        .alert("同期完了を待っています", isPresented: $showSyncWaitingAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("iCloud から既存のシートを取得中です。少し待ってからもう一度お試しください。")
-        }
-        .alert("インターネット接続が必要です", isPresented: $showOfflineAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("シートの新規作成には iCloud との同期が必要です。インターネットに接続してから再度お試しください。")
         }
         .alert("iCloud にサインインしてください", isPresented: $showNotSignedInAlert) {
             Button("OK", role: .cancel) {}
@@ -198,25 +182,13 @@ struct BudgetyMacContentView: View {
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
     }
 
-    /// Free 上限・同期状態を確認してから新規シート作成ダイアログを出す (iOS と同じゲート)。
-    /// 無料プランは自分が作成したシートを `FreeTierLimits.ownedSheets` 個までに制限する。
     private func tryShowAddSheet() {
-        switch PurchaseManager.sheetCreationGate() {
-        case .allowed:
-            showingAddSheet = true
-        case .notSignedIn:
+        guard PersistenceController.shared.iCloudAccountAvailable else {
             showNotSignedInAlert = true
             Haptics.warning()
-        case .waitingForSync:
-            showSyncWaitingAlert = true
-            Haptics.warning()
-        case .offline:
-            showOfflineAlert = true
-            Haptics.warning()
-        case .overLimit:
-            showingPaywall = true
-            Haptics.warning()
+            return
         }
+        showingAddSheet = true
     }
 
     /// Apple Music の sidebar footer 風プロフィール行。タップで「プロフィールを編集」/「設定」を選べるメニューを開く。
@@ -266,7 +238,7 @@ struct BudgetyMacContentView: View {
                     .font(.body.weight(.medium))
                     .foregroundStyle(sheet.archived ? .secondary : .primary)
                 Text(monthlyLabel(for: sheet))
-                    .font(.caption)
+                    .font(.sheetNumber(.caption))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -308,15 +280,9 @@ struct BudgetyMacContentView: View {
     // MARK: - 全シート横断検索
 
     /// 支出 1 件が (シート名以外の) クエリにマッチするか。
-    private func matchesExpense(_ e: Expense, query q: String) -> Bool {
-        let fields: [String] = [
-            e.displayTitle.lowercased(),
-            e.categoryDisplayName.lowercased(),
-            e.displayPaidBy.lowercased(),
-            e.formattedSignedAmount.lowercased(),
-            (e.note ?? "").lowercased()
-        ]
-        return fields.contains { $0.contains(q) }
+    private func matchesExpense(_ e: Expense, query q: TransactionSearchTerm) -> Bool {
+        q.matchesNameOrCategory(of: e) || q.matches(e.displayPaidBy)
+            || q.matches(e.formattedSignedAmount) || q.matches(e.note ?? "")
     }
 
     /// 名前がクエリにマッチするシート。
@@ -341,7 +307,7 @@ struct BudgetyMacContentView: View {
 
     /// 支出/収入がクエリにマッチするものを所属シートごとにまとめる (ロック中は除外)。
     private var expenseMatchGroups: [MacExpenseMatchGroup] {
-        let q = trimmedQuery.lowercased()
+        let q = TransactionSearchTerm(trimmedQuery)
         guard !q.isEmpty else { return [] }
         var groups: [MacExpenseMatchGroup] = []
         for sheet in sheets {
@@ -413,7 +379,7 @@ struct BudgetyMacContentView: View {
                 searchCurrencyMenu
             }
             Text(trimmedQuery.isEmpty ? String(localized: "\(total.count)件") : String(localized: "「\(trimmedQuery)」 · \(total.count)件"))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.sheetNumber(.subheadline)).foregroundStyle(.secondary)
             Text(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))
                 .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
@@ -424,7 +390,7 @@ struct BudgetyMacContentView: View {
                 Text("|").foregroundStyle(.tertiary)
                 Text("- \(CurrencyCatalog.format(total.expense, code: searchTotalCurrency))")
             }
-            .font(.subheadline.monospacedDigit().weight(.medium))
+            .font(.sheetNumber(.subheadline, weight: .medium))
             .foregroundStyle(.secondary)
             if total.mixed {
                 Label("複数通貨を \(searchTotalCurrency) に換算して合計しています",
@@ -436,7 +402,7 @@ struct BudgetyMacContentView: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(Color.accentColor.opacity(0.12))
         )
     }
@@ -497,12 +463,12 @@ struct BudgetyMacContentView: View {
                     .font(.body).foregroundStyle(.primary).lineLimit(1)
                 if let d = e.date {
                     Text(d, format: .dateTime.year().month().day())
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.sheetNumber(.caption)).foregroundStyle(.secondary)
                 }
             }
             Spacer()
             Text(e.formattedSignedAmount)
-                .font(.callout.monospacedDigit()).foregroundStyle(.primary)
+                .font(.sheetNumber(.callout)).foregroundStyle(.primary)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .contentShape(Rectangle())
@@ -549,6 +515,7 @@ struct BudgetyMacContentView: View {
                                 .foregroundStyle(group.sheet.tint)
                             Spacer()
                             Text(netString(group.net, code: group.currency))
+                                .fontDesign(.rounded)
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
@@ -654,6 +621,9 @@ struct MacEditSheetView: View {
     @State private var symbol: String = "person.2.fill"
     @State private var currencyCode: String = CurrencyCatalog.defaultCode
     @State private var budgetText: String = ""
+    @State private var initialCurrency = ""
+    @State private var initialBudget = ""
+    @State private var budgetCurrencyChange: SheetBudgetCurrencyChange?
     /// 編集ドラフト。「保存」を押すまで record には書かない。
     @State private var archivedDraft: Bool = false
     @State private var didLoad: Bool = false
@@ -683,6 +653,7 @@ struct MacEditSheetView: View {
             onSave: { save() }
         )
         .onAppear { loadOnce() }
+        .sheetBudgetCurrencyAlert($budgetCurrencyChange) { save(approval: $0) }
         .confirmationDialog(
             isOwner ? String(localized: "「\(name)」を削除しますか？") : String(localized: "「\(name)」から退出しますか？"),
             isPresented: $showingDeleteConfirm,
@@ -728,17 +699,25 @@ struct MacEditSheetView: View {
         if let budget = record.monthlyBudgetDecimal, budget > 0 {
             budgetText = NSDecimalNumber(decimal: budget).stringValue
         }
+        initialCurrency = currencyCode
+        initialBudget = budgetText
         archivedDraft = record.archived
     }
 
-    private func save() {
+    private func save(approval: SheetBudgetCurrencyChange.Approval? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        viewContext.refresh(record, mergeChanges: true)
+        if let change = SheetBudgetCurrencyChange.apply(
+            to: record, initialCurrency: initialCurrency, currency: currencyCode,
+            initialBudget: initialBudget, budget: budgetText, approval: approval
+        ) {
+            Task { @MainActor in budgetCurrencyChange = change }
+            return
+        }
         record.name = trimmed
         record.colorHex = colorHex
         record.symbol = symbol
-        record.defaultCurrencyCode = currencyCode
-        record.monthlyBudgetDecimal = Decimal(string: budgetText)
         if record.archived != archivedDraft { record.archived = archivedDraft }
         PersistenceController.shared.save()
         dismiss()
@@ -770,8 +749,6 @@ private struct MacSheetFormDialog: View {
     let onSave: () -> Void
 
     @State private var showingSymbolPicker: Bool = false
-    @State private var showingPaywall: Bool = false
-    @StateObject private var pm = PurchaseManager.shared
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// AX サイズなら column を縦に積む。
@@ -848,6 +825,7 @@ private struct MacSheetFormDialog: View {
                     // 月予算 (任意・「今月」表示時に進捗バーで残額を可視化)
                     formRow(label: String(localized: "月予算:")) {
                         TextField("", text: $budgetText, prompt: Text("0 (なし)"))
+                            .font(.sheetNumber(.body))
                             .textFieldStyle(.roundedBorder)
                             .frame(maxWidth: 160)
                         Spacer(minLength: 0)
@@ -1021,20 +999,14 @@ private struct MacSheetFormDialog: View {
         }
         .scrollIndicators(.never)
         .frame(width: 320, height: 360)
-        .sheet(isPresented: $showingPaywall) { PaywallView() }
     }
 
     @ViewBuilder
     private func symbolButton(_ sym: String) -> some View {
         let isSelected = (symbol == sym)
-        let isLocked = SheetSymbols.isPremiumSymbol(sym) && !pm.isPremium
         Button {
-            if isLocked {
-                showingPaywall = true
-            } else {
-                symbol = sym
-                showingSymbolPicker = false
-            }
+            symbol = sym
+            showingSymbolPicker = false
         } label: {
             ZStack {
                 Circle()
@@ -1050,15 +1022,6 @@ private struct MacSheetFormDialog: View {
                 Image(systemName: sym)
                     .font(.callout)
                     .foregroundStyle(isSelected ? .white : .primary)
-                    .opacity(isLocked ? 0.45 : 1)
-                if isLocked {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(3)
-                        .background(Circle().fill(Color.accentColor))
-                        .offset(x: 13, y: 13)
-                }
             }
             .frame(width: 40, height: 40)
         }
@@ -1070,11 +1033,9 @@ private struct MacSheetFormDialog: View {
 
 struct BudgetyMacSettingsView: View {
     @StateObject private var profile = UserProfileStore.shared
-    @StateObject private var pm = PurchaseManager.shared
     @State private var shareURLText: String = ""
     @State private var acceptInProgress: Bool = false
     @State private var acceptMessage: String?
-    @State private var showingPaywall: Bool = false
     @State private var showingProfileEdit: Bool = false
     @State private var showingClaudeSetup: Bool = false
 
@@ -1140,9 +1101,6 @@ struct BudgetyMacSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: $showingPaywall) {
-            MacModalSheet { PaywallView() }
-        }
         .sheet(isPresented: $showingProfileEdit) {
             ProfileEditView()
         }

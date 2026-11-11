@@ -6,7 +6,7 @@
 import Foundation
 import SwiftUI
 
-enum TransactionKind: String, CaseIterable, Identifiable {
+enum TransactionKind: String, CaseIterable, Identifiable, Sendable {
     case expense
     case income
 

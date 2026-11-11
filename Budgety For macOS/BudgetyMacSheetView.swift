@@ -51,14 +51,11 @@ struct BudgetyMacSheetView: View {
     @State private var showingAIChat = false
     @State private var showingCSVImport = false
     @State private var showingStats = false
-    @State private var showingShare = false
 
     @StateObject private var lockManager = SheetLockManager.shared
     @State private var showingSetPassword = false
-    @State private var showingLockPaywall = false
 
-    // エクスポート (CSV / PDF)。Premium 機能。
-    @State private var showingExportPaywall = false
+    // CSV / PDF エクスポート。
     @State private var showingExporter = false
     @State private var exportDocument: ExportFileDocument?
     @State private var exportContentType: UTType = .commaSeparatedText
@@ -92,6 +89,17 @@ struct BudgetyMacSheetView: View {
             case .lastMonth: "先月"
             case .thisYear:  "今年"
             case .all:       "全期間"
+            }
+        }
+        var occurrenceRange: ClosedRange<Date>? {
+            let now = Date.now
+            switch self {
+            case .all: return nil
+            case .thisMonth: return RecurringOccurrenceService.calendarDays(in: .month, containing: now)
+            case .lastMonth:
+                guard let last = Calendar.current.date(byAdding: .month, value: -1, to: now) else { return nil }
+                return RecurringOccurrenceService.calendarDays(in: .month, containing: last)
+            case .thisYear: return RecurringOccurrenceService.calendarDays(in: .year, containing: now)
             }
         }
         /// 指定日がこの期間に含まれるか。`.all` は常に true。
@@ -142,13 +150,10 @@ struct BudgetyMacSheetView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: sheet))
             list = list.filter { macExpensePayerMatches($0, payerID: payerID, selfIDs: selfIDs) }
         }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
             list = list.filter {
-                $0.displayTitle.lowercased().contains(q)
-                    || $0.categoryDisplayName.lowercased().contains(q)
-                    || $0.displayPaidBy.lowercased().contains(q)
-                    || ($0.note ?? "").lowercased().contains(q)
+                q.matchesNameOrCategory(of: $0) || q.matches($0.displayPaidBy) || q.matches($0.note ?? "")
             }
         }
         return list
@@ -203,22 +208,22 @@ struct BudgetyMacSheetView: View {
                 forShare: ShareCoordinator.shared.existingShare(for: sheet))
             list = list.filter { macPayerMatches($0.payerProfileID ?? "", payerID: payerID, selfIDs: selfIDs) }
         }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = TransactionSearchTerm(searchText)
         if !q.isEmpty {
-            list = list.filter { $0.title.lowercased().contains(q) }
+            list = list.filter { q.matchesNameOrCategory(of: $0) }
         }
         return list
     }
 
     /// サマリー合計用の仮想 (期間 + フィルタ)。
     private var summaryVirtuals: [RecurringOccurrence] {
-        applyNonPeriodFiltersV(allVirtuals.filter { effectivePeriod.contains($0.date) })
+        applyNonPeriodFiltersV(RecurringOccurrenceService.virtualOccurrences(for: sheet, in: effectivePeriod.occurrenceRange))
     }
 
     /// 一覧用の仮想 (検索中のみ期間を適用)。
     private var listVirtuals: [RecurringOccurrence] {
-        let base = applyNonPeriodFiltersV(allVirtuals)
-        return isSearching ? base.filter { effectivePeriod.contains($0.date) } : base
+        let range = isSearching ? effectivePeriod.occurrenceRange : nil
+        return applyNonPeriodFiltersV(RecurringOccurrenceService.virtualOccurrences(for: sheet, in: range))
     }
 
     /// 絞り込みが有効か。
@@ -372,12 +377,7 @@ struct BudgetyMacSheetView: View {
             }
             // iOS と同じく、共有はメニューに入れず独立したツールバーボタンにする。
             ToolbarItem {
-                Button { showingShare = true } label: {
-                    Image(systemName: hasAcceptedOtherParticipants
-                          ? "person.crop.circle.badge.checkmark"
-                          : "person.crop.circle.badge.plus")
-                }
-                .help(hasAcceptedOtherParticipants ? "共有メンバー" : "シートを共有")
+                MacSheetSharingButton(sheet: sheet, hasParticipants: hasAcceptedOtherParticipants)
             }
             ToolbarItem {
                 Menu {
@@ -418,12 +418,12 @@ struct BudgetyMacSheetView: View {
                             Label("今すぐロック", systemImage: "lock.fill")
                         }
                         if sheet.isOwnedByCurrentUser {
-                            Button { presentLockSetup() } label: {
+                            Button { showingSetPassword = true } label: {
                                 Label("ロック設定を変更", systemImage: "key.fill")
                             }
                         }
                     } else if sheet.isOwnedByCurrentUser {
-                        Button { presentLockSetup() } label: {
+                        Button { showingSetPassword = true } label: {
                             Label("シートをロック", systemImage: "lock")
                         }
                     }
@@ -482,17 +482,8 @@ struct BudgetyMacSheetView: View {
         .sheet(isPresented: $showingStats) {
             MacModalSheet { StatsView(record: sheet) }
         }
-        .sheet(isPresented: $showingShare) {
-            MacShareSheetView(sheet: sheet)
-        }
         .sheet(isPresented: $showingSetPassword) {
             MacModalSheet { SetSheetPasswordView(record: sheet) }
-        }
-        .sheet(isPresented: $showingLockPaywall) {
-            PaywallView()
-        }
-        .sheet(isPresented: $showingExportPaywall) {
-            PaywallView()
         }
         .fileExporter(
             isPresented: $showingExporter,
@@ -522,29 +513,11 @@ struct BudgetyMacSheetView: View {
     /// 支出を削除する (iOS の SheetDetailView.deleteExpense と同じロジック)。
     /// 定期由来の支出は、行を消すだけだと仮想で復活するのでルールに skip を記録する。
     private func deleteExpense(_ expense: Expense) {
-        if RecurringOccurrenceService.virtualizationEnabled,
-           let ruleID = expense.generatedFromRuleID,
-           let rule = (sheet.recurringRules as? Set<RecurringRule>)?.first(where: { $0.id == ruleID }),
-           let day = expense.scheduledDate ?? expense.date {
-            rule.addSkippedDay(day)
-        }
         // 未 commit の materialize 済み仮想を削除するケースに備えて後始末する。
         if materializedPending == expense { materializedPending = nil }
-        viewContext.delete(expense)
+        RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
         PersistenceController.shared.save()
         Haptics.warning()
-    }
-
-    /// Premium ならロック設定画面を、未加入なら Paywall を開く。
-    /// (ロックは Premium 機能。オーナー判定は SetSheetPasswordView 側でも行う)。
-    /// 既にロック済みのシートは Premium 解除後も編集 / 解除を許可する。
-    private func presentLockSetup() {
-        if PurchaseManager.shared.isPremium
-            || SheetLockManager.shared.hasPassword(for: sheet) {
-            showingSetPassword = true
-        } else {
-            showingLockPaywall = true
-        }
     }
 
     private func clearFilters() {
@@ -557,14 +530,7 @@ struct BudgetyMacSheetView: View {
 
     private enum ExportFormat { case csv, pdf }
 
-    /// CSV / PDF エクスポート。Premium (または共有シート参加) で gate し、
-    /// 通れば `.fileExporter` (保存パネル) を出す。
     private func startExport(_ format: ExportFormat) {
-        guard PurchaseManager.hasPremiumAccess(to: sheet) else {
-            showingExportPaywall = true
-            Haptics.warning()
-            return
-        }
         let safe = sheet.displayName
             .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
             .joined()
@@ -650,7 +616,7 @@ struct BudgetyMacSheetView: View {
                 Spacer()
                 if filtering {
                     Text("\(listExpenses.count)件")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(.sheetNumber(.caption, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -669,7 +635,7 @@ struct BudgetyMacSheetView: View {
                 Text("|").foregroundStyle(.tertiary)
                 Text("- \(CurrencyCatalog.format(t.expense, code: code))")
             }
-            .font(.subheadline.monospacedDigit().weight(.medium))
+            .font(.sheetNumber(.subheadline, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -688,7 +654,7 @@ struct BudgetyMacSheetView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(sheet.tint.opacity(0.12))
         )
     }
@@ -701,7 +667,7 @@ struct BudgetyMacSheetView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.subheadline.monospacedDigit().weight(.semibold))
+                .font(.sheetNumber(.subheadline, weight: .semibold))
                 .foregroundStyle(color)
         }
     }
@@ -722,11 +688,11 @@ struct BudgetyMacSheetView: View {
         VStack(spacing: 8) {
             HStack {
                 Text("予算 \(CurrencyCatalog.format(budget, code: code))")
-                    .font(.caption.monospacedDigit())
+                    .font(.sheetNumber(.caption))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(Int((ratio * 100).rounded())) %")
-                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .font(.sheetNumber(.caption, weight: .semibold))
                     .foregroundStyle(color)
             }
             GeometryReader { geo in
@@ -890,11 +856,11 @@ struct BudgetyMacSheetView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text(dayHeader(group.date))
-                            .font(.subheadline.weight(.semibold))
+                            .font(.sheetNumber(.subheadline, weight: .semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(daySigned(group.items, code: sheet.resolvedDefaultCurrencyCode))
-                            .font(.subheadline.monospacedDigit())
+                            .font(.sheetNumber(.subheadline))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -1028,7 +994,7 @@ struct BudgetyMacSheetView: View {
             }
             Spacer()
             Text(e.formattedSignedAmount)
-                .font(.callout.monospacedDigit())
+                .font(.sheetNumber(.callout))
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 12)
@@ -1124,7 +1090,7 @@ struct BudgetyMacSheetView: View {
             }
             Spacer()
             Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
-                .font(.callout.monospacedDigit())
+                .font(.sheetNumber(.callout))
                 .foregroundStyle(occ.kind == .income ? Color.green : Color.primary)
         }
         .padding(.horizontal, 12)

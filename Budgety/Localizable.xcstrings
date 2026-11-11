@@ -768,6 +768,58 @@
         }
       }
     },
+    "%@から%@への為替レートがないため、月予算を換算できません。数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für %1$@ in %2$@ ist kein Wechselkurs verfügbar. Das Monatsbudget kann daher nicht umgerechnet werden. Mit unverändertem Zahlenwert beträgt es %3$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No exchange rate is available from %1$@ to %2$@. Keeping the same number sets the monthly budget to %3$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay un tipo de cambio disponible de %1$@ a %2$@. Si conservas el valor numérico, el presupuesto mensual será de %3$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun taux de change de %1$@ vers %2$@ n’est disponible. Si vous gardez la même valeur numérique, le budget mensuel sera de %3$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@에서 %2$@(으)로 환산할 환율이 없습니다. 숫자를 유지하면 월 예산은 %3$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não há taxa de câmbio disponível de %1$@ para %2$@. Se você mantiver o valor numérico, o orçamento mensal será de %3$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有从%1$@到%2$@的汇率，无法换算每月预算。保留原数值后，预算为%3$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有從%1$@到%2$@的匯率，無法換算每月預算。保留原數值後，預算為%3$@。"
+          }
+        }
+      }
+    },
     "%@さんが「%@」であなたに %@ を割り当てました": {
       "localizations": {
         "de": {
@@ -874,6 +926,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "只有此帳本的擁有者、參加者及虛擬成員可被記錄為 %@。"
+          }
+        }
+      }
+    },
+    "%@のカテゴリ「%@」": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, Kategorie „%2$@“"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, category “%2$@”"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, categoría «%2$@»"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, catégorie « %2$@ »"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@의 ‘%2$@’ 카테고리"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, categoria “%2$@”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@的“%2$@”类别"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@的「%2$@」類別"
           }
         }
       }
@@ -6625,6 +6729,110 @@
         }
       }
     },
+    "「%@」に定期%@「%@」を設定しました。%@ · %@ · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederkehrenden Eintrag „%3$@“ (%2$@) in „%1$@“ eingerichtet. %4$@ · %5$@ · %6$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up “%3$@” as a recurring entry (%2$@) in “%1$@”. %4$@ · %5$@ · %6$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se ha configurado «%3$@» como movimiento recurrente (%2$@) en «%1$@». %4$@ · %5$@ · %6$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "« %3$@ » a été configuré comme opération récurrente (%2$@) dans « %1$@ ». %4$@ · %5$@ · %6$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "‘%1$@’에 ‘%3$@’ 항목을 정기 %2$@(으)로 설정했습니다. %4$@ · %5$@ · %6$@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%3$@” foi configurado como lançamento recorrente (%2$@) em “%1$@”. %4$@ · %5$@ · %6$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在“%1$@”中设置定期%2$@“%3$@”。%4$@ · %5$@ · %6$@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已在「%1$@」中設定定期%2$@「%3$@」。%4$@ · %5$@ · %6$@"
+          }
+        }
+      }
+    },
+    "「%@」の%@で支出名またはカテゴリ名に「%@」を含む明細": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buchungen in „%1$@“ für %2$@ mit „%3$@“ im Ausgaben- oder Kategorienamen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transactions in “%1$@” for %2$@ with “%3$@” in the expense or category name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Movimientos de «%1$@» para %2$@ con «%3$@» en el nombre del gasto o de la categoría"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opérations dans « %1$@ » pour %2$@ dont le nom de dépense ou de catégorie contient « %3$@ »"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "‘%1$@’에서 %2$@에 지출명이나 카테고리명에 ‘%3$@’이 포함된 내역"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transações em “%1$@” para %2$@ com “%3$@” no nome da despesa ou da categoria"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@”中%2$@支出或类别名称包含“%3$@”的明细"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」中%2$@支出或類別名稱包含「%3$@」的明細"
+          }
+        }
+      }
+    },
     "「%@」の「%@」を変更しますか？\n%@": {
       "localizations": {
         "de": {
@@ -12133,6 +12341,110 @@
           "stringUnit": {
             "state": "translated",
             "value": "咖啡"
+          }
+        }
+      }
+    },
+    "サイドバーを表示": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seitenleiste einblenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Sidebar"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar la barra lateral"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher la barre latérale"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사이드바 보기"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar a barra lateral"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示侧边栏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示側邊欄"
+          }
+        }
+      }
+    },
+    "サイドバーを閉じる": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seitenleiste schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Sidebar"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar la barra lateral"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer la barre latérale"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사이드바 닫기"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fechar a barra lateral"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭侧边栏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉側邊欄"
           }
         }
       }
@@ -26709,6 +27021,58 @@
         }
       }
     },
+    "定期収入・定期支出を設定": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederkehrende Einnahme oder Ausgabe einrichten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Up Recurring Income or Expense"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar un ingreso o gasto recurrente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurer un revenu ou une dépense récurrente"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정기 수입 또는 지출 설정"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurar receita ou despesa recorrente"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置定期收入或支出"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定定期收入或支出"
+          }
+        }
+      }
+    },
     "定期項目": {
       "localizations": {
         "de": {
@@ -28841,6 +29205,110 @@
         }
       }
     },
+    "換算して保存": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umrechnen und sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convert and Save"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir y guardar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir et enregistrer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환산하여 저장"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Converter e salvar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换算并保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換算並儲存"
+          }
+        }
+      }
+    },
+    "換算後の月予算は%@の最小単位未満です。数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das umgerechnete Monatsbudget liegt unter der kleinsten Einheit von %1$@. Mit unverändertem Zahlenwert beträgt es %2$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The converted monthly budget is less than the smallest unit of %1$@. Keeping the same number sets it to %2$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El presupuesto mensual convertido es inferior a la unidad mínima de %1$@. Si conservas el valor numérico, será de %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Après conversion, le budget mensuel est inférieur à la plus petite unité de %1$@. Si vous gardez la même valeur numérique, il sera de %2$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환산한 월 예산이 %1$@의 최소 단위보다 작습니다. 숫자를 유지하면 월 예산은 %2$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O orçamento mensal convertido é menor que a menor unidade de %1$@. Se você mantiver o valor numérico, ele será de %2$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换算后的每月预算小于%1$@的最小单位。保留原数值后，预算为%2$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "換算後的每月預算小於%1$@的最小單位。保留原數值後，預算為%2$@。"
+          }
+        }
+      }
+    },
     "支出": {
       "localizations": {
         "de": {
@@ -29725,6 +30193,58 @@
         }
       }
     },
+    "支出名・カテゴリ名": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgaben- oder Kategoriename"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expense or Category Name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del gasto o de la categoría"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de la dépense ou de la catégorie"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지출명 또는 카테고리명"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome da despesa ou categoria"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支出或类别名称"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支出或類別名稱"
+          }
+        }
+      }
+    },
     "支払": {
       "localizations": {
         "de": {
@@ -30189,6 +30709,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "教育・工作"
+          }
+        }
+      }
+    },
+    "数値を維持して保存": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zahlenwert beibehalten und sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the Number and Save"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar el valor numérico y guardar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder la valeur numérique et enregistrer"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "금액 숫자를 그대로 저장"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter o valor numérico e salvar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留数值并保存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留數值並儲存"
           }
         }
       }
@@ -31961,6 +32533,110 @@
         }
       }
     },
+    "最初の発生日。毎月25日なら、初回の25日を指定します。省略時は今日です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datum des ersten Eintrags. Für den 25. jedes Monats den ersten 25. angeben. Standard ist heute."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date of the first occurrence. To repeat on the 25th of each month, choose the first 25th. Defaults to today."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fecha de la primera operación. Para repetir el día 25 de cada mes, elige el primer día 25. Por omisión, se usa hoy."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date de la première occurrence. Pour une récurrence le 25 de chaque mois, choisissez la date du premier 25. Par défaut, la date du jour est utilisée."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 발생일입니다. 매월 25일이면 처음 발생할 달의 25일을 지정하세요. 생략하면 오늘입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data da primeira ocorrência. Para repetir no dia 25 de cada mês, escolha o primeiro dia 25. O padrão é hoje."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次发生日期。若要在每月 25 日重复，请指定第一次的 25 日。默认为今天。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次發生日期。若要在每月 25 日重複，請指定第一次的 25 日。預設為今天。"
+          }
+        }
+      }
+    },
+    "最後に発生できる日。期限がないときは省略します。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letztes mögliches Datum für einen Eintrag. Ohne Enddatum leer lassen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The last date an entry can occur. Omit this if it continues indefinitely."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Última fecha en la que puede ocurrir. Omítela si no hay fecha límite."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière date possible d’une occurrence. Omettez-la si la récurrence est sans fin."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "항목이 발생할 수 있는 마지막 날짜입니다. 종료 기한이 없으면 생략하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Última data em que pode ocorrer. Omita se não houver prazo final."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可发生的最后一天。没有截止日期时请省略。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可發生的最後一天。沒有截止日期時請省略。"
+          }
+        }
+      }
+    },
     "最新バージョンに更新してから続けてください。": {
       "localizations": {
         "de": {
@@ -32269,6 +32945,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "每月預算（選填）"
+          }
+        }
+      }
+    },
+    "月予算も換算しますか？": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monatsbudget ebenfalls umrechnen?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convert the monthly budget too?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Convertir también el presupuesto mensual?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convertir aussi le budget mensuel ?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "월 예산도 환산할까요?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Converter também o orçamento mensal?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也要换算每月预算吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "也要換算每月預算嗎？"
           }
         }
       }
@@ -33625,6 +34353,58 @@
         }
       }
     },
+    "毎月の給与や家賃、毎週の交通費などを、指定した日から繰り返す定期項目としてシートに登録します。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erfasst ab einem gewählten Datum wiederkehrende Posten wie monatliches Gehalt, Miete oder wöchentliche Fahrtkosten im Blatt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add recurring entries to a sheet starting on a chosen date, such as monthly salary or rent, or weekly transit costs."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añade a la hoja movimientos recurrentes desde la fecha elegida, como el sueldo o el alquiler mensual, o el transporte semanal."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoute à la feuille des opérations récurrentes à partir de la date choisie, comme un salaire ou un loyer mensuel, ou des frais de transport hebdomadaires."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지정한 날짜부터 월급, 월세, 주간 교통비처럼 반복되는 항목을 시트에 등록합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adiciona à planilha lançamentos recorrentes a partir da data escolhida, como salário ou aluguel mensal e transporte semanal."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从指定日期起，在账本中添加每月工资、房租或每周交通费等定期项目。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從指定日期起，在帳本中加入每月薪資、房租或每週交通費等定期項目。"
+          }
+        }
+      }
+    },
     "毎月自動更新": {
       "localizations": {
         "de": {
@@ -34193,6 +34973,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前的密碼不正確。"
+          }
+        }
+      }
+    },
+    "現在の月予算は%@です。換算すると%@、数値を維持すると%@になります。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Monatsbudget beträgt derzeit %1$@. Umgerechnet sind das %2$@. Behältst du den Zahlenwert bei, beträgt es %3$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your monthly budget is %1$@. Converting it gives %2$@. Keeping the same number gives %3$@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El presupuesto mensual actual es de %1$@. Si lo conviertes, será de %2$@. Si conservas el valor numérico, será de %3$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le budget mensuel actuel est de %1$@. Après conversion, il sera de %2$@. Si vous gardez la même valeur numérique, il sera de %3$@."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 월 예산은 %1$@입니다. 환산하면 %2$@, 숫자를 유지하면 %3$@입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seu orçamento mensal atual é de %1$@. Se você converter, ele será de %2$@. Se mantiver o valor numérico, será de %3$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前每月预算为%1$@。换算后为%2$@，保留原数值则为%3$@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前的每月預算為%1$@。換算後為%2$@，保留原數值則為%3$@。"
           }
         }
       }
@@ -34873,6 +35705,58 @@
         }
       }
     },
+    "終了日は開始日以降を指定してください。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle ein Enddatum am oder nach dem Startdatum."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an end date on or after the start date."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige una fecha de fin igual o posterior a la fecha de inicio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez une date de fin égale ou postérieure à la date de début."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료일은 시작일과 같거나 그 이후여야 합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha uma data final igual ou posterior à data inicial."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择不早于开始日期的结束日期。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請選擇不早於開始日期的結束日期。"
+          }
+        }
+      }
+    },
     "終了日を設定": {
       "localizations": {
         "de": {
@@ -35285,6 +36169,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "重複"
+          }
+        }
+      }
+    },
+    "繰り返しの間隔は1から60の整数を指定してください。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib für das Wiederholungsintervall eine ganze Zahl von 1 bis 60 ein."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a whole number from 1 to 60 for the repeat interval."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige un número entero del 1 al 60 para el intervalo de repetición."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un nombre entier de 1 à 60 pour l’intervalle de répétition."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "반복 간격은 1부터 60 사이의 정수로 지정하세요."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha um número inteiro de 1 a 60 para o intervalo de repetição."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请将重复间隔设为 1 到 60 之间的整数。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請將重複間隔設為 1 到 60 之間的整數。"
           }
         }
       }
@@ -37993,6 +38929,58 @@
         }
       }
     },
+    "金額に付いた通貨。省略するとシートの既定通貨を使います。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Währung des Betrags. Ohne Angabe wird die Standardwährung des Blatts verwendet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The currency of the amount. If omitted, the sheet’s default currency is used."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La moneda del importe. Si se omite, se usa la moneda predeterminada de la hoja."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devise du montant. Si elle est omise, la devise par défaut de la feuille est utilisée."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "금액의 통화입니다. 생략하면 시트의 기본 통화를 사용합니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moeda do valor. Se omitida, será usada a moeda padrão da planilha."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金额使用的货币。省略时使用账本的默认货币。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金額使用的貨幣。省略時使用帳本的預設貨幣。"
+          }
+        }
+      }
+    },
     "金額は 0 より大きい値を指定してください。": {
       "localizations": {
         "de": {
@@ -38515,6 +39503,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "間隔"
+          }
+        }
+      }
+    },
+    "隔週なら2、毎週なら1。省略時は1です。": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 für alle zwei Wochen, 1 für jede Woche. Standard ist 1."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use 2 for every other week or 1 for every week. The default is 1."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa 2 para cada dos semanas o 1 para cada semana. El valor predeterminado es 1."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indiquez 2 pour une semaine sur deux ou 1 pour chaque semaine. La valeur par défaut est 1."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "격주면 2, 매주면 1입니다. 생략하면 1입니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use 2 para semanas alternadas ou 1 para toda semana. O padrão é 1."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每两周填 2，每周填 1。默认为 1。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每兩週填 2，每週填 1。預設為 1。"
           }
         }
       }

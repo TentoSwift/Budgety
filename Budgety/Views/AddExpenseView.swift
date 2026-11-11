@@ -181,7 +181,7 @@ struct AddExpenseView: View {
             text: $amountText,
             focus: $amountFocused,
             placeholder: "0",
-            font: .monospacedDigitSystemFont(ofSize: 20, weight: .regular),
+            font: .sheetNumber(ofSize: 20, weight: .regular),
             keyboardType: decimalKeypadNeeded ? .decimalPad : .numberPad,
             dismissOnDeleteWhenEmpty: calcAccumulator == nil && calcPendingOp == nil
         )
@@ -198,7 +198,7 @@ struct AddExpenseView: View {
             // 計算プレビューは演算子を押したとき以降だけ表示する。
             if !calcExpression.isEmpty {
                 Text(calcExpression)
-                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .font(.sheetNumber(.title3, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
@@ -662,7 +662,6 @@ struct AddExpenseView: View {
 
     @ViewBuilder
     private var recurringSection: some View {
-        // 機能オフ時 (RecurringOccurrenceService.featureEnabled == false) は繰り返し UI を一切出さない (新規作成不可)。
         if RecurringOccurrenceService.featureEnabled { recurringSectionContent }
     }
 
@@ -851,8 +850,9 @@ struct AddExpenseView: View {
     @MainActor
     private func deleteExpense() {
         guard case .edit(let expense) = mode else { return }
-        viewContext.delete(expense)
+        RecurringExpenseGenerator.deleteExpense(expense, in: viewContext)
         PersistenceController.shared.save()
+        onCommit?()
         Haptics.success()
         dismiss()
     }
@@ -1002,6 +1002,7 @@ struct AddExpenseView: View {
                     // 金額を先に入力する。
                     HStack(spacing: 6) {
                         Text(CurrencyCatalog.option(for: currencyCode).symbol)
+                            .font(.sheetNumber(.body))
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 24, alignment: .leading)
                         if coverEntry {
@@ -1059,6 +1060,7 @@ struct AddExpenseView: View {
 
                 Section {
                     DatePicker("日付", selection: $date, displayedComponents: [.date])
+                        .font(.sheetNumber(.body))
                 }
 
                 payerSection
@@ -1581,7 +1583,7 @@ struct AddExpenseView: View {
         guard case .edit(let expense) = mode else { return }
         // save() と同じく、計算途中の状態は確定してから保存する。
         finalizePendingCalcIfNeeded()
-        viewContext.refresh(expense, mergeChanges: true)
+        if !expense.isInserted { viewContext.refresh(expense, mergeChanges: true) }
 
         // 1) 編集中の Expense には常に反映 (= 「この項目のみ」と「今後」「全て」共通)
         applyChanges(toExpense: expense, includeDate: true)
@@ -1649,7 +1651,11 @@ struct AddExpenseView: View {
         guard !didLoad else { return }
         didLoad = true
         // 自分の Member が無ければここで作る (プロフィール未登録でも"自分"が選べるように)
-        profile.ensureSelfMemberExists(in: viewContext)
+        if case .edit(let expense) = mode, expense.isInserted, expense.generatedFromRuleID != nil {
+            profile.ensureSelfMemberExists(in: viewContext, saveChanges: false)
+        } else {
+            profile.ensureSelfMemberExists(in: viewContext)
+        }
         switch mode {
         case .create(let record):
             currencyCode = record.resolvedDefaultCurrencyCode
@@ -1802,7 +1808,7 @@ struct AddExpenseView: View {
             }
         case .edit(let expense):
             // 通常編集 (定期項目以外、または「この項目のみ」)。差分のみ書き戻し。
-            viewContext.refresh(expense, mergeChanges: true)
+            if !expense.isInserted { viewContext.refresh(expense, mergeChanges: true) }
             applyChanges(toExpense: expense, includeDate: true)
 
             // 繰り返し関連の差分を反映 (Rule の作成 / 更新)
@@ -1870,6 +1876,7 @@ struct AddExpenseView: View {
         rule.categoryRaw = selectedCategory?.name
         rule.paidBy = effectivePaidByFallback
         rule.payerProfileID = effectivePayerProfileID
+        rule.beneficiaryProfileIDs = effectiveBeneficiaryCSV
         rule.note = note
         rule.frequency = frequency.rawValue
         rule.interval = Int32(recurringInterval)

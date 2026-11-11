@@ -229,7 +229,7 @@ struct SettlementView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("対象支出")
                 Spacer()
-                Text("\(result.includedExpenseCount) 件").foregroundStyle(.secondary)
+                Text("\(result.includedExpenseCount) 件").font(.sheetNumber(.body)).foregroundStyle(.secondary)
             }
         }
     }
@@ -287,7 +287,6 @@ struct SettlementView: View {
                     .multilineTextAlignment(.center)
             }
             balanceLabel(amount: bal.amount, currencyCode: currencyCode)
-                .monospacedDigit()
         }
         // 全タイルが同じ高さになるよう minHeight を固定。
         // maxHeight: .infinity で同じ行のタイルを最も高いタイルに合わせて伸ばす
@@ -311,7 +310,7 @@ struct SettlementView: View {
         if amount > 0 {
             VStack(spacing: 1) {
                 Text("+ \(CurrencyCatalog.format(amount, code: currencyCode))")
-                    .font(.footnote.weight(.semibold))
+                    .font(.sheetNumber(.footnote, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -322,7 +321,7 @@ struct SettlementView: View {
         } else if amount < 0 {
             VStack(spacing: 1) {
                 Text("- \(CurrencyCatalog.format(-amount, code: currencyCode))")
-                    .font(.footnote.weight(.semibold))
+                    .font(.sheetNumber(.footnote, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -412,7 +411,7 @@ struct SettlementView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             Text(CurrencyCatalog.format(transfer.amount, code: currencyCode))
-                .font(.headline.monospacedDigit())
+                .font(.sheetNumber(.headline))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -536,13 +535,13 @@ struct SettlementView: View {
             .minimumScaleFactor(0.7)
             HStack(spacing: 6) {
                 Text(r.formattedAmount)
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .font(.sheetNumber(.subheadline, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 if let d = r.date {
                     Text(d, format: .dateTime.year().month().day())
-                        .font(.caption2)
+                        .font(.sheetNumber(.caption2))
                         .foregroundStyle(.secondary)
                 }
             }

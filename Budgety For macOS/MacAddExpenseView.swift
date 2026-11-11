@@ -47,10 +47,9 @@ struct MacAddExpenseView: View {
     /// 割り勘トグル。オフ = 支払者のみの負担 (受益者 = 支払者)。
     /// オン = `selectedBeneficiaries` で受益者を選ぶ (空 = 全員均等)。
     @State private var splitEnabled: Bool = false
-    /// バーチャルメンバー追加 (Premium 機能)。
+    /// バーチャルメンバー追加。
     @State private var showAddMemberPrompt = false
     @State private var newMemberName = ""
-    @State private var showMemberPaywall = false
     /// 名前変更対象の recordName。nil = 新規追加。
     @State private var editingMemberID: String?
     @State private var didLoad: Bool = false
@@ -173,6 +172,7 @@ struct MacAddExpenseView: View {
                         // LabeledContent のラベル扱いになって左に表示されてしまう。
                         // .labelsHidden() でラベル列を消し、prompt: で placeholder を出す。
                         TextField("金額", text: $amountText, prompt: Text("0"))
+                            .font(.sheetNumber(.body))
                             .labelsHidden()
                             .focused($amountFocused)
                             .onChange(of: amountText) { _, new in
@@ -227,10 +227,8 @@ struct MacAddExpenseView: View {
                 Section(kind == .income ? "受取者" : "支払い者") {
                     payerPicker
                 }
-                // 共有シート、またはバーチャルメンバー追加可能な Premium なら表示
-                // (ソロシートでも Premium はバーチャルメンバーを足して割り勘できる)。
                 // 収入には割り勘の概念がないので支出時のみ表示。
-                if kind == .expense, !payerProfileID.isEmpty, hasOtherMembers || PurchaseManager.hasPremiumAccess(to: sheet) {
+                if kind == .expense, !payerProfileID.isEmpty {
                     Section {
                         Toggle("割り勘", isOn: Binding(
                             get: { splitEnabled },
@@ -247,11 +245,7 @@ struct MacAddExpenseView: View {
                         if splitEnabled {
                             beneficiariesList
                             Button {
-                                if PurchaseManager.hasPremiumAccess(to: sheet) {
-                                    showAddMemberPrompt = true
-                                } else {
-                                    showMemberPaywall = true
-                                }
+                                showAddMemberPrompt = true
                             } label: {
                                 Label("メンバーを追加", systemImage: "person.badge.plus")
                             }
@@ -315,7 +309,6 @@ struct MacAddExpenseView: View {
         }
         .frame(width: 560, height: 720)
         .tint(sheet.tint)
-        .sheet(isPresented: $showMemberPaywall) { PaywallView() }
         .sheet(isPresented: $showingNewCategory) {
             // 支出追加画面からカテゴリを新規作成し、作成後はそれを選択する。
             MacEditCategoryView(mode: .create(record: sheet, defaultKind: kind)) { newCat in
@@ -899,13 +892,7 @@ struct MacAddExpenseView: View {
 
     private func deleteExpense() {
         guard let e = expense else { return }
-        // 定期由来 (occurrence) の削除は、完全仮想化では行を消すだけだと仮想で復活するので、
-        // ルールにこの日付を skip 記録してから削除する (iOS SheetDetailView.deleteExpense と同じ)。
-        if RecurringOccurrenceService.virtualizationEnabled,
-           let rule = e.relatedRule, let day = e.scheduledDate ?? e.date {
-            rule.addSkippedDay(day)
-        }
-        viewContext.delete(e)
+        RecurringExpenseGenerator.deleteExpense(e, in: viewContext)
         PersistenceController.shared.save()
         onCommit?()
         dismiss()

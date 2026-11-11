@@ -50,7 +50,8 @@ struct SiriExpenseCardRow: TransientAppEntity {
     }
 
     @MainActor
-    static func from(_ transaction: Expense, in sheet: ExpenseSheet, isSoloSheet: Bool) -> Self {
+    static func from(_ transaction: Expense, in sheet: ExpenseSheet, isSoloSheet: Bool,
+                     virtualIdentifier: String? = nil) -> Self {
         let currency = transaction.resolvedCurrencyCode.uppercased()
         let category = transaction.categoryDisplayName
         let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet)
@@ -64,8 +65,8 @@ struct SiriExpenseCardRow: TransientAppEntity {
             signedAmount: transaction.formattedSignedAmount,
             payerName: payer?.name, payerColorHex: payer?.colorHex ?? "", payerPhoto: payer?.photo,
             foreignCurrencyCode: currency == sheet.resolvedDefaultCurrencyCode ? nil : currency,
-            expenseIdentifier: transaction.objectID.uriRepresentation().absoluteString,
-            editableTransaction: SiriEditableTransactionEntity.from(transaction)
+            expenseIdentifier: virtualIdentifier ?? transaction.objectID.uriRepresentation().absoluteString,
+            editableTransaction: virtualIdentifier == nil ? SiriEditableTransactionEntity.from(transaction) : nil
         )
     }
 }

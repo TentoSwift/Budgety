@@ -67,7 +67,7 @@ final class _PeriodMenuUIControl: UIControl {
     private let periodLabel: UILabel = {
         let l = UILabel()
         // 20pt をベースに Dynamic Type で拡大縮小する (固定サイズにしない)。
-        let base = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        let base = UIFont.sheetNumber(ofSize: 20, weight: .semibold)
         l.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: base)
         l.adjustsFontForContentSizeCategory = true
         l.textColor = .secondaryLabel

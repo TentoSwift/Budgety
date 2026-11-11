@@ -123,6 +123,7 @@ struct LogSettlementView: View {
                 Section("金額") {
                     HStack {
                         TextField("0", text: $amountText)
+                            .font(.sheetNumber(.body))
                         #if os(iOS)
                             .keyboardType(.decimalPad)
                         #endif
@@ -145,6 +146,7 @@ struct LogSettlementView: View {
                 }
                 Section("日付") {
                     DatePicker("送金日", selection: $date, displayedComponents: .date)
+                        .font(.sheetNumber(.body))
                 }
                 Section("メモ") {
                     TextField("", text: $note, axis: .vertical)

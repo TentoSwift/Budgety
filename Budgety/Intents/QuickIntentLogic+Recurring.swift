@@ -13,18 +13,13 @@ extension QuickIntentLogic {
 
     @MainActor
     static func addRecurring(parsed: [String: Any]) async -> [String: Any] {
-        // 定期項目機能は一旦オフ (RecurringOccurrenceService.featureEnabled == false)。MCP/ショートカット経由の
-        // 追加も受け付けない (休眠ルールを増やさないため)。
-        guard RecurringOccurrenceService.featureEnabled else {
-            return ["ok": false, "error": "定期項目機能は現在無効です (Recurring items are currently disabled)."]
-        }
         let amount: Double = {
             if let v = parsed["amount"] as? Double { return v }
             if let v = parsed["amount"] as? Int    { return Double(v) }
             if let s = parsed["amount"] as? String, let v = Double(s) { return v }
             return -1
         }()
-        guard amount > 0 else {
+        guard let value = CurrencyCatalog.transactionAmount(amount) else {
             return ["ok": false, "error": "amount required (positive number)"]
         }
 
@@ -43,16 +38,19 @@ extension QuickIntentLogic {
             let raw = (parsed["frequency"] as? String)?.lowercased() ?? "monthly"
             return RecurrenceFrequency(rawValue: raw) ?? .monthly
         }()
-        let interval: Int32 = {
-            if let v = parsed["interval"] as? Int    { return max(1, Int32(v)) }
-            if let v = parsed["interval"] as? Double { return max(1, Int32(v)) }
-            if let s = parsed["interval"] as? String, let v = Int32(s) { return max(1, v) }
-            return 1
-        }()
+        let interval: Int32
+        if let raw = parsed["interval"] {
+            guard let number = Double(String(describing: raw)), let exact = Int32(exactly: number), exact >= 1 else {
+                return ["ok": false, "error": "interval must be a positive whole number"]
+            }
+            interval = exact
+        } else {
+            interval = 1
+        }
 
         let startDate: Date = parseRecurringDate(parsed["startDate"]) ?? .now
         let endDate: Date? = parseRecurringDate(parsed["endDate"])
-        if let endDate, endDate <= startDate {
+        if let endDate, endDate.compare(startDate) != .orderedDescending {
             return ["ok": false, "error": "endDate must be after startDate"]
         }
 
@@ -72,12 +70,7 @@ extension QuickIntentLogic {
                 sheet = first
                 if matches.count > 1 { nameCollisionCount = matches.count }
             } else {
-                sheetReq.predicate = nil
-                sheetReq.fetchLimit = 1
-                guard let fallback = (try? ctx.fetch(sheetReq))?.first else {
-                    return ["ok": false, "error": "no sheet found"]
-                }
-                sheet = fallback
+                return ["ok": false, "error": "specified sheet not found"]
             }
         } else {
             sheetReq.fetchLimit = 1
@@ -85,16 +78,6 @@ extension QuickIntentLogic {
                 return ["ok": false, "error": "no sheet found"]
             }
             sheet = first
-        }
-
-        // Premium 制限
-        if !PurchaseManager.isPremiumCached && sheet.isOwnedByCurrentUser {
-            return [
-                "ok": false,
-                "error": "Premium 限定機能です。自分がオーナーのシート「\(sheet.displayName)」への MCP 経由の定期項目追加には Budgety Premium が必要です。他の Premium ユーザーが共有してくれているシートには無料で追加できます。",
-                "sheet": sheet.displayName,
-                "premiumRequired": true
-            ]
         }
 
         // パスワードロック判定
@@ -137,50 +120,28 @@ extension QuickIntentLogic {
         }
         let firstCategory = aiSuggested ?? allKindCats.first
 
-        let rule = RecurringRule(context: ctx)
-        if let store = sheet.objectID.persistentStore {
-            ctx.assign(rule, to: store)
-        }
-        rule.id = UUID()
-        rule.amount = NSDecimalNumber(value: amount)
-        rule.title = title
-        rule.note = ""
-        rule.kindRaw = kind.rawValue
-        rule.frequency = frequency.rawValue
-        rule.interval = interval
-        rule.startDate = startDate
-        rule.endDate = endDate
-        rule.createdAt = .now
-        rule.sheet = sheet
-
-        rule.currencyCode = {
-            if let raw = (parsed["currency"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-               !raw.isEmpty,
-               CurrencyCatalog.all.contains(where: { $0.code == raw }) {
-                return raw
-            }
-            return sheet.resolvedDefaultCurrencyCode
-        }()
-
-        if let cat = firstCategory {
-            rule.categoryRaw = cat.name ?? ""
-        }
-
-        let profile = UserProfileStore.shared
-        let share = ShareCoordinator.shared.existingShare(for: sheet)
-        if let pid = profile.canonicalSelfID(forShare: share), !pid.isEmpty {
-            rule.payerProfileID = pid
-        }
-
         do {
-            try ctx.save()
+            try Task.checkCancellation()
+            let access = try IntentSheetAccess(checking: ctx)
+            guard !sheet.isDeleted, let target = try access.context.existingObject(with: sheet.objectID) as? ExpenseSheet else {
+                return ["ok": false, "error": "sheet not found"]
+            }
+            let password = parsed["password"] as? String ?? ""
+            if !access.allows(target) {
+                let protected = [target, sheet].filter { $0.lockPasswordSalt?.isEmpty == false || $0.lockPasswordHash?.isEmpty == false }
+                guard !protected.isEmpty, !password.isEmpty, protected.allSatisfy({ lock.verify($0, password: password) }) else {
+                    return ["ok": false, "error": "sheet is locked", "locked": true]
+                }
+            }
+            let currency = (parsed["currency"] as? String).flatMap(CurrencyCatalog.transactionCurrencyCode(for:))
+                ?? target.resolvedDefaultCurrencyCode
+            let category = firstCategory.flatMap { try? access.context.existingObject(with: $0.objectID) as? ExpenseCategory }
+            let name = category.flatMap { $0.sheet == target && $0.kind == kind ? $0.name : nil }
+            try saveRecurringRule(in: target, context: access.context, kind: kind, title: title, amount: value, currency: currency,
+                                  category: name, frequency: frequency, interval: interval, start: startDate, end: endDate)
         } catch {
             return ["ok": false, "error": "save failed: \(error.localizedDescription)"]
         }
-
-        // 即座に最初の occurrence を Expense として展開
-        RecurringExpenseGenerator.generateAll(in: ctx)
 
         var summary: [String: Any] = [
             "ok": true,
@@ -200,6 +161,37 @@ extension QuickIntentLogic {
             summary["warning"] = "name_collision: \(nameCollisionCount) sheets named \"\(sheet.displayName)\". Using oldest by createdAt."
         }
         return summary
+    }
+
+    @MainActor
+    static func saveRecurringRule(in sheet: ExpenseSheet, context: NSManagedObjectContext, kind: TransactionKind,
+                                  title: String, amount: Decimal, currency: String, category: String?,
+                                  frequency: RecurrenceFrequency, interval: Int32, start: Date, end: Date?) throws {
+        guard !sheet.isDeleted, sheet.managedObjectContext === context,
+              PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: sheet.objectID)
+        else { throw AppIntentError.sheetNotFound }
+        let rule = RecurringRule(context: context)
+        if let store = sheet.objectID.persistentStore { context.assign(rule, to: store) }
+        rule.id = UUID()
+        rule.createdAt = .now
+        rule.sheet = sheet
+        rule.kindRaw = kind.rawValue
+        rule.title = title
+        rule.amount = NSDecimalNumber(decimal: amount)
+        rule.currencyCode = currency
+        rule.categoryRaw = category
+        rule.note = ""
+        let share = ShareCoordinator.shared.existingShare(for: sheet)
+        rule.payerProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+        rule.frequency = frequency.rawValue
+        rule.interval = interval
+        rule.startDate = start
+        rule.endDate = end
+        // Virtual series need only the rule. Materialized mode saves its due occurrences in the same transaction.
+        if !RecurringOccurrenceService.virtualizationEnabled {
+            RecurringExpenseGenerator.generate(for: rule, in: context)
+        }
+        try context.save()
     }
 
     /// ISO8601 / epoch のいずれかを Date にパース。失敗時は nil。

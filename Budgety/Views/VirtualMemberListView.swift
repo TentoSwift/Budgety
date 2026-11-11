@@ -18,7 +18,6 @@ struct VirtualMemberListView: View {
     @State private var newMemberName = ""
     /// プロフィール編集シート (名前 + 写真 + Memoji + 背景色) 対象。
     @State private var editingMember: EditingMember?
-    @State private var showingPaywall = false
     /// 削除確認アラート対象のバーチャルメンバー。
     @State private var pendingDelete: PendingDelete?
 
@@ -63,12 +62,8 @@ struct VirtualMemberListView: View {
                     }
                 }
                 Button {
-                    if PurchaseManager.hasPremiumAccess(to: record) {
-                        newMemberName = ""
-                        showAddPrompt = true
-                    } else {
-                        showingPaywall = true
-                    }
+                    newMemberName = ""
+                    showAddPrompt = true
                 } label: {
                     Label("バーチャルメンバーを追加", systemImage: "person.badge.plus")
                 }
@@ -108,6 +103,5 @@ struct VirtualMemberListView: View {
                 VirtualMemberEditView(profile: pp)
             }
         }
-        .sheet(isPresented: $showingPaywall) { PaywallView() }
     }
 }

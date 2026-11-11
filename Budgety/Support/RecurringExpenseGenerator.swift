@@ -51,8 +51,8 @@ enum RecurringExpenseGenerator {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
         let endDate = rule.endDate.map { cal.startOfDay(for: $0) } ?? .distantFuture
-        let limit = min(today, endDate)
-        guard cal.startOfDay(for: startDate) <= limit else { return 0 }
+        let limit = today.compare(endDate) == .orderedAscending ? today : endDate
+        guard cal.startOfDay(for: startDate).compare(limit) != .orderedDescending else { return 0 }
 
         // lastGeneratedDate を下限 (floor) に使う。これ以下の日付は再生成しない。
         // → 生成済み occurrence を単発削除しても次回復活しない (= 削除を尊重)。
@@ -129,15 +129,36 @@ enum RecurringExpenseGenerator {
         return expense
     }
 
+    /// Deleting a generated or transient row must also remove its virtual calendar slot.
+    static func deleteExpense(_ expense: Expense, in context: NSManagedObjectContext) {
+        if let ruleID = expense.generatedFromRuleID,
+           let rules = expense.sheet?.recurringRules as? Set<RecurringRule>,
+           let rule = rules.first(where: { !$0.isDeleted && $0.id == ruleID }),
+           let day = expense.scheduledDate ?? expense.date {
+            rule.addSkippedDay(day)
+        }
+        context.delete(expense)
+    }
+
+    /// Keep already-visible entries in the ledger when their schedule is removed.
+    static func deleteRule(_ rule: RecurringRule, in context: NSManagedObjectContext) {
+        let calendar = Calendar.current
+        if RecurringOccurrenceService.virtualizationEnabled,
+           let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now)) {
+            materializePast(for: rule, before: tomorrow, in: context)
+        }
+        context.delete(rule)
+    }
+
     /// 「今後のみ変更」用: ルールの occurrence を [startDate, cutoff) の範囲で
     /// 現在 (= 変更前) の値で実体化して凍結する。完全仮想化フラグに関係なく実体化する。
     /// 既に実体化済み / スキップ済みの日付は作らない。`save` は呼び出し側で。
     @discardableResult
     static func materializePast(for rule: RecurringRule, before cutoff: Date, in ctx: NSManagedObjectContext) -> Int {
-        guard let startDate = rule.startDate, let sheet = rule.sheet else { return 0 }
+        guard rule.id != nil, let startDate = rule.startDate, let sheet = rule.sheet else { return 0 }
         let cal = Calendar.current
         let cutoffDay = cal.startOfDay(for: cutoff)
-        guard cal.startOfDay(for: startDate) < cutoffDay else { return 0 }
+        guard cal.startOfDay(for: startDate).compare(cutoffDay) == .orderedAscending else { return 0 }
         let materialized = materializedDays(for: rule, in: ctx, cal: cal)
         let skipped = rule.skippedDaySet
         let sheetStore = sheet.objectID.persistentStore
@@ -148,17 +169,18 @@ enum RecurringExpenseGenerator {
                   cat.objectID.persistentStore == sheetStore else { return nil }
             return cat
         }()
-        let limit = cal.date(byAdding: .day, value: -1, to: cutoffDay) ?? cutoffDay
+        guard let lastDay = cal.date(byAdding: .day, value: -1, to: cutoffDay) else { return 0 }
+        let end = rule.endDate ?? lastDay
+        let limit = end.compare(lastDay) == .orderedAscending ? end : lastDay
         let days = RecurringOccurrenceService.occurrenceDays(
             start: startDate,
             frequency: rule.resolvedFrequency,
             interval: rule.resolvedInterval,
             until: limit,
-            cap: 600,
             calendar: cal
         )
         var count = 0
-        for day in days where day < cutoffDay {
+        for day in days {
             if materialized.contains(day) || skipped.contains(day) { continue }
             makeOccurrence(for: rule, on: day, sheet: sheet, category: matchedCategory, in: ctx)
             count += 1
@@ -173,9 +195,9 @@ enum RecurringExpenseGenerator {
         in ctx: NSManagedObjectContext,
         cal: Calendar
     ) -> Set<Date> {
-        guard let id = rule.id else { return [] }
+        guard let id = rule.id, let sheet = rule.sheet else { return [] }
         let req = NSFetchRequest<Expense>(entityName: "Expense")
-        req.predicate = NSPredicate(format: "generatedFromRuleID == %@", id as CVarArg)
+        req.predicate = NSPredicate(format: "sheet == %@ AND generatedFromRuleID == %@", sheet, id as CVarArg)
         req.returnsObjectsAsFaults = false
         let rows = (try? ctx.fetch(req)) ?? []
         var set = Set<Date>()

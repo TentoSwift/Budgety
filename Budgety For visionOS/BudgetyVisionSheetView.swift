@@ -129,7 +129,7 @@ struct BudgetyVisionSheetView: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: SheetAppearance.summaryCornerRadius, style: .continuous)
                 .fill(sheet.tint.opacity(0.12))
         )
     }
@@ -153,11 +153,11 @@ struct BudgetyVisionSheetView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text(dayHeader(group.date))
-                            .font(.subheadline.weight(.semibold))
+                            .font(.sheetNumber(.subheadline, weight: .semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text(daySigned(group.items, code: sheet.resolvedDefaultCurrencyCode))
-                            .font(.subheadline.monospacedDigit())
+                            .font(.sheetNumber(.subheadline))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
@@ -213,7 +213,7 @@ struct BudgetyVisionSheetView: View {
             }
             Spacer()
             Text(e.formattedSignedAmount)
-                .font(.callout.monospacedDigit())
+                .font(.sheetNumber(.callout))
                 .foregroundStyle(e.kind == .income ? .green : .primary)
         }
         .padding(.horizontal, 16)
@@ -269,7 +269,7 @@ struct BudgetyVisionSheetView: View {
             }
             Spacer()
             Text(CurrencyCatalog.format(occ.amount, code: occ.currencyCode))
-                .font(.callout.monospacedDigit())
+                .font(.sheetNumber(.callout))
                 .foregroundStyle(occ.kind == .income ? .green : .primary)
         }
         .padding(.horizontal, 16)

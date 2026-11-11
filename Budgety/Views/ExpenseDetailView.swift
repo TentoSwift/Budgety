@@ -16,6 +16,8 @@ struct ExpenseDetailView: View {
     /// 仮想 occurrence を materialize して詳細表示している場合に、編集が実際に保存(commit)
     /// されたことを親へ伝えるコールバック。未 commit で戻ったら親が未保存行を破棄する。
     var onCommit: (() -> Void)? = nil
+    var onEdit: (() -> Void)? = nil
+    var lockRecord: ExpenseSheet? = nil
     /// 支払者名 (Public DB カスタム名) / 自分の名前変更で再描画させる。
     @ObservedObject private var pub = PublicProfileSync.shared
     @ObservedObject private var profileStore = UserProfileStore.shared
@@ -54,7 +56,9 @@ struct ExpenseDetailView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("編集") { showingEdit = true }
+                Button("編集") {
+                    if let onEdit { onEdit() } else { showingEdit = true }
+                }
                     #if os(macOS)
                     // macOS の編集ボタンをシートの色で塗る (iOS は従来の nav tint のまま)。
                     .tint(expense.sheet?.tint)
@@ -73,7 +77,7 @@ struct ExpenseDetailView: View {
         #if os(iOS)
         // 親シートが再ロックされたら詳細画面にロックを重ねる。overlay 方式なので
         // 編集シート表示中でも再ホストせず、編集内容を壊さない。
-        .lockOverlay(expense.sheet)
+        .lockOverlay(lockRecord ?? expense.sheet)
         #endif
     }
 
@@ -84,8 +88,7 @@ struct ExpenseDetailView: View {
             VStack(spacing: 12) {
                 CategoryPayerIconView(expense: expense, size: 64, avatarSize: 26)
                 Text(expense.formattedSignedAmount)
-                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                    .monospacedDigit()
+                    .font(.sheetNumber(.largeTitle, weight: .bold))
                     .foregroundStyle(Color.primary)
                 let title = expense.displayTitle.isEmpty
                     ? expense.categoryDisplayName : expense.displayTitle
@@ -109,7 +112,7 @@ struct ExpenseDetailView: View {
     @ViewBuilder
     private var detailsSection: some View {
         Section {
-            detailRow(String(localized: "日付"), expense.date.map { $0.formatted(date: .long, time: .omitted) } ?? "—")
+            detailRow(String(localized: "日付"), expense.date.map { $0.formatted(date: .long, time: .omitted) } ?? "—", font: .sheetNumber(.body))
             detailRow(String(localized: "カテゴリ"), expense.categoryDisplayName)
             if !expense.displayTitle.isEmpty {
                 detailRow(String(localized: "タイトル"), expense.displayTitle)
@@ -118,14 +121,14 @@ struct ExpenseDetailView: View {
                 detailRow(String(localized: "通貨"), expense.resolvedCurrencyCode)
             }
             if let created = expense.createdAt {
-                detailRow(String(localized: "追加日"), created.formatted(date: .long, time: .shortened))
+                detailRow(String(localized: "追加日"), created.formatted(date: .long, time: .shortened), font: .sheetNumber(.body))
             }
         }
     }
 
     /// ラベル/値の行。AX サイズでは横に収まらないので AnyLayout で縦積みに切替
     /// (WWDC24「Get started with Dynamic Type」推奨パターン)。縦積み時は左寄せ。
-    private func detailRow(_ label: String, _ value: String) -> some View {
+    private func detailRow(_ label: String, _ value: String, font: Font? = nil) -> some View {
         let isAX = dynamicTypeSize.isAccessibilitySize
         let layout: AnyLayout = isAX
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
@@ -134,6 +137,7 @@ struct ExpenseDetailView: View {
             Text(label).foregroundStyle(.secondary)
             if !isAX { Spacer(minLength: 8) }
             Text(value)
+                .font(font)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(isAX ? .leading : .trailing)
                 .frame(maxWidth: isAX ? .infinity : nil, alignment: isAX ? .leading : .trailing)

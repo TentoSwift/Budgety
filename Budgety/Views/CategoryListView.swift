@@ -14,7 +14,6 @@ struct CategoryListView: View {
 
     @State private var editingCategory: ExpenseCategory?
     @State private var showingNew = false
-    @State private var showingPaywall = false
     /// 削除ダイアログの対象。`nil` ならダイアログは閉じている。
     @State private var deletingCategory: ExpenseCategory?
 
@@ -52,12 +51,7 @@ struct CategoryListView: View {
             #endif
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    if PurchaseManager.canAddCategory(to: record) {
-                        showingNew = true
-                    } else {
-                        showingPaywall = true
-                        Haptics.warning()
-                    }
+                    showingNew = true
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -76,9 +70,6 @@ struct CategoryListView: View {
             #else
             EditCategoryView(mode: .create(record: record))
             #endif
-        }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
         }
         .confirmationDialog(
             deletingCategory.map { String(localized: "「\($0.displayName)」を削除しますか?") } ?? "",

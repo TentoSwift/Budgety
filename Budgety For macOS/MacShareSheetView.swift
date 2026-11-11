@@ -1,404 +1,118 @@
-//
-//  MacShareSheetView.swift
-//  Budgety For macOS
-//
-//  Mac 用のシート共有 UI。UICloudSharingController が使えないので
-//  ShareCoordinator の API をそのまま使う自前 SwiftUI 実装。
-//
-//  機能:
-//  - 既存参加者一覧 (アバター + 名前 + 役割 + 権限) を表示
-//  - メール入力で新規招待 (Premium 限定: オーナー側のみ)
-//  - 参加者の削除
-//  - 共有 URL のコピー (リンク経由でも招待できる)
-//  - 共有解除 (全参加者削除 + 公開 OFF)
-//
-
-import SwiftUI
-import CloudKit
 import AppKit
+import CloudKit
+import CoreData
+import SwiftUI
 
-struct MacShareSheetView: View {
-    @ObservedObject var sheet: ExpenseSheet
-    @Environment(\.dismiss) private var dismiss
-    @StateObject private var pm = PurchaseManager.shared
-    @StateObject private var pub = PublicProfileSync.shared
+struct MacSheetSharingButton: NSViewRepresentable {
+    let sheet: ExpenseSheet
+    let hasParticipants: Bool
 
-    @State private var share: CKShare?
-    @State private var participants: [CKShare.Participant] = []
-    @State private var loading: Bool = true
-    @State private var error: String?
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
-    @State private var inviteEmail: String = ""
-    @State private var inviting: Bool = false
-    @State private var inviteSucceedMessage: String?
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(image: NSImage(), target: context.coordinator, action: #selector(Coordinator.share(_:)))
+        button.bezelStyle = .toolbar
+        button.imagePosition = .imageOnly
+        return button
+    }
 
-    @State private var shareURL: URL?
-    @State private var preparingURL: Bool = false
-    @State private var showingRevokeConfirm: Bool = false
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.sheet = sheet
+        let label = hasParticipants ? String(localized: "共有メンバー") : String(localized: "シートを共有")
+        let symbol = hasParticipants ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.plus"
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.setAccessibilityLabel(label)
+        button.toolTip = label
+    }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            if loading {
-                ProgressView()
-                    .padding(40)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    @MainActor
+    final class Coordinator: NSObject, NSCloudSharingServiceDelegate {
+        var sheet: ExpenseSheet?
+        private weak var anchor: NSButton?
+        private var service: NSSharingService?
+
+        @objc func share(_ sender: NSButton) {
+            guard service == nil, let sheet, let window = sender.window,
+                  !sheet.isDeleted, SheetLockManager.shared.isUnlocked(sheet) else { return }
+            guard let sharing = NSSharingService(named: .cloudSharing) else {
+                NSAlert(error: CocoaError(.featureUnsupported)).beginSheetModal(for: window)
+                return
+            }
+            anchor = sender
+            service = sharing
+            sharing.delegate = self
+
+            Task {
+                do {
+                    let provider = try await itemProvider(for: sheet)
+                    guard self.sheet === sheet, !sheet.isDeleted, SheetLockManager.shared.isUnlocked(sheet),
+                          sender.window === window else { service = nil; return }
+                    guard sharing.canPerform(withItems: [provider]) else { throw CocoaError(.featureUnsupported) }
+                    sharing.perform(withItems: [provider])
+                } catch {
+                    service = nil
+                    if sender.window === window { await NSAlert(error: error).beginSheetModal(for: window) }
+                }
+            }
+        }
+
+        private func itemProvider(for sheet: ExpenseSheet) async throws -> NSItemProvider {
+            let coordinator = ShareCoordinator.shared
+            let provider = NSItemProvider()
+            provider.suggestedName = sheet.displayName
+            let icon = Self.thumbnail
+            if let existing = coordinator.existingShare(for: sheet) {
+                let share = await coordinator.shareForPresentation(existing, title: sheet.displayName, thumbnail: icon)
+                provider.registerCloudKitShare(share, container: PersistenceController.shared.cloudKitContainer())
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if !sheet.isOwnedByCurrentUser {
-                            recipientNotice
-                        } else if let err = error {
-                            errorBanner(err)
+                guard sheet.isOwnedByCurrentUser else { throw ShareError.storeNotReady }
+                let id = sheet.objectID
+                provider.registerCloudKitShare { completion in
+                    Task { @MainActor in
+                        do {
+                            let share = try await Self.prepareShare(for: id, thumbnail: icon)
+                            completion(share, PersistenceController.shared.cloudKitContainer(), nil)
+                        } catch {
+                            completion(nil, nil, error)
                         }
-                        if !participants.isEmpty {
-                            participantsSection
-                        }
-                        if sheet.isOwnedByCurrentUser {
-                            if pm.isPremium {
-                                inviteSection
-                                shareLinkSection
-                                if share != nil {
-                                    revokeSection
-                                }
-                            } else {
-                                premiumGate
-                            }
-                        }
-                    }
-                    .padding(20)
-                    .frame(maxWidth: 640, alignment: .leading)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            Divider()
-            HStack {
-                Spacer()
-                Button("閉じる") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(16)
-        }
-        .frame(minWidth: 560, minHeight: 600)
-        .task { await reload() }
-        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
-            Task { await reload() }
-        }
-        .confirmationDialog(
-            "このシートの共有を解除しますか?",
-            isPresented: $showingRevokeConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("共有を解除", role: .destructive) {
-                Task { await revoke() }
-            }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("参加者全員が削除され、リンクからの参加もできなくなります。シート自体は削除されません。")
-        }
-    }
-
-    // MARK: - Sections
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(sheet.tint.gradient)
-                    .frame(width: 40, height: 40)
-                Image(systemName: sheet.symbol ?? "person.2.fill")
-                    .foregroundStyle(.white)
-                    .font(.callout.weight(.semibold))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sheet.displayName).font(.headline)
-                Text("シートを共有").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(16)
-    }
-
-    @ViewBuilder
-    private var participantsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("参加者")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            VStack(spacing: 0) {
-                ForEach(Array(participants.enumerated()), id: \.offset) { idx, p in
-                    participantRow(p)
-                    if idx < participants.count - 1 {
-                        Divider().padding(.leading, 56)
                     }
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.quaternary.opacity(0.5))
-            )
+            return provider
         }
-    }
 
-    private func participantRow(_ p: CKShare.Participant) -> some View {
-        let identity = p.userIdentity
-        let urn = identity.userRecordID?.recordName ?? ""
-        let isSelfPlaceholder = UserProfileStore.isSelfPlaceholderRecordName(urn)
-        let displayName: String = {
-            if let comps = identity.nameComponents {
-                let s = PersonNameComponentsFormatter().string(from: comps)
-                if !s.isEmpty { return s }
-            }
-            if isSelfPlaceholder { return UserProfileStore.shared.resolvedDisplayName }
-            if let cached = pub.profileOrPrefetch(for: urn), !cached.displayName.isEmpty {
-                return cached.displayName
-            }
-            if let email = identity.lookupInfo?.emailAddress { return email }
-            return String(localized: "メンバー")
+        private static func prepareShare(for id: NSManagedObjectID, thumbnail: Data?) async throws -> CKShare {
+            let context = PersistenceController.shared.container.viewContext
+            guard let sheet = try context.existingObject(with: id) as? ExpenseSheet, !sheet.isDeleted,
+                  sheet.isOwnedByCurrentUser, SheetLockManager.shared.isUnlocked(sheet) else { throw ShareError.storeNotReady }
+            return try await ShareCoordinator.shared.prepareShareLink(for: sheet, title: sheet.displayName, thumbnail: thumbnail).share
+        }
+
+        private static let thumbnail: Data? = {
+            guard let icon = NSApp.applicationIconImage else { return nil }
+            var bounds = NSRect(x: 0, y: 0, width: 120, height: 120)
+            guard let cg = icon.cgImage(forProposedRect: &bounds, context: nil, hints: nil) else { return nil }
+            return NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
         }()
-        let isMe = isSelfPlaceholder
-        let role: String = {
-            switch p.role {
-            case .owner: return String(localized: "オーナー")
-            case .privateUser: return String(localized: "参加者")
-            case .publicUser: return String(localized: "リンク参加")
-            default: return ""
-            }
-        }()
-        let acceptance: String = {
-            switch p.acceptanceStatus {
-            case .pending: return String(localized: "招待中")
-            case .accepted: return String(localized: "参加済み")
-            case .removed: return String(localized: "削除済み")
-            default: return ""
-            }
-        }()
-        let photo: Data? = isMe
-            ? UserProfileStore.shared.photoData
-            : pub.profileOrPrefetch(for: urn)?.photoData
-        return HStack(spacing: 12) {
-            AvatarView(
-                photoData: photo,
-                displayName: displayName,
-                colorHex: "#8E8E93",
-                size: 36
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isMe ? String(localized: "\(displayName) (自分)") : displayName)
-                    .font(.body)
-                HStack(spacing: 8) {
-                    Text(role).font(.caption2).foregroundStyle(.secondary)
-                    if !acceptance.isEmpty {
-                        Text("·").font(.caption2).foregroundStyle(.tertiary)
-                        Text(acceptance).font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            Spacer()
-            if sheet.isOwnedByCurrentUser, p.role != .owner {
-                Button(role: .destructive) {
-                    Task { await removeParticipant(p) }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help("この参加者を削除")
-            }
+
+        func anchoringView(for sharingService: NSSharingService, showRelativeTo rect: UnsafeMutablePointer<NSRect>,
+                           preferredEdge edge: UnsafeMutablePointer<NSRectEdge>) -> NSView? {
+            guard let anchor, anchor.window != nil else { return nil }
+            rect.pointee = anchor.bounds
+            edge.pointee = .minY
+            return anchor
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
 
-    @ViewBuilder
-    private var inviteSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Apple Account のメールアドレスで招待")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack {
-                TextField("name@icloud.com", text: $inviteEmail)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(inviting)
-                Button {
-                    Task { await invite() }
-                } label: {
-                    if inviting {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("招待する", systemImage: "plus")
-                    }
-                }
-                .disabled(inviteEmail.trimmingCharacters(in: .whitespaces).isEmpty || inviting)
-                .keyboardShortcut(.return)
-            }
-            if let msg = inviteSucceedMessage {
-                Text(msg).font(.caption).foregroundStyle(.secondary)
-            }
-            Text("招待する相手の Apple Account のメールアドレスを入力し「招待する」をクリックすると「招待中」として登録されます。続いて下の「リンクを送る」からリンクをコピーして、メールやメッセージなどで相手に送ってください。招待した相手はリンクを開くことで参加できます。")
-                .font(.caption2).foregroundStyle(.secondary)
+        func options(for cloudKitSharingService: NSSharingService, share provider: NSItemProvider) -> NSSharingService.CloudKitOptions {
+            [.allowPrivate, .allowReadWrite]
         }
-    }
 
-    @ViewBuilder
-    private var shareLinkSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("リンクを送る")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack {
-                if let url = shareURL {
-                    Text(url.absoluteString)
-                        .font(.caption.monospaced())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                    Spacer()
-                    Button("リンクをコピー") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                    }
-                } else {
-                    Button {
-                        Task { await prepareLink() }
-                    } label: {
-                        if preparingURL {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("共有リンクを準備")
-                        }
-                    }
-                    .disabled(preparingURL)
-                    Spacer()
-                }
-            }
-            Text("「招待する」で登録した相手に、メールやメッセージなどでこのリンクを送ることもできます。相手はリンクを開いて参加できます。")
-                .font(.caption2).foregroundStyle(.secondary)
+        func sharingService(_ sharingService: NSSharingService, didCompleteForItems items: [Any], error: Error?) {
+            service = nil
+            guard let error = error as NSError?,
+                  !(error.domain == NSCocoaErrorDomain && error.code == NSUserCancelledError),
+                  let window = anchor?.window else { return }
+            NSAlert(error: error).beginSheetModal(for: window)
         }
-    }
-
-    @ViewBuilder
-    private var revokeSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button(role: .destructive) {
-                showingRevokeConfirm = true
-            } label: {
-                Label("このシートの共有を解除", systemImage: "person.2.slash")
-                    .frame(maxWidth: .infinity)
-            }
-            Text("このシートを共有しているすべての参加者が外され、リンクも無効になります。シート自体は残ります。")
-                .font(.caption2).foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private var premiumGate: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("招待は Premium 限定", systemImage: "lock.fill")
-                .foregroundStyle(.secondary)
-            Text("Premium にアップグレードすると、家族や友人をこのシートに招待できます。受け取った共有シートに参加するのは無料です。")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(.quaternary.opacity(0.3)))
-    }
-
-    @ViewBuilder
-    private var recipientNotice: some View {
-        Label("このシートは他のユーザーから共有されています。招待 / 削除はオーナーのみが行えます。",
-              systemImage: "info.circle")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.3)))
-    }
-
-    private func errorBanner(_ msg: String) -> some View {
-        Label(msg, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.red)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.1)))
-    }
-
-    // MARK: - Actions
-
-    @MainActor
-    private func reload() async {
-        loading = true
-        defer { loading = false }
-        let current = ShareCoordinator.shared.existingShare(for: sheet)
-        share = current
-        participants = current?.participants
-            .filter { $0.acceptanceStatus != .removed }
-            ?? []
-        // 参加者の URN を prefetch しておく (写真表示用)
-        let urns = participants.compactMap { $0.userIdentity.userRecordID?.recordName }
-        if !urns.isEmpty {
-            await PublicProfileSync.shared.fetchProfiles(forURNs: urns)
-        }
-        // 既に URL が取れているなら表示
-        if let s = current { shareURL = s.url }
-    }
-
-    @MainActor
-    private func invite() async {
-        let email = inviteEmail.trimmingCharacters(in: .whitespaces)
-        guard !email.isEmpty else { return }
-        inviting = true
-        defer { inviting = false }
-        error = nil
-        inviteSucceedMessage = nil
-        do {
-            let result = try await ShareCoordinator.shared.invite(
-                email: email,
-                permission: .readWrite,
-                to: sheet
-            )
-            inviteEmail = ""
-            inviteSucceedMessage = String(localized: "\(email) を招待しました")
-            shareURL = result.url
-            await reload()
-        } catch {
-            self.error = String(localized: "招待に失敗しました: \(error.localizedDescription)")
-        }
-    }
-
-    @MainActor
-    private func removeParticipant(_ p: CKShare.Participant) async {
-        guard let share else { return }
-        error = nil
-        do {
-            try await ShareCoordinator.shared.remove(participant: p, from: share)
-            await reload()
-        } catch {
-            self.error = String(localized: "削除に失敗しました: \(error.localizedDescription)")
-        }
-    }
-
-    @MainActor
-    private func prepareLink() async {
-        preparingURL = true
-        defer { preparingURL = false }
-        error = nil
-        do {
-            let (s, url) = try await ShareCoordinator.shared.prepareShareLink(for: sheet)
-            share = s
-            shareURL = url
-            await reload()
-        } catch {
-            self.error = String(localized: "リンクの取得に失敗しました: \(error.localizedDescription)")
-        }
-    }
-
-    @MainActor
-    private func revoke() async {
-        error = nil
-        let ok = await ShareCoordinator.shared.revokeAllOwnedShares()
-        if !ok {
-            self.error = String(localized: "共有解除に失敗した share がありました。")
-        }
-        await reload()
     }
 }

@@ -54,6 +54,7 @@ struct VisionAddExpenseView: View {
                 }
                 Section("金額 (\(sheet.resolvedDefaultCurrencyCode))") {
                     TextField("0", text: $amountText)
+                        .font(.sheetNumber(.body))
                 }
                 Section("日付") {
                     DatePicker("日付", selection: $date, displayedComponents: .date)

@@ -108,7 +108,9 @@ struct RecurringListView: View {
 
     private func deleteRules(items: [RecurringRule], at offsets: IndexSet) {
         withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
+            for i in offsets {
+                RecurringExpenseGenerator.deleteRule(items[i], in: viewContext)
+            }
             PersistenceController.shared.save()
             Haptics.warning()
         }
@@ -149,11 +151,13 @@ private struct RecurringRow: View {
                 HStack(spacing: 6) {
                     Image(systemName: "repeat")
                     Text(rule.resolvedFrequency.summary(interval: rule.resolvedInterval))
+                        .font(.sheetNumber(.caption2))
                     Text("·")
                     Text(categoryName)
                     if let next = rule.nextOccurrence {
                         Text("·")
                         Text("次回 \(formatted(next))")
+                            .font(.sheetNumber(.caption2))
                     }
                 }
                 .font(.caption2)
@@ -161,7 +165,7 @@ private struct RecurringRow: View {
             }
             Spacer()
             Text(rule.formattedAmount)
-                .font(.subheadline.monospacedDigit())
+                .font(.sheetNumber(.subheadline))
                 .foregroundStyle(rule.kind == .income ? .green : .primary)
         }
         .padding(.vertical, 2)
