@@ -7,7 +7,7 @@ import SwiftUI
 @available(iOS 27.3, *)
 struct SiriExpenseDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出名で明細を確認"
-    static let description = IntentDescription("指定したシートの支出を名前や対象月で探し、件数、通貨別の合計、最新5件までの支出名・日付・金額・カテゴリを返します。支出名と対象月を省略すると最近の支出を確認できます。")
+    static let description = IntentDescription("指定したシートの支出を名前、日付、月で探し、件数、通貨別の合計と最新5件までの明細をテキストで返します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "シート名を指定された場合だけ設定します。省略時は最後に開いたシートを使い、特定できなければ選択を求めます。")
@@ -16,14 +16,18 @@ struct SiriExpenseDetailsIntent: AppIntent {
     @Parameter(title: "支出名", description: "「ランチ」や店名など、支出の名前に含まれる言葉。省略するとすべての支出名が対象になります。")
     var expenseName: String?
 
-    @Parameter(title: "対象月", description: "探したい月に含まれる日付。省略すると全期間を対象にします。")
+    @Parameter(title: "対象月", description: "年月だけが指定されたときの月。「今日」や特定の日付は対象月に設定しません。")
     var month: Date?
+    @Parameter(title: "対象日", description: "11月11日など、特定の1日について尋ねられたときの日付。")
+    var day: Date?
+    @Parameter(title: "検索期間", description: "今日・昨日・今月・先月・全期間。期間を省略すると全期間を検索します。")
+    var period: SiriExpensePeriod?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         // Existing personal shortcuts consume this action's text output.
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, period: nil, unnamedPeriod: .allTime)
-        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: filter.name, month: filter.month) {
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, day: day, period: period, unnamedPeriod: .allTime)
+        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         return .result(value: result.report, dialog: IntentDialog("\(result.report)"))
@@ -34,27 +38,29 @@ struct SiriExpenseDetailsIntent: AppIntent {
 @AppIntent(.tool)
 struct SiriFindExpenseCardsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出明細を検索してカードで表示"
-    static let description = IntentDescription("「今月の支出は？」「先月の支出を見せて」など、期間や店名を指定して支出を検索します。日付・金額・カテゴリが並ぶカードと件数・通貨別合計を返します。")
+    static let description = IntentDescription("「今日の支出は？」なら今日1日だけ、「今月の支出は？」なら今月の支出を、明細カードと通貨別の金額で返します。日付と店名を組み合わせて検索することもできます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
-    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出名に含まれる言葉。「今月の支出は？」など一覧を求められたら省略します。")
+    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出名に含まれる言葉。「今日の支出は？」など一覧を求められたら省略します。")
     var expenseName: String?
-    @Parameter(title: "対象月", description: "2026年5月など年月を指定されたとき、その月に含まれる日付。今月・先月・全期間の場合は検索期間を使います。")
+    @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
-    @Parameter(title: "検索期間", description: "「今月」は今月、「先月」は先月、「すべての期間」は全期間。期間指定がない一覧は今月、店名だけの検索は全期間を対象にします。")
+    @Parameter(title: "対象日", description: "11月11日など、特定の1日について尋ねられたときの日付。")
+    var day: Date?
+    @Parameter(title: "検索期間", description: "「今日の支出は？」は今日、「昨日」は昨日、「今月」は今月、「先月」は先月。期間指定がない一覧は今月、店名だけの検索は全期間を対象にします。")
     var period: SiriExpensePeriod?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, period: period)
-        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: filter.name, month: filter.month) {
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, day: day, period: period)
+        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         let supporting: LocalizedStringResource = result.card.count == 0
             ? "該当する支出はありません" : "支出が見つかりました。"
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, expenseName: filter.name, month: filter.month)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
     }
@@ -67,19 +73,41 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     @Parameter(title: "シートの識別子") var sheetIdentifier: String
     @Parameter(title: "支出名") var expenseName: String?
+    // Retained to decode snippets created before daily searches were supported.
     @Parameter(title: "対象月") var month: Date?
+    @Parameter(title: "期間の開始") var intervalStart: Date?
+    @Parameter(title: "期間の終了") var intervalEnd: Date?
+    @Parameter(title: "対象期間") var periodLabel: String?
 
     init() {}
 
-    init(sheetIdentifier: String, expenseName: String?, month: Date?) {
+    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter) {
         self.sheetIdentifier = sheetIdentifier
-        self.expenseName = expenseName
-        self.month = month
+        self.expenseName = filter.name
+        self.intervalStart = filter.scope.interval?.start
+        self.intervalEnd = filter.scope.interval?.end
+        self.periodLabel = filter.scope.label
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
-        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, month: month)
+        let interval: DateInterval?
+        let label: String
+        switch (intervalStart, intervalEnd, periodLabel) {
+        case let (start?, end?, savedLabel?) where start <= end:
+            interval = DateInterval(start: start, end: end)
+            label = savedLabel
+        case (nil, nil, let savedLabel?):
+            interval = nil
+            label = savedLabel
+        case (nil, nil, nil):
+            let legacy = SiriExpenseSearchFilter(expenseName: nil, month: month, period: nil, unnamedPeriod: .allTime)
+            interval = legacy.scope.interval
+            label = legacy.scope.label
+        default:
+            throw AppIntentError.expenseUnavailable
+        }
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, interval: interval, periodLabel: label)
         return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
@@ -116,10 +144,10 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func run(sheet: ExpenseSheetEntity?, expenseName: String?, month: Date?,
+    static func run(sheet: ExpenseSheetEntity?, filter: SiriExpenseSearchFilter,
                     choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
         let sheetID = try await sheetIdentifier(sheet: sheet, choosing: choosing)
-        return try search(sheetID: sheetID, expenseName: expenseName, month: month)
+        return try search(sheetID: sheetID, expenseName: filter.name, interval: filter.scope.interval, periodLabel: filter.scope.label)
     }
 
     @MainActor
@@ -138,14 +166,14 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func search(sheetID: String, expenseName: String?, month: Date?) throws -> Result {
+    static func search(sheetID: String, expenseName: String?, interval: DateInterval?, periodLabel period: String) throws -> Result {
         // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
         let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
         let record = try access.resolve(sheetID)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
         var filters = [NSPredicate(format: "sheet == %@", record)]
-        if let month, let interval = Calendar.current.dateInterval(of: .month, for: month) {
+        if let interval {
             filters.append(NSPredicate(format: "date >= %@ AND date < %@", interval.start as NSDate, interval.end as NSDate))
         }
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: filters)
@@ -170,7 +198,6 @@ enum SiriExpenseLookup {
             }
         }
 
-        let period = month?.formatted(.dateTime.year().month(.wide)) ?? String(localized: "全期間")
         let scope = name.isEmpty ? String(localized: "「\(record.displayName)」の\(period)の支出")
             : String(localized: "「\(record.displayName)」の\(period)で支出名に「\(name)」を含む明細")
         let summary: String

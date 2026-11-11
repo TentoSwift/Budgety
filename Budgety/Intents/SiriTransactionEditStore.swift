@@ -32,6 +32,7 @@ enum SiriTransactionEditStore {
         fileprivate let original: Snapshot
         fileprivate let request: Request
         fileprivate let selectedMembers: [MemberIdentity]
+        fileprivate let selectedCategoryName: String?
     }
 
     fileprivate struct Request {
@@ -41,6 +42,8 @@ enum SiriTransactionEditStore {
         let payer: SiriSheetMemberEntity?
         let split: SiriTransactionSplitChange
         let beneficiaries: [SiriSheetMemberEntity]
+        let category: ExpenseCategoryEntity?
+        let currencyCode: String?
     }
 
     // Expense has no revision field. Compare persisted attributes and relationship identities
@@ -71,7 +74,10 @@ enum SiriTransactionEditStore {
         var changes: [Change] = []
         var title: String?
         var amount: Decimal?
+        var currencyCode: String?
         var date: Date?
+        var category: ExpenseCategory?
+        var changesCategory = false
         var payer: SiriSheetMemberEntity?
         var splitMembers: [SiriSheetMemberEntity]?
         var selectedMembers: [MemberIdentity] = []
@@ -89,8 +95,10 @@ enum SiriTransactionEditStore {
 
     static func prepare(identifier: String, sheetIdentifier: String, title: String? = nil, amount: Double? = nil,
                         date: Date? = nil, payer: SiriSheetMemberEntity? = nil, split: SiriTransactionSplitChange = .unchanged,
-                        beneficiaries: [SiriSheetMemberEntity] = []) throws -> Prepared {
-        let request = Request(title: title, amount: amount, date: date, payer: payer, split: split, beneficiaries: beneficiaries)
+                        beneficiaries: [SiriSheetMemberEntity] = [], category: ExpenseCategoryEntity? = nil,
+                        currencyCode: String? = nil) throws -> Prepared {
+        let request = Request(title: title, amount: amount, date: date, payer: payer, split: split,
+                              beneficiaries: beneficiaries, category: category, currencyCode: currencyCode)
         let (access, row, sheet) = try target(identifier, in: sheetIdentifier)
         let plan = try plan(request, for: row, sheet: sheet, access: access)
         guard !plan.changes.isEmpty else { throw EditError.unchanged }
@@ -98,7 +106,7 @@ enum SiriTransactionEditStore {
                         transactionTitle: row.displayTitle.isEmpty ? row.categoryDisplayName : row.displayTitle,
                         changes: plan.changes, originalReceipt: SiriRecordedTransaction(transaction: row, sheet: sheet),
                         sheetIdentifier: sheetIdentifier, original: Snapshot(row),
-                        request: request, selectedMembers: plan.selectedMembers)
+                        request: request, selectedMembers: plan.selectedMembers, selectedCategoryName: plan.category?.displayName)
     }
 
     static func commit(_ prepared: Prepared) throws -> AddExpenseIntent.RecordedTransaction {
@@ -108,14 +116,16 @@ enum SiriTransactionEditStore {
               title == prepared.transactionTitle else { throw EditError.stale }
         var updates = try plan(prepared.request, for: row, sheet: sheet, access: access)
         guard !updates.changes.isEmpty, updates.changes == prepared.changes,
-              updates.selectedMembers == prepared.selectedMembers else { throw EditError.stale }
+              updates.selectedMembers == prepared.selectedMembers, updates.category?.displayName == prepared.selectedCategoryName
+        else { throw EditError.stale }
         // A newly configured account may have no stored self UUID until it saves for the first time.
         if updates.selectedMembers.contains(where: { $0.profileID.isEmpty }) {
             updates = try plan(prepared.request, for: row, sheet: sheet, access: access, preparingToSave: true)
         }
         if let title = updates.title { row.title = title }
-        if let amount = updates.amount {
-            row.amount = NSDecimalNumber(decimal: amount)
+        if updates.amount != nil || updates.currencyCode != nil {
+            if let amount = updates.amount { row.amount = NSDecimalNumber(decimal: amount) }
+            if let code = updates.currencyCode { row.currencyCode = code }
             if row.generatedFromRuleID == nil {
                 row.captureFXSnapshot()
             } else {
@@ -124,6 +134,10 @@ enum SiriTransactionEditStore {
             }
         }
         if let date = updates.date { row.date = date }
+        if updates.changesCategory {
+            row.category = updates.category
+            row.categoryRaw = updates.category?.name
+        }
         if let payer = updates.payer {
             row.payerProfileID = payer.profileID
             row.payerMemberID = payer.memberID
@@ -139,7 +153,7 @@ enum SiriTransactionEditStore {
                                                     dialog: "明細を変更しました", context: access.context)
     }
 
-    private static func target(_ identifier: String, in sheetIdentifier: String) throws
+    static func target(_ identifier: String, in sheetIdentifier: String) throws
         -> (IntentSheetAccess, Expense, ExpenseSheet) {
         let container = PersistenceController.shared.container
         let access = try IntentSheetAccess(checking: container.viewContext)
@@ -165,25 +179,37 @@ enum SiriTransactionEditStore {
                                            after: title.isEmpty ? empty : title))
             }
         }
-        if let input = request.amount {
-            guard input.isFinite, input > 0 else { throw AppIntentError.invalidAmount }
-            let amount = Decimal(input)
-            guard !amount.isNaN, amount > 0 else { throw AppIntentError.invalidAmount }
-            if amount != row.amountDecimal {
-                plan.amount = amount
-                let code = row.resolvedCurrencyCode
-                let formatted = CurrencyCatalog.format(amount, code: code)
-                let roundedEqual = row.formattedAmount == formatted
-                plan.changes.append(Change(label: String(localized: "金額"),
-                                           before: roundedEqual ? "\(row.amountDecimal) \(code)" : row.formattedAmount,
-                                           after: roundedEqual ? "\(amount) \(code)" : formatted))
-            }
-        }
+        try planAmountAndCurrency(request, for: row, plan: &plan)
         if let date = request.date, row.date.map({ !Calendar.current.isDate($0, inSameDayAs: date) }) != false {
             plan.date = date
             plan.changes.append(Change(label: String(localized: "日付"),
                                        before: row.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "未設定"),
                                        after: date.formatted(date: .abbreviated, time: .omitted)))
+        }
+        if let choice = request.category {
+            let current = row.category
+            if let current, let draft = access.viewContext.registeredObject(for: current.objectID),
+               draft.isDeleted || draft.hasPersistentChangedValues { throw EditError.stale }
+            let next = try SiriEditingCategoryQuery.resolve(choice.id, for: row, access: access)
+            plan.category = next
+            plan.changesCategory = current?.objectID != next?.objectID || (next == nil && !(row.categoryRaw ?? "").isEmpty)
+            if plan.changesCategory {
+                var before = row.categoryDisplayName
+                var after = next?.displayName ?? String(localized: "カテゴリなし")
+                if before == after {
+                    if let current, let next {
+                        before = try SiriEditingCategoryQuery.duplicateLabel(for: current, transaction: row, access: access)
+                        after = try SiriEditingCategoryQuery.duplicateLabel(for: next, transaction: row, access: access)
+                    } else if current == nil, !(row.categoryRaw ?? "").isEmpty {
+                        before = String(localized: "\(before)（名前のみ）")
+                    } else if current != nil {
+                        before = String(localized: "カテゴリ「\(before)」")
+                    } else {
+                        after = String(localized: "カテゴリ「\(after)」")
+                    }
+                }
+                plan.changes.append(Change(label: String(localized: "カテゴリ"), before: before, after: after))
+            }
         }
         guard request.payer != nil || request.split != .unchanged || !request.beneficiaries.isEmpty else { return plan }
         if request.split != .unchanged, row.kind != .expense { throw AppIntentError.incomeCannotSplit }
@@ -239,6 +265,29 @@ enum SiriTransactionEditStore {
                                        after: members.isEmpty ? none : members.map(\.name).formatted(.list(type: .and))))
         }
         return plan
+    }
+
+    private static func planAmountAndCurrency(_ request: Request, for row: Expense, plan: inout Plan) throws {
+        let oldAmount = row.amountDecimal
+        let oldCode = row.resolvedCurrencyCode.uppercased()
+        if let input = request.amount {
+            guard let amount = CurrencyCatalog.transactionAmount(input) else { throw AppIntentError.invalidAmount }
+            if amount != oldAmount { plan.amount = amount }
+        }
+        if let input = request.currencyCode {
+            guard let code = CurrencyCatalog.transactionCurrencyCode(for: input) else { throw AppIntentError.unsupportedCurrency }
+            if code != oldCode { plan.currencyCode = code }
+        }
+        if let code = plan.currencyCode {
+            let label = plan.amount == nil ? String(localized: "通貨") : String(localized: "金額・通貨")
+            plan.changes.append(Change(label: label, before: "\(oldAmount) \(oldCode)", after: "\(plan.amount ?? oldAmount) \(code)"))
+        } else if let amount = plan.amount {
+            let formatted = CurrencyCatalog.format(amount, code: oldCode)
+            let roundedEqual = row.formattedAmount == formatted
+            plan.changes.append(Change(label: String(localized: "金額"),
+                                       before: roundedEqual ? "\(oldAmount) \(oldCode)" : row.formattedAmount,
+                                       after: roundedEqual ? "\(amount) \(oldCode)" : formatted))
+        }
     }
 }
 #endif

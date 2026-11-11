@@ -97,6 +97,40 @@ enum CurrencyCatalog {
         all.first { $0.code == code } ?? .init(code: code, displayName: code, symbol: code)
     }
 
+    /// App Intents supplies a Double; keep its decimal spelling rather than expanding the binary approximation.
+    static func transactionAmount(_ value: Double) -> Decimal? {
+        guard value.isFinite, value > 0,
+              let amount = Decimal(string: String(value), locale: Locale(identifier: "en_US_POSIX")),
+              !amount.isNaN, amount > 0 else { return nil }
+        return amount
+    }
+
+    /// Accept codes from Shortcuts and currency names from Siri. A shared symbol alone
+    /// (for example "$") cannot identify a currency.
+    static func transactionCurrencyCode(for input: String) -> String? {
+        let locale = Locale(identifier: "en_US_POSIX")
+        func key(_ value: String) -> String {
+            value.folding(options: [.caseInsensitive, .widthInsensitive], locale: locale)
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(with: locale)
+        }
+        let token = key(input)
+        guard !token.isEmpty else { return nil }
+        if let option = all.first(where: { key($0.code) == token }) { return option.code }
+        switch token {
+        case "円", "日本円", "yen", "jp¥": return "JPY"
+        case "ドル", "米ドル", "アメリカドル", "us dollar", "us dollars", "us$": return "USD"
+        case "ユーロ", "euro", "euros": return "EUR"
+        default: break
+        }
+        let locales = [Locale.current, Locale(identifier: "ja_JP"), locale]
+        let matches = all.filter { option in
+            key(option.displayName) == token || key(option.symbol) == token || locales.contains {
+                $0.localizedString(forCurrencyCode: option.code).map(key) == token
+            }
+        }
+        return matches.count == 1 ? matches[0].code : nil
+    }
+
     static func format(_ amount: Decimal, code: String) -> String {
         amount.formatted(.currency(code: code).locale(Locale.current))
     }

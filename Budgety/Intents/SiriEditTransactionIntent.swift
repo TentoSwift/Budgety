@@ -7,7 +7,7 @@ import SwiftUI
 @AppIntent(.tool)
 struct SiriEditTransactionIntent: AppIntent {
     static let title: LocalizedStringResource = "登録済みの明細を変更"
-    static let description = IntentDescription("直前に登録した明細や、シート内の既存の支出・収入を訂正します。元の明細を選び、変更したい項目だけ指定してください。保存前に変更内容を確認します。")
+    static let description = IntentDescription("直前に登録した明細や、既存の支出・収入のカテゴリ、金額、名前などを訂正します。対象の明細と変更したい項目だけを指定し、保存前に確認します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "明細を名前で探すシート。直前のカードの明細を指定するときは省略できます。")
@@ -15,9 +15,15 @@ struct SiriEditTransactionIntent: AppIntent {
     @Parameter(title: "変更する明細", description: "直前の登録カードの編集対象、または変更したい既存の支出・収入。")
     var transaction: SiriEditableTransactionEntity
     @Parameter(title: "新しい名前") var newTitle: String?
-    @Parameter(title: "新しい金額", description: "明細の通貨で、変更後の金額を正の数で指定します。")
+    @Parameter(title: "新しい金額", description: "変更後の額面を正の数で指定します。通貨も変えるときは変更後の通貨を併せて指定します。")
     var newAmount: Double?
+    @Parameter(title: "変更後の通貨", description: "明細の通貨だけを訂正するときや「1,200円に変更」のように金額と通貨を指定したときに設定します。金額を省略すれば数値は変わりません。",
+               optionsProvider: SiriCurrencyOptions())
+    var currencyCode: String?
     @Parameter(title: "新しい日付") var newDate: Date?
+    @Parameter(title: "変更後のカテゴリ", description: "変更先のカテゴリ。支出はそのシートの支出カテゴリ、収入は収入カテゴリから選びます。解除するときは未分類、変更しないときは省略します。",
+               optionsProvider: SiriEditingCategoryQuery())
+    var category: ExpenseCategoryEntity?
     @Parameter(title: "支払者・受取者", description: "変更後の支払者。収入の場合は受取者。省略すると元の人を維持します。",
                optionsProvider: SiriEditingMemberQuery())
     var payer: SiriSheetMemberEntity?
@@ -32,7 +38,9 @@ struct SiriEditTransactionIntent: AppIntent {
             \.$sheet
             \.$newTitle
             \.$newAmount
+            \.$currencyCode
             \.$newDate
+            \.$category
             \.$payer
             \.$split
             \.$beneficiaries
@@ -45,7 +53,8 @@ struct SiriEditTransactionIntent: AppIntent {
         let prepared = try SiriTransactionEditStore.prepare(
             identifier: transaction.id, sheetIdentifier: sheet?.id ?? transaction.sheetID,
             title: newTitle, amount: newAmount, date: newDate, payer: payer,
-            split: split ?? (selected.isEmpty ? .unchanged : .selected), beneficiaries: selected)
+            split: split ?? (selected.isEmpty ? .unchanged : .selected), beneficiaries: selected,
+            category: category, currencyCode: currencyCode)
         let changes = prepared.changes.map { String(localized: "\($0.label)：\($0.before) → \($0.after)") }
             .joined(separator: "\n")
         let prompt = IntentDialog("「\(prepared.sheetName)」の「\(prepared.transactionTitle)」を変更しますか？\n\(changes)")

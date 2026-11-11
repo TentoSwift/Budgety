@@ -15,10 +15,11 @@ struct SiriRecordExpenseIntent: AppIntent {
     @Parameter(title: "シート", description: "この支出を記録する家計簿または旅行などのシート。")
     var sheet: ExpenseSheetEntity
 
-    @Parameter(title: "金額", description: "実際に支払った、0より大きい金額。")
+    @Parameter(title: "金額", description: "実際に支払った正の金額。シートの通貨には換算しません。発話に円などの単位が付いていれば支払通貨も設定します。")
     var amount: Double
 
-    @Parameter(title: "支払通貨", description: "通貨の指定があれば、日本円はJPY、米ドルはUSDのようにISO通貨コードで指定します。通貨の指定がない場合は省略します。")
+    @Parameter(title: "支払通貨", description: "金額に付いた通貨を指定します。ドル建てシートでも「1,200円」はJPY、「15ユーロ」はEUR。通貨が言われなかった場合だけ省略します。",
+               optionsProvider: SiriCurrencyOptions())
     var currencyCode: String?
 
     @Parameter(title: "支出名", description: "「ランチ代」「駅までのバス代」など、利用者が話した支出の名前。指定された名前のまま記録します。")
@@ -66,7 +67,8 @@ struct SiriRecordIncomeIntent: AppIntent {
     var sheet: ExpenseSheetEntity
     @Parameter(title: "金額", description: "受け取った、0より大きい金額。")
     var amount: Double
-    @Parameter(title: "通貨", description: "指定があればJPYやUSDなどの通貨コード。省略時はシートの既定通貨を使います。")
+    @Parameter(title: "通貨", description: "金額に付いた通貨。シートの既定通貨と違っても「円」はJPY、「米ドル」はUSDを指定します。金額の単位を省略した場合だけシートの通貨を使います。",
+               optionsProvider: SiriCurrencyOptions())
     var currencyCode: String?
     @Parameter(title: "収入名", description: "「給与」「お小遣い」など、利用者が指定した収入の名前。")
     var incomeTitle: String?
@@ -151,16 +153,18 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
 @available(iOS 27.3, *)
 @AppIntent(.tool)
 struct SiriMonthlySpendingIntent: AppIntent {
-    static let title: LocalizedStringResource = "シートの月間支出を確認"
-    static let description = IntentDescription("シート全体の月間支出の合計を、シートの既定通貨で返します。個別の支出名や明細は含みません。")
+    static let title: LocalizedStringResource = "シートの支出額を確認"
+    static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。明細カードは含みません。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "集計したいシート。省略すると最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
 
-    @Parameter(title: "対象月", description: "2026年5月など年月を指定されたとき、その月に含まれる日付。")
+    @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
-    @Parameter(title: "検索期間", description: "「今月」「先月」「全期間」の指定。対象月と検索期間を省略すると今月の合計になります。")
+    @Parameter(title: "対象日", description: "11月11日など、特定の1日について尋ねられたときの日付。")
+    var day: Date?
+    @Parameter(title: "検索期間", description: "「今日の支出は？」は今日、「昨日」は昨日、「今月」は今月、「先月」は先月。日付も期間も省略すると今月を集計します。")
     var period: SiriExpensePeriod?
 
     @MainActor
@@ -170,16 +174,15 @@ struct SiriMonthlySpendingIntent: AppIntent {
         }
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let record = try access.resolve(sheetID)
-        let calendar = Calendar.current
-        let date = month ?? (period ?? .thisMonth).month(relativeTo: .now, calendar: calendar)
+        let scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period).scope
         let totals = record.convertedTotals { expense in
             guard expense.kind == .expense, !expense.isSkipped else { return false }
-            guard let date else { return true }
+            guard let interval = scope.interval else { return true }
             guard let paidOn = expense.date else { return false }
-            return calendar.isDate(paidOn, equalTo: date, toGranularity: .month)
+            return interval.start <= paidOn && paidOn < interval.end
         }
         let amount = CurrencyCatalog.format(totals.expense, code: record.resolvedDefaultCurrencyCode)
-        let periodLabel = date?.formatted(.dateTime.year().month(.wide)) ?? String(localized: "全期間")
+        let periodLabel = scope.label
         let report: LocalizedStringResource
         if totals.missing.isEmpty {
             report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。"

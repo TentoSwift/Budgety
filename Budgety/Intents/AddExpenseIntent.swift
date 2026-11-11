@@ -25,10 +25,14 @@ struct AddExpenseIntent: AppIntent {
 
     @Parameter(
         title: "金額",
-        description: "支払った金額。シートの既定通貨で記録されます。",
+        description: "実際に支払った金額。通貨を指定しなければシートの既定通貨で記録します。",
         controlStyle: .field
     )
     var amount: Double
+
+    @Parameter(title: "支払通貨", description: "支払額の通貨。「1,200円」なら、シートが米ドルでも日本円を選びます。",
+               optionsProvider: SiriCurrencyOptions())
+    var currencyCode: String?
 
     @Parameter(
         title: "カテゴリ",
@@ -77,6 +81,7 @@ struct AddExpenseIntent: AppIntent {
     static var parameterSummary: some ParameterSummary {
         Summary("\(\.$sheet) に \(\.$amount) を \(\.$category) で追加") {
             \.$title
+            \.$currencyCode
             \.$note
             \.$date
             \.$dateText
@@ -121,7 +126,7 @@ struct AddExpenseIntent: AppIntent {
         }
         return try await Self.recordTransaction(sheet: selected, kind: .expense, amount: amount, title: title,
                                                 date: Self.resolveDate(date: date, dateText: dateText),
-                                                category: category, note: note, payer: payer,
+                                                category: category, note: note, currencyCode: currencyCode, payer: payer,
                                                 splitAll: splitAll ?? false, beneficiaries: beneficiaries ?? [])
     }
 
@@ -146,13 +151,11 @@ struct AddExpenseIntent: AppIntent {
                                   title: String? = nil, date: Date = .now, category: ExpenseCategoryEntity? = nil,
                                   note: String = "", currencyCode: String? = nil, payer: SiriSheetMemberEntity? = nil,
                                   splitAll: Bool = false, beneficiaries: [SiriSheetMemberEntity] = []) async throws -> RecordedTransaction {
-        guard amount.isFinite, amount > 0 else { throw AppIntentError.invalidAmount }
-        let currency = currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if let currency, !CurrencyCatalog.all.contains(where: { $0.code == currency }) {
-            throw AppIntentError.unsupportedCurrency
+        guard let value = CurrencyCatalog.transactionAmount(amount) else { throw AppIntentError.invalidAmount }
+        let currency = try currencyCode.map { input in
+            guard let code = CurrencyCatalog.transactionCurrencyCode(for: input) else { throw AppIntentError.unsupportedCurrency }
+            return code
         }
-        let value = Decimal(amount)
-        guard !value.isNaN, value > 0 else { throw AppIntentError.invalidAmount }
         let trimmedTitle = (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let viewContext = PersistenceController.shared.container.viewContext
         let lookup = try IntentSheetAccess(checking: viewContext)
@@ -326,6 +329,15 @@ struct AddExpenseIntent: AppIntent {
             if let d = f.date(from: text) { return d }
         }
         return date ?? .now
+    }
+}
+
+struct SiriCurrencyOptions: DynamicOptionsProvider {
+    func results() async throws -> IntentItemCollection<String> {
+        let currencies = CurrencyCatalog.allOrderedByLocale.map { option in
+            IntentItem(option.code, title: "\(option.displayName)", subtitle: "\(option.code)")
+        }
+        return IntentItemCollection(sections: [IntentItemSection(items: currencies)])
     }
 }
 
