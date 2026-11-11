@@ -4,7 +4,7 @@ import SwiftUI
 
 @available(iOS 27.3, *)
 struct SiriExpenseCardRow: TransientAppEntity {
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "支出明細"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "支出"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
@@ -71,7 +71,7 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(sheetName)の支出明細", subtitle: "\(period) · \(count)件")
+        DisplayRepresentation(title: "\(sheetName)", subtitle: "\(period) · \(count)件")
     }
 
     static var snippet: some EntitySnippetContent<Self> {
@@ -110,9 +110,11 @@ struct SiriExpenseCardView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(result.expenseName.isEmpty ? String(localized: "支出明細") : result.expenseName)
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
+                if !result.expenseName.isEmpty {
+                    Text(verbatim: result.expenseName)
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 Text("\(result.sheetName) · \(result.period)")
                     .font(.subheadline)
                     .foregroundStyle(secondaryInk)

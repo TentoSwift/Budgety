@@ -41,30 +41,37 @@ struct SiriMonthlySpendingIntent: AppIntent {
     static let description = IntentDescription("シート全体の月間支出の合計を、シートの既定通貨で返します。個別の支出名や明細は含みません。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
-    @Parameter(title: "シート", description: "支出の合計を確認したい家計簿または旅行などのシート。")
-    var sheet: ExpenseSheetEntity
+    @Parameter(title: "シート", description: "集計したいシート。省略すると最後に開いたシートを使います。")
+    var sheet: ExpenseSheetEntity?
 
-    @Parameter(title: "対象月", description: "集計する月に含まれる日付。省略すると今月になります。")
+    @Parameter(title: "対象月", description: "2026年5月など年月を指定されたとき、その月に含まれる日付。")
     var month: Date?
+    @Parameter(title: "検索期間", description: "「今月」「先月」「全期間」の指定。対象月と検索期間を省略すると今月の合計になります。")
+    var period: SiriExpensePeriod?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
+            try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの支出を集計しますか？")
+        }
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
-        let record = try access.resolve(sheet.id)
-        let date = month ?? .now
+        let record = try access.resolve(sheetID)
         let calendar = Calendar.current
+        let date = month ?? (period ?? .thisMonth).month(relativeTo: .now, calendar: calendar)
         let totals = record.convertedTotals { expense in
-            guard expense.kind == .expense, let paidOn = expense.date else { return false }
+            guard expense.kind == .expense, !expense.isSkipped else { return false }
+            guard let date else { return true }
+            guard let paidOn = expense.date else { return false }
             return calendar.isDate(paidOn, equalTo: date, toGranularity: .month)
         }
         let amount = CurrencyCatalog.format(totals.expense, code: record.resolvedDefaultCurrencyCode)
-        let period = date.formatted(.dateTime.year().month(.wide))
+        let periodLabel = date?.formatted(.dateTime.year().month(.wide)) ?? String(localized: "全期間")
         let report: LocalizedStringResource
         if totals.missing.isEmpty {
-            report = "「\(record.displayName)」の\(period)の支出は\(amount)です。"
+            report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。"
         } else {
             let currencies = totals.missing.sorted().joined(separator: ", ")
-            report = "「\(record.displayName)」の\(period)の支出は\(amount)です。為替レートを取得できない通貨（\(currencies)）の明細は合計に含まれていません。"
+            report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。為替レートを取得できない通貨（\(currencies)）の明細は合計に含まれていません。"
         }
         return .result(value: String(localized: report), dialog: IntentDialog(report))
     }

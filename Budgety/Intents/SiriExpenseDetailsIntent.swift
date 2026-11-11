@@ -22,7 +22,8 @@ struct SiriExpenseDetailsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         // Existing personal shortcuts consume this action's text output.
-        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: expenseName, month: month) {
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, period: nil, unnamedPeriod: .allTime)
+        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: filter.name, month: filter.month) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         return .result(value: result.report, dialog: IntentDialog("\(result.report)"))
@@ -33,24 +34,27 @@ struct SiriExpenseDetailsIntent: AppIntent {
 @AppIntent(.tool)
 struct SiriFindExpenseCardsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出明細を検索してカードで表示"
-    static let description = IntentDescription("支出の名前や月でシートを検索します。最近の支出や特定の支出について、日付・支出名・金額・カテゴリが並ぶカードと、一致した件数・通貨別合計を返します。")
+    static let description = IntentDescription("「今月の支出は？」「先月の支出を見せて」など、期間や店名を指定して支出を検索します。日付・金額・カテゴリが並ぶカードと件数・通貨別合計を返します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
-    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出名に含まれる言葉。最近の支出を一覧にするときは省略します。")
+    @Parameter(title: "支出名", description: "「ランチ」や店名など、支出名に含まれる言葉。「今月の支出は？」など一覧を求められたら省略します。")
     var expenseName: String?
-    @Parameter(title: "対象月", description: "指定された月に含まれる日付。省略時は全期間を検索します。")
+    @Parameter(title: "対象月", description: "2026年5月など年月を指定されたとき、その月に含まれる日付。今月・先月・全期間の場合は検索期間を使います。")
     var month: Date?
+    @Parameter(title: "検索期間", description: "「今月」は今月、「先月」は先月、「すべての期間」は全期間。期間指定がない一覧は今月、店名だけの検索は全期間を対象にします。")
+    var period: SiriExpensePeriod?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
-        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: expenseName, month: month) {
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, month: month, period: period)
+        let result = try await SiriExpenseLookup.run(sheet: sheet, expenseName: filter.name, month: filter.month) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         let supporting: LocalizedStringResource = result.card.count == 0
             ? "該当する支出はありません" : "\(result.card.count)件の支出が見つかりました。"
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, expenseName: expenseName, month: month)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, expenseName: filter.name, month: filter.month)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
     }
@@ -103,7 +107,7 @@ struct SiriOpenExpenseIntent: AppIntent {
 }
 
 @available(iOS 27.3, *)
-private enum SiriExpenseLookup {
+enum SiriExpenseLookup {
     struct Result {
         let sheetID: String
         let report: String
@@ -114,23 +118,23 @@ private enum SiriExpenseLookup {
     @MainActor
     static func run(sheet: ExpenseSheetEntity?, expenseName: String?, month: Date?,
                     choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
-        let viewContext = PersistenceController.shared.container.viewContext
-        let sheetID: String
-        if let sheet {
-            sheetID = sheet.id
-        } else if let lastID = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"), !lastID.isEmpty {
-            sheetID = lastID
-        } else {
-            let candidates = try IntentSheetAccess(checking: viewContext).sheets().map(ExpenseSheetEntity.from)
-            guard let first = candidates.first else { throw AppIntentError.sheetNotFound }
-            if candidates.count == 1 {
-                sheetID = first.id
-            } else {
-                let choice = try await choosing(candidates)
-                sheetID = choice.id
-            }
-        }
+        let sheetID = try await sheetIdentifier(sheet: sheet, choosing: choosing)
         return try search(sheetID: sheetID, expenseName: expenseName, month: month)
+    }
+
+    @MainActor
+    static func sheetIdentifier(sheet: ExpenseSheetEntity?,
+                               choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> String {
+        if let sheet {
+            return sheet.id
+        } else if let lastID = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"), !lastID.isEmpty {
+            return lastID
+        }
+        let viewContext = PersistenceController.shared.container.viewContext
+        let candidates = try IntentSheetAccess(checking: viewContext).sheets().map(ExpenseSheetEntity.from)
+        guard let first = candidates.first else { throw AppIntentError.sheetNotFound }
+        if candidates.count == 1 { return first.id }
+        return try await choosing(candidates).id
     }
 
     @MainActor
