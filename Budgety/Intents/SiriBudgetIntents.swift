@@ -110,7 +110,7 @@ private enum SiriTransactionRecording {
 }
 
 @available(iOS 27.3, *)
-private extension SiriRecordedTransaction {
+extension SiriRecordedTransaction {
     @MainActor
     init(transaction: Expense, sheet: ExpenseSheet) {
         let ids = transaction.beneficiaryIDList

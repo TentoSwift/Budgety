@@ -9,6 +9,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
+    @Property(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity?
     @Property(title: "名前") var title: String
     @Property(title: "日付") var date: String
     @Property(title: "カテゴリ") var category: String
@@ -27,8 +28,10 @@ struct SiriExpenseCardRow: TransientAppEntity {
          categoryColorHex: String = "", categorySymbol: String = "tag",
          signedAmount: String? = nil, payerName: String? = nil,
          payerColorHex: String = "", payerPhoto: IntentFile? = nil,
-         foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil) {
+         foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil,
+         editableTransaction: SiriEditableTransactionEntity? = nil) {
         self.expenseIdentifier = expenseIdentifier
+        self.editableTransaction = editableTransaction
         self.title = title
         self.date = date
         self.category = category
@@ -61,7 +64,8 @@ struct SiriExpenseCardRow: TransientAppEntity {
             signedAmount: transaction.formattedSignedAmount,
             payerName: payer?.name, payerColorHex: payer?.colorHex ?? "", payerPhoto: payer?.photo,
             foreignCurrencyCode: currency == sheet.resolvedDefaultCurrencyCode ? nil : currency,
-            expenseIdentifier: transaction.objectID.uriRepresentation().absoluteString
+            expenseIdentifier: transaction.objectID.uriRepresentation().absoluteString,
+            editableTransaction: SiriEditableTransactionEntity.from(transaction)
         )
     }
 }
@@ -116,6 +120,7 @@ struct SiriRecordedTransaction: TransientAppEntity, SnippetRepresentableEntity {
     @Property(title: "明細") var row: SiriExpenseCardRow
     @Property(title: "取引の種類") var kindName: String
     @Property(title: "割り勘の対象") var splitMemberNames: [String]?
+    @ComputedProperty(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity? { row.editableTransaction }
 
     init() {}
 
@@ -147,9 +152,13 @@ struct SiriExpenseCardView: View {
         case recorded(SiriRecordedTransaction)
     }
     private let content: Content
+    private var allowsOpening = true
 
     init(result: SiriExpenseCardResult) { content = .search(result) }
-    init(recorded: SiriRecordedTransaction) { content = .recorded(recorded) }
+    init(recorded: SiriRecordedTransaction, allowsOpening: Bool = true) {
+        content = .recorded(recorded)
+        self.allowsOpening = allowsOpening
+    }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -162,7 +171,7 @@ struct SiriExpenseCardView: View {
     private var secondaryInk: Color { Color(white: colorScheme == .dark ? 0.82 : 0.30) }
 
     var body: some View {
-        if let onlyExpenseIdentifier {
+        if allowsOpening, let onlyExpenseIdentifier {
             openButton(identifier: onlyExpenseIdentifier) { card }
                 .accessibilityIdentifier("siriExpenseRow_0")
         } else {

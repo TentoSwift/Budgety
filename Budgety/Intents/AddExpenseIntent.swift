@@ -242,13 +242,24 @@ struct AddExpenseIntent: AppIntent {
         transaction.payerProfileID = party.profileID
         transaction.payerMemberID = party.memberID
         guard splitting else { return }
-        let all = Set(roster.members.map(\.profileID))
+        let members = try splitMembers(in: roster, splitAll: splitAll, beneficiaries: beneficiaries)
+        transaction.beneficiaryProfileIDs = members.map(\.profileID).sorted().joined(separator: ",")
+    }
+
+    @MainActor
+    static func splitMembers(in roster: SiriSheetMemberRoster, splitAll: Bool,
+                             beneficiaries: [SiriSheetMemberEntity]) throws -> [SiriSheetMemberEntity] {
+        let all = Set(roster.members.map(\.id))
         guard all.count > 1 else { throw AppIntentError.noSplitMembers }
-        let selected = Set(try beneficiaries.map { try roster.resolve($0).profileID })
+        let selected = Set(try beneficiaries.map { try roster.resolve($0).id })
         if splitAll, !selected.isEmpty, selected != all { throw AppIntentError.conflictingSplitMembers }
         let ids = splitAll ? all : selected
-        guard ids.allSatisfy({ !$0.isEmpty && !$0.contains(",") }) else { throw AppIntentError.invalidSplitMembers }
-        transaction.beneficiaryProfileIDs = ids.sorted().joined(separator: ",")
+        let members = roster.members.filter { ids.contains($0.id) }.sorted { $0.id < $1.id }
+        // An uninitialized self profile can occur in a read-only edit preview. The write-time
+        // roster assigns its stable local UUID before any beneficiary IDs are stored.
+        guard !members.isEmpty, members.allSatisfy({ ($0.isSelf || !$0.profileID.isEmpty) && !$0.profileID.contains(",") })
+        else { throw AppIntentError.invalidSplitMembers }
+        return members
     }
 
     private static func matchesKind(_ category: ExpenseCategory, _ kind: TransactionKind) -> Bool {
