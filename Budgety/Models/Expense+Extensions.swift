@@ -81,35 +81,35 @@ extension Expense {
     /// payerProfileID が CKShare の参加者 (オーナー含む) なら iCloud nameComponents を返す。
     /// URN マッチを優先、email/phone ベース canonical (旧データ) もフォールバックで照合。
     @MainActor
-    private func resolvedSharedParticipantName() -> String? {
+    func resolvedSharedParticipantName(includingEmail: Bool = true) -> String? {
         guard let pid = payerProfileID, !pid.isEmpty,
               let sheet = sheet,
               let share = ShareCoordinator.shared.existingShare(for: sheet) else { return nil }
         // オーナー: URN 一致
         let ownerRN = share.owner.userIdentity.userRecordID?.recordName ?? ""
         if !UserProfileStore.isSelfPlaceholderRecordName(ownerRN), ownerRN == pid {
-            return nameFromIdentity(share.owner.userIdentity)
+            return nameFromIdentity(share.owner.userIdentity, includingEmail: includingEmail)
         }
         // 参加者: URN 一致を優先、無ければ budgetyCanonicalID (email 等) もチェック
         for p in share.participants {
             let rn = p.userIdentity.userRecordID?.recordName ?? ""
             if !UserProfileStore.isSelfPlaceholderRecordName(rn), rn == pid {
-                return nameFromIdentity(p.userIdentity)
+                return nameFromIdentity(p.userIdentity, includingEmail: includingEmail)
             }
             if let cid = p.budgetyCanonicalID, cid == pid {
-                return nameFromIdentity(p.userIdentity)
+                return nameFromIdentity(p.userIdentity, includingEmail: includingEmail)
             }
         }
         return nil
     }
 
     @MainActor
-    private func nameFromIdentity(_ identity: CKUserIdentity) -> String? {
+    private func nameFromIdentity(_ identity: CKUserIdentity, includingEmail: Bool) -> String? {
         if let nc = identity.nameComponents {
             let formatted = PersonNameComponentsFormatter().string(from: nc)
             if !formatted.isEmpty { return formatted }
         }
-        if let email = identity.lookupInfo?.emailAddress, !email.isEmpty {
+        if includingEmail, let email = identity.lookupInfo?.emailAddress, !email.isEmpty {
             return email
         }
         return nil

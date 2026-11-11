@@ -93,6 +93,7 @@ private enum SiriExpenseLookup {
         var count = 0
         var totals: [String: Decimal] = [:]
         var rows: [SiriExpenseCardRow] = []
+        lazy var isSoloSheet = !record.hasAcceptedOtherMembers()
         for expense in try access.context.fetch(request) where expense.kind == .expense && !expense.isSkipped {
             let title = expense.displayTitle.isEmpty ? expense.categoryDisplayName : expense.displayTitle
             guard query.isEmpty || Self.searchKey(title).contains(query) else { continue }
@@ -103,9 +104,14 @@ private enum SiriExpenseLookup {
                 let day = expense.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明")
                 let amount = expense.amountDecimal.formatted(.currency(code: currency).presentation(.isoCode))
                 let category = expense.categoryDisplayName
+                let payer = SiriExpensePayer.snapshot(for: expense, isSoloSheet: isSoloSheet)
                 rows.append(SiriExpenseCardRow(title: title, date: day, category: category, amount: amount,
-                                               categoryColorHex: expense.resolvedCategory?.displayColorHex ?? record.displayColorHex,
-                                               categorySymbol: expense.categorySymbol))
+                                               categoryColorHex: expense.resolvedCategory?.displayColorHex ?? "",
+                                               categorySymbol: expense.categorySymbol,
+                                               signedAmount: expense.formattedSignedAmount,
+                                               payerName: payer?.name, payerColorHex: payer?.colorHex ?? "",
+                                               payerPhoto: payer?.photo,
+                                               foreignCurrencyCode: currency == record.resolvedDefaultCurrencyCode ? nil : currency))
             }
         }
 

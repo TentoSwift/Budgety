@@ -13,17 +13,30 @@ struct SiriExpenseCardRow: TransientAppEntity {
     @Property(title: "金額") var amount: String
     @Property(title: "カテゴリの色", visibility: .internal) var categoryColorHex: String
     @Property(title: "カテゴリのアイコン", visibility: .internal) var categorySymbol: String
+    @Property(title: "表示用金額", visibility: .internal) var signedAmount: String?
+    @Property(title: "支払者") var payerName: String?
+    @Property(title: "支払者の色", visibility: .internal) var payerColorHex: String?
+    @Property(title: "支払者のアイコン", visibility: .internal) var payerPhoto: IntentFile?
+    @Property(title: "外貨の通貨コード") var foreignCurrencyCode: String?
 
     init() {}
 
     init(title: String, date: String, category: String, amount: String,
-         categoryColorHex: String = "", categorySymbol: String = "tag") {
+         categoryColorHex: String = "", categorySymbol: String = "tag",
+         signedAmount: String? = nil, payerName: String? = nil,
+         payerColorHex: String = "", payerPhoto: IntentFile? = nil,
+         foreignCurrencyCode: String? = nil) {
         self.title = title
         self.date = date
         self.category = category
         self.amount = amount
         self.categoryColorHex = categoryColorHex
         self.categorySymbol = categorySymbol
+        self.signedAmount = signedAmount
+        self.payerName = payerName
+        self.payerColorHex = payerColorHex
+        self.payerPhoto = payerPhoto
+        self.foreignCurrencyCode = foreignCurrencyCode
     }
 
     var displayRepresentation: DisplayRepresentation {
@@ -69,6 +82,7 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
 @available(iOS 27.3, *)
 struct SiriExpenseCardView: View {
     let result: SiriExpenseCardResult
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -103,7 +117,14 @@ struct SiriExpenseCardView: View {
     private func list(limit: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(0..<limit, id: \.self) { index in
-                row(result.rows[index])
+                let item = result.rows[index]
+                if index == 0 || result.rows[index - 1].date != item.date {
+                    Text(verbatim: item.date)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                row(item)
             }
             if result.count > limit {
                 Text("全\(result.count)件のうち最新\(limit)件")
@@ -119,39 +140,68 @@ struct SiriExpenseCardView: View {
     }
 
     private func row(_ item: SiriExpenseCardRow) -> some View {
-        let tint = Color(hex: item.categoryColorHex) ?? .secondary
-        let tile = RoundedRectangle(cornerRadius: 9, style: .continuous)
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: item.categorySymbol.isEmpty ? "tag" : item.categorySymbol)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(5)
-                .background(tint.opacity(0.22), in: Circle())
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(verbatim: item.title).fixedSize()
-                        Spacer(minLength: 0)
-                        Text(verbatim: item.amount).fixedSize()
+        let amount = VStack(alignment: .trailing, spacing: 2) {
+            Text(verbatim: item.signedAmount ?? item.amount)
+                .font(.subheadline.monospacedDigit())
+            if let code = item.foreignCurrencyCode {
+                Text(verbatim: code)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        categoryIcon(item)
+                        Spacer(minLength: 12)
+                        amount
                     }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(verbatim: item.title)
-                        Text(verbatim: item.amount)
-                    }
+                    labels(item)
                 }
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                Text(item.title == item.category ? item.date : "\(item.date) · \(item.category)")
+            } else {
+                HStack(spacing: 12) {
+                    categoryIcon(item)
+                    labels(item)
+                    Spacer(minLength: 0)
+                    amount.fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func categoryIcon(_ item: SiriExpenseCardRow) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            CategoryIconView(symbol: item.categorySymbol.isEmpty ? "tag.slash" : item.categorySymbol,
+                             tint: Color(hex: item.categoryColorHex) ?? .gray, size: 38)
+            if let payerName = item.payerName {
+                AvatarView(photoData: item.payerPhoto?.data, displayName: payerName,
+                           colorHex: item.payerColorHex ?? "", size: 18)
+                    .background(Circle().fill(Color.platformSystemBackground).padding(-2))
+                    .offset(x: 5, y: 5)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func labels(_ item: SiriExpenseCardRow) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: item.category)
+                .font(.body)
+            if !item.title.isEmpty, item.title != item.category {
+                Text(verbatim: item.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let payerName = item.payerName, !payerName.isEmpty {
+                Text(verbatim: payerName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(tint.opacity(0.13), in: tile)
-        .accessibilityElement(children: .combine)
     }
 }
 #endif
