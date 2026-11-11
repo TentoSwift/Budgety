@@ -75,8 +75,26 @@ struct AddExpenseIntent: AppIntent {
         }
     }
 
+    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
+        let saved = try await recordSelectedExpense()
+        if #available(iOS 27.3, *) {
+            let snippet = SiriRecordedTransactionSnippetIntent(identifier: saved.transaction.objectID.uriRepresentation().absoluteString)
+            return .result(dialog: saved.dialog, snippetIntent: snippet)
+        }
+        return .result(dialog: saved.dialog, snippetIntent: EmptySnippetIntent())
+    }
+    #else
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        let saved = try await recordSelectedExpense()
+        return .result(dialog: saved.dialog)
+    }
+    #endif
+
+    @MainActor
+    private func recordSelectedExpense() async throws -> RecordedTransaction {
         let selected: ExpenseSheetEntity
         if let name = sheetName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
@@ -89,16 +107,31 @@ struct AddExpenseIntent: AppIntent {
         } else {
             selected = sheet
         }
-        let dialog = try await Self.record(sheet: selected, amount: amount, title: title,
-                                           date: Self.resolveDate(date: date, dateText: dateText),
-                                           category: category, note: note)
-        return .result(dialog: dialog)
+        return try await Self.recordTransaction(sheet: selected, kind: .expense, amount: amount, title: title,
+                                                date: Self.resolveDate(date: date, dateText: dateText),
+                                                category: category, note: note)
     }
 
     @MainActor
     static func record(sheet selected: ExpenseSheetEntity, amount: Double, title: String? = nil,
                        date: Date = .now, category: ExpenseCategoryEntity? = nil,
                        note: String = "", currencyCode: String? = nil) async throws -> IntentDialog {
+        try await recordTransaction(sheet: selected, kind: .expense, amount: amount, title: title,
+                                    date: date, category: category, note: note, currencyCode: currencyCode).dialog
+    }
+
+    struct RecordedTransaction {
+        let transaction: Expense
+        let sheet: ExpenseSheet
+        let dialog: IntentDialog
+        // NSManagedObject does not retain its context; keep the saved row and its relationships usable.
+        let context: NSManagedObjectContext
+    }
+
+    @MainActor
+    static func recordTransaction(sheet selected: ExpenseSheetEntity, kind: TransactionKind, amount: Double,
+                                  title: String? = nil, date: Date = .now, category: ExpenseCategoryEntity? = nil,
+                                  note: String = "", currencyCode: String? = nil) async throws -> RecordedTransaction {
         guard amount.isFinite, amount > 0 else { throw AppIntentError.invalidAmount }
         let currency = currencyCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if let currency, !CurrencyCatalog.all.contains(where: { $0.code == currency }) {
@@ -110,7 +143,7 @@ struct AddExpenseIntent: AppIntent {
         let viewContext = PersistenceController.shared.container.viewContext
         let lookup = try IntentSheetAccess(checking: viewContext)
         let selectedSheet = try lookup.resolve(selected.id)
-        let categoryID = await resolveCategory(chosen: category, sheet: selectedSheet,
+        let categoryID = await resolveCategory(chosen: category, kind: kind, sheet: selectedSheet,
                                                title: trimmedTitle, ctx: lookup.context)?.objectID
 
         // AI classification can suspend. Resolve the same ID again before making any changes.
@@ -119,7 +152,7 @@ struct AddExpenseIntent: AppIntent {
         let ctx = transaction.context
         let coreSheet = try transaction.resolve(selected.id)
         let resolvedCategory = categoryID.flatMap { try? ctx.existingObject(with: $0) as? ExpenseCategory }
-            .flatMap { $0.sheet?.objectID == coreSheet.objectID ? $0 : nil }
+            .flatMap { $0.sheet?.objectID == coreSheet.objectID && matchesKind($0, kind) ? $0 : nil }
         let expense = Expense(context: ctx)
         let sheetStore = coreSheet.objectID.persistentStore
         if let store = sheetStore {
@@ -128,7 +161,7 @@ struct AddExpenseIntent: AppIntent {
 
         expense.title = trimmedTitle.isEmpty ? nil : trimmedTitle
         expense.amount = NSDecimalNumber(decimal: value)
-        expense.kindRaw = TransactionKind.expense.rawValue
+        expense.kindRaw = kind.rawValue
         let recordedCurrency = currency ?? coreSheet.resolvedDefaultCurrencyCode
         expense.currencyCode = recordedCurrency
         expense.date = date
@@ -175,8 +208,19 @@ struct AddExpenseIntent: AppIntent {
         let body = trimmedTitle.isEmpty
             ? "\(amountDisplay)\(categoryNote)"
             : "「\(trimmedTitle)」(\(amountDisplay)\(categoryNote))"
-        return IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を追加しました",
-                            supporting: "支出を追加しました")
+        let dialog: IntentDialog
+        switch kind {
+        case .expense:
+            dialog = IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を追加しました", supporting: "支出を追加しました")
+        case .income:
+            dialog = IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を収入として追加しました", supporting: "収入を追加しました")
+        }
+        return RecordedTransaction(transaction: expense, sheet: coreSheet, dialog: dialog, context: ctx)
+    }
+
+    private static func matchesKind(_ category: ExpenseCategory, _ kind: TransactionKind) -> Bool {
+        let raw = category.kindRaw ?? ""
+        return raw == kind.rawValue || (kind == .expense && raw.isEmpty)
     }
 
     /// 選択されたカテゴリ entity → シート内の `ExpenseCategory` を返す。
@@ -186,29 +230,27 @@ struct AddExpenseIntent: AppIntent {
     @MainActor
     private static func resolveCategory(
         chosen: ExpenseCategoryEntity?,
+        kind: TransactionKind,
         sheet: ExpenseSheet,
         title: String,
         ctx: NSManagedObjectContext
     ) async -> ExpenseCategory? {
         let cats = (sheet.categories as? Set<ExpenseCategory>) ?? []
-        let kindCats = cats.filter { c in
-            let raw = c.kindRaw ?? ""
-            return raw == TransactionKind.expense.rawValue || raw.isEmpty
-        }
+        let kindCats = cats.filter { matchesKind($0, kind) }
 
         // 「未分類」→ カテゴリなし
         if chosen?.id == Self.skipCategoryID { return nil }
 
         // 「AI 提案」→ ①過去の自分の分類履歴 → ②FoundationModels で推測
         if chosen == nil || chosen?.id == ExpenseCategoryEntity.aiSuggestionSentinelID {
-            if let hist = CategoryHistorySuggestor.suggest(title: title, kind: .expense, in: sheet) {
+            if let hist = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet), kindCats.contains(hist) {
                 return hist
             }
             let names = kindCats.map { $0.displayName }
             guard !names.isEmpty,
                   CategoryAISuggestor.isAvailable,
                   let suggestedName = await CategoryAISuggestor.suggest(
-                    title: title, kind: .expense, categories: names
+                    title: title, kind: kind, categories: names
                   )
             else { return nil }
             return kindCats.first(where: { $0.displayName == suggestedName })
@@ -220,7 +262,7 @@ struct AddExpenseIntent: AppIntent {
            let oid = ctx.persistentStoreCoordinator?
             .managedObjectID(forURIRepresentation: url),
            let exact = try? ctx.existingObject(with: oid) as? ExpenseCategory,
-           exact.sheet?.objectID == sheet.objectID {
+           kindCats.contains(exact) {
             return exact
         }
         return kindCats.first(where: { $0.displayName == chosen.name })
@@ -254,7 +296,7 @@ enum AppIntentError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .sheetNotFound: "シートが見つかりませんでした。"
-        case .expenseUnavailable: "この支出明細は現在表示できません。"
+        case .expenseUnavailable: "この明細は現在表示できません。"
         case .debugDump(let msg):
             "DEBUG: \(msg)"
         case .emptyTitle:    "タイトルが空です。"

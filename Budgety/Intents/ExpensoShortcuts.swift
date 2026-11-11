@@ -21,6 +21,19 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             shortTitle: "支出を追加",
             systemImageName: "plus.circle.fill"
         )
+        #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+        if #available(iOS 27.3, *) {
+            AppShortcut(
+                intent: SiriRecordIncomeIntent(),
+                phrases: [
+                    "\(.applicationName) で収入を追加",
+                    "Add income to \(.applicationName)"
+                ],
+                shortTitle: "収入を追加",
+                systemImageName: "plus.circle"
+            )
+        }
+        #endif
         AppShortcut(
             intent: QuickBudgetIntent(),
             phrases: [

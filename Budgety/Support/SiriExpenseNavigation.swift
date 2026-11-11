@@ -7,7 +7,7 @@ import UIKit
 extension DeepLinkRouter {
     func requestOpenExpense(identifier: String) throws {
         let context = PersistenceController.shared.container.viewContext
-        _ = try IntentSheetAccess(checking: context).expenseForDisplay(identifier: identifier)
+        _ = try IntentSheetAccess(checking: context).transactionForDisplay(identifier: identifier)
         pendingExpenseIdentifier = identifier
         if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive && $0.keyWindow != nil }) {
@@ -26,7 +26,7 @@ extension DeepLinkRouter {
 
         pendingExpenseIdentifier = nil
         let context = PersistenceController.shared.container.viewContext
-        let expense = try? IntentSheetAccess(checking: context).expenseForDisplay(identifier: identifier)
+        let expense = try? IntentSheetAccess(checking: context).transactionForDisplay(identifier: identifier)
         let detail = SiriExpenseDetail(expense: expense, context: context)
         if let current = presenter as? UIHostingController<SiriExpenseDetail> {
             current.rootView = detail
@@ -49,7 +49,7 @@ private struct SiriExpenseDetail: View {
                     ExpenseDetailView(expense: expense)
                         .id(expense.objectID)
                 } else {
-                    ContentUnavailableView("この支出明細は現在表示できません。", systemImage: "doc.text.magnifyingglass")
+                    ContentUnavailableView("この明細は現在表示できません。", systemImage: "doc.text.magnifyingglass")
                 }
             }
             .toolbar {

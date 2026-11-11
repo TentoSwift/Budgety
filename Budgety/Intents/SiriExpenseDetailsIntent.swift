@@ -86,7 +86,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
 @available(iOS 27.3, *)
 struct SiriOpenExpenseIntent: AppIntent {
-    static let title: LocalizedStringResource = "支出明細を開く"
+    static let title: LocalizedStringResource = "明細を開く"
     static let isDiscoverable = false
     static let supportedModes: IntentModes = .foreground(.immediate)
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -166,18 +166,7 @@ enum SiriExpenseLookup {
             let currency = expense.resolvedCurrencyCode.uppercased()
             totals[currency, default: 0] += expense.amountDecimal
             if rows.count < 5 {
-                let day = expense.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明")
-                let amount = expense.amountDecimal.formatted(.currency(code: currency).presentation(.isoCode))
-                let category = expense.categoryDisplayName
-                let payer = SiriExpensePayer.snapshot(for: expense, isSoloSheet: isSoloSheet)
-                rows.append(SiriExpenseCardRow(title: title, date: day, category: category, amount: amount,
-                                               categoryColorHex: expense.resolvedCategory?.displayColorHex ?? "",
-                                               categorySymbol: expense.categorySymbol,
-                                               signedAmount: expense.formattedSignedAmount,
-                                               payerName: payer?.name, payerColorHex: payer?.colorHex ?? "",
-                                               payerPhoto: payer?.photo,
-                                               foreignCurrencyCode: currency == record.resolvedDefaultCurrencyCode ? nil : currency,
-                                               expenseIdentifier: expense.objectID.uriRepresentation().absoluteString))
+                rows.append(.from(expense, in: record, isSoloSheet: isSoloSheet))
             }
         }
 
