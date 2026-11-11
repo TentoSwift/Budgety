@@ -372,7 +372,8 @@ struct EditSheetView: View {
                     HStack(spacing: 12) {
                         AvatarView(photoData: pp.photoData,
                                    displayName: pp.displayNameOrEmpty,
-                                   colorHex: pp.displayColorHex, size: 32)
+                                   colorHex: pp.displayColorHex, size: 32,
+                                   isVirtual: true)
                         Text(pp.displayNameOrEmpty.isEmpty ? "メンバー" : pp.displayNameOrEmpty)
                             .foregroundStyle(.primary)
                         Spacer()
@@ -400,10 +401,10 @@ struct EditSheetView: View {
                     showingPaywall = true
                 }
             } label: {
-                Label("バーチャルメンバーを追加", systemImage: "person.badge.plus")
+                Label("バーチャルメンバーを追加", image: "persona-symmetric.badge.plus.left")
             }
         } header: {
-            Text("バーチャルメンバー")
+            Label("バーチャルメンバー", image: "persona-symmetric")
         } footer: {
             Text("アプリを使っていない相手を割り勘・支払者に追加できます。行をタップで名前・写真を編集、スワイプで削除。")
         }

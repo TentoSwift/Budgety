@@ -165,6 +165,7 @@ final class WidgetSnapshotPublisher {
         row.payerColorHex = expense.resolvedParticipantProfile?.colorHex
             ?? (expense.isPayerSelf ? UserProfileStore.shared.avatarBgColorHex : nil)
             ?? expense.resolvedPayer?.colorHex
+        row.payerIsVirtual = UserProfileStore.isVirtualRecordName(expense.payerProfileID ?? "")
         row.payerThumbnail = thumbnail(expense.payerPhotoData)
         return row
     }

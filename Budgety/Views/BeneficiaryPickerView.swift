@@ -137,7 +137,8 @@ struct BeneficiaryPickerView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 36
+                    size: 36,
+                    isVirtual: UserProfileStore.isVirtualRecordName(profileID)
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(info.name).foregroundStyle(.primary)

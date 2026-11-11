@@ -22,7 +22,8 @@ struct SheetMemberAvatars: View {
             HStack(spacing: -overlap) {
                 ForEach(members.prefix(4), id: \.self) { id in
                     let info = sheet.memberDisplayInfo(for: id)
-                    AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 28)
+                    AvatarView(photoData: info.photoData, displayName: info.name, colorHex: info.colorHex, size: 28,
+                               isVirtual: UserProfileStore.isVirtualRecordName(id))
                         .overlay { Circle().strokeBorder(.background, lineWidth: 1.5) }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Text(verbatim: info.name))

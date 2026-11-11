@@ -194,7 +194,8 @@ struct EditRecurringRuleView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 32
+                    size: 32,
+                    isVirtual: UserProfileStore.isVirtualRecordName(id)
                 )
                 Text(info.name).foregroundStyle(.primary)
                 Spacer()
@@ -353,7 +354,7 @@ struct EditRecurringRuleView: View {
                             Button {
                                 showAddMemberPrompt = true
                             } label: {
-                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                                Label("メンバーを追加", image: "persona-symmetric.badge.plus.left")
                             }
                         }
                     } header: {
@@ -504,7 +505,8 @@ struct EditRecurringRuleView: View {
         } else if payerEffectivelyUnselected {
             unspecifiedPayerPreview
         } else if let name = payerFallbackName {
-            AvatarView(name: name, colorHex: "#8E8E93", photoData: nil, size: 24)
+            AvatarView(name: name, colorHex: "#8E8E93", size: 24,
+                       isVirtual: UserProfileStore.isVirtualRecordName(payerFallbackProfileID ?? ""))
             Text(name).foregroundStyle(.secondary)
         } else if let pp = selfParticipantProfileInSheet {
             ObservedParticipantProfileAvatar(profile: pp, size: 24)

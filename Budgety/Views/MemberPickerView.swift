@@ -466,7 +466,8 @@ struct MemberPickerView: View {
                         ))
                     } label: {
                         HStack(spacing: 12) {
-                            AvatarView(name: name, colorHex: pp.displayColorHex, photoData: pp.photoData, size: 36)
+                            AvatarView(photoData: pp.photoData, displayName: name, colorHex: pp.displayColorHex,
+                                       size: 36, isVirtual: true)
                             Text(name).foregroundStyle(.primary)
                             Spacer()
                             if isSelected { Image(systemName: "checkmark").foregroundStyle(.tint) }
@@ -475,7 +476,7 @@ struct MemberPickerView: View {
                     .buttonStyle(.plain)
                 }
             } header: {
-                Text("バーチャルメンバー")
+                Label("バーチャルメンバー", image: "persona-symmetric")
             }
         }
     }

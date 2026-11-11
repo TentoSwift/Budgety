@@ -103,7 +103,8 @@ final class PublicProfileSync: ObservableObject {
     /// fetch 失敗時 backoff + in-flight 重複防止で過剰な Task 生成を防ぐ (= OOM 対策)。
     @discardableResult
     func profileOrPrefetch(for urn: String) -> CachedProfile? {
-        guard !urn.isEmpty else { return nil }
+        // Virtual members have a sheet-local identity and no public CloudKit profile.
+        guard !urn.isEmpty, !UserProfileStore.isVirtualRecordName(urn) else { return nil }
         let existing = cache[urn]
         let needsRefresh: Bool = {
             guard let existing else { return true }
@@ -127,7 +128,7 @@ final class PublicProfileSync: ObservableObject {
     func fetchProfiles(forURNs urns: [String]) async {
         let cleaned = urns
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && !UserProfileStore.isVirtualRecordName($0) }
         guard !cleaned.isEmpty else { return }
         let ids = cleaned.map { profileRecordID(forURN: $0) }
         do {

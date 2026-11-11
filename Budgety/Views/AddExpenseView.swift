@@ -744,7 +744,8 @@ struct AddExpenseView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 32
+                    size: 32,
+                    isVirtual: UserProfileStore.isVirtualRecordName(id)
                 )
                 Text(info.name).foregroundStyle(.primary)
                 Spacer()
@@ -903,7 +904,8 @@ struct AddExpenseView: View {
                 photoData: expense.payerPhotoData,
                 displayName: name,
                 colorHex: hexString(from: expense.payerTint) ?? "#8E8E93",
-                size: 24
+                size: 24,
+                isVirtual: UserProfileStore.isVirtualRecordName(pid)
             )
             Text(name).foregroundStyle(.secondary)
         } else if case .edit = mode {
@@ -1107,7 +1109,7 @@ struct AddExpenseView: View {
                                     memberPaywall = true
                                 }
                             } label: {
-                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                                Label("メンバーを追加", image: "persona-symmetric.badge.plus.left")
                             }
                         }
                     } header: {

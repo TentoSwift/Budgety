@@ -106,6 +106,7 @@ nonisolated struct WidgetExpenseRow: Codable, Equatable, Sendable {
     var payerName: String?
     var payerColorHex: String?
     var payerThumbnail: Data?
+    var payerIsVirtual: Bool?
 }
 
 nonisolated struct WidgetLedgerDay: Codable, Equatable, Sendable {

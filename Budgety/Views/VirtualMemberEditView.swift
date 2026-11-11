@@ -188,40 +188,9 @@ struct VirtualMemberEditView: View {
             }
     }
 
-    @ViewBuilder
     private var avatarPreview: some View {
-        let trimmedName = draftName.trimmingCharacters(in: .whitespaces)
-        let initial = String(trimmedName.first ?? "?").uppercased()
-        let color = Color(hex: draftBgHex)
-            ?? Color.deterministic(from: trimmedName.isEmpty ? "?" : trimmedName)
-        if let photo = draftPhoto, let image = platformImage(from: photo) {
-            image
-                .resizable()
-                .scaledToFill()
-                .frame(width: 120, height: 120)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-        } else {
-            ZStack {
-                Circle().fill(color.gradient)
-                Text(initial.isEmpty ? "?" : initial)
-                    .font(.system(size: 48, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 120, height: 120)
-        }
-    }
-
-    private func platformImage(from data: Data) -> Image? {
-        #if canImport(UIKit)
-        guard let ui = UIImage(data: data) else { return nil }
-        return Image(uiImage: ui)
-        #elseif canImport(AppKit)
-        guard let ns = NSImage(data: data) else { return nil }
-        return Image(nsImage: ns)
-        #else
-        return nil
-        #endif
+        AvatarView(photoData: draftPhoto, displayName: draftName, colorHex: draftBgHex,
+                   size: 120, isVirtual: true)
     }
 
     private var nameSection: some View {

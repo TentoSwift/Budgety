@@ -87,6 +87,7 @@
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
 				ShareCoordinator.swift,
+				PersonaSymbols.xcassets,
 				"Support/Color+Hex.swift",
 				Support/Currency.swift,
 				Support/Notifications.swift,
@@ -132,6 +133,7 @@
 				Models/SheetSymbols.swift,
 				Models/TransactionKind.swift,
 				PersistenceController.swift,
+				PersonaSymbols.xcassets,
 				PurchaseManager.swift,
 				ShareCoordinator.swift,
 				Support/AppTips.swift,
@@ -230,6 +232,7 @@
 		4D18B4D92FB31696006F2C30 /* Exceptions for "Budgety" folder in "Budgety For macOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				PersonaSymbols.xcassets,
 				Support/SpotlightIndexer.swift,
 				"Budgety-Develop.icon",
 				BudgetyIcon.icon,
@@ -329,6 +332,7 @@
 		73EDD147DB1A59FAAC6BC5BF /* Exceptions for "Budgety" folder in "BudgetyWidget" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				PersonaSymbols.xcassets,
 				"Support/Color+Hex.swift",
 				Support/WidgetSnapshot.swift,
 				Views/SheetSymbolIcon.swift,

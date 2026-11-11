@@ -272,7 +272,8 @@ struct SettlementView: View {
                 photoData: info.photoData,
                 displayName: info.name,
                 colorHex: info.colorHex,
-                size: 64
+                size: 64,
+                isVirtual: UserProfileStore.isVirtualRecordName(bal.profileID)
             )
             // 「自分」の有無で背丈が変わらないよう、常に subtitle 行のスペースを確保。
             VStack(spacing: 2) {
@@ -372,7 +373,8 @@ struct SettlementView: View {
                     photoData: from.photoData,
                     displayName: from.name,
                     colorHex: from.colorHex,
-                    size: 32
+                    size: 32,
+                    isVirtual: UserProfileStore.isVirtualRecordName(transfer.fromProfileID)
                 )
                 Image(systemName: "arrow.right")
                     .font(.caption)
@@ -381,7 +383,8 @@ struct SettlementView: View {
                     photoData: to.photoData,
                     displayName: to.name,
                     colorHex: to.colorHex,
-                    size: 32
+                    size: 32,
+                    isVirtual: UserProfileStore.isVirtualRecordName(transfer.toProfileID)
                 )
                 Spacer()
                 Button {
@@ -511,7 +514,8 @@ struct SettlementView: View {
                     photoData: fromInfo.photoData,
                     displayName: fromInfo.name,
                     colorHex: fromInfo.colorHex,
-                    size: 28
+                    size: 28,
+                    isVirtual: UserProfileStore.isVirtualRecordName(r.fromProfileID ?? "")
                 )
                 Image(systemName: "arrow.right")
                     .font(.caption2)
@@ -520,7 +524,8 @@ struct SettlementView: View {
                     photoData: toInfo.photoData,
                     displayName: toInfo.name,
                     colorHex: toInfo.colorHex,
-                    size: 28
+                    size: 28,
+                    isVirtual: UserProfileStore.isVirtualRecordName(r.toProfileID ?? "")
                 )
                 Spacer()
                 Image(systemName: "checkmark.seal.fill")

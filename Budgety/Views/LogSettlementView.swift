@@ -188,7 +188,8 @@ struct LogSettlementView: View {
                         photoData: info.photoData,
                         displayName: info.name,
                         colorHex: info.colorHex,
-                        size: 28
+                        size: 28,
+                        isVirtual: UserProfileStore.isVirtualRecordName(id)
                     )
                     Text(isMe ? "\(info.name) (自分)" : info.name)
                         .foregroundStyle(.primary)

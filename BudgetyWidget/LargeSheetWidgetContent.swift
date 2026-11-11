@@ -116,6 +116,11 @@ struct LargeSheetWidgetContent: View {
             Circle().fill(Color(hex: item.payerColorHex ?? "") ?? .secondary)
             if let bytes = item.payerThumbnail, let photo = UIImage(data: bytes) {
                 Image(uiImage: photo).resizable().scaledToFill()
+            } else if item.payerIsVirtual == true {
+                Image("persona-symmetric")
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
+                    .accessibilityHidden(true)
             } else {
                 Text(verbatim: String(name.prefix(1))).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
             }

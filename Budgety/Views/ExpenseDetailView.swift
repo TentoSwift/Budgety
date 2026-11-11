@@ -212,7 +212,8 @@ struct ExpenseDetailView: View {
                     HStack(alignment: .center, spacing: 10) {
                         AvatarView(photoData: info.photoData,
                                    displayName: info.name,
-                                   colorHex: info.colorHex, size: 32)
+                                   colorHex: info.colorHex, size: 32,
+                                   isVirtual: UserProfileStore.isVirtualRecordName(id))
                         Text(info.name)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -227,7 +228,8 @@ struct ExpenseDetailView: View {
                         VStack(spacing: 4) {
                             AvatarView(photoData: info.photoData,
                                        displayName: info.name,
-                                       colorHex: info.colorHex, size: 36)
+                                       colorHex: info.colorHex, size: 36,
+                                       isVirtual: UserProfileStore.isVirtualRecordName(id))
                             // 長い名前は 2 行まで折り返す (以前は 1 行固定で「…」になっていた)。
                             Text(info.name)
                                 .font(.caption2)

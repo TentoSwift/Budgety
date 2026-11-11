@@ -64,18 +64,18 @@ private struct DuoSheetsView: View {
     var body: some View {
         // The main stack owns the list, pushed detail and any presented editor on both displays.
         HStack(spacing: 0) {
-            sidebar
-                .frame(width: sidebarWidth)
-                .overlay(alignment: .trailing) { Divider() }
-                .frame(width: showsSidebar ? sidebarWidth : 0, alignment: .leading)
-                .clipped()
-                .allowsHitTesting(showsSidebar)
-                .accessibilityHidden(!showsSidebar)
+            // A clipped NavigationStack still contributes toolbar items to accessibility.
+            // Keep the detail stack in its own stable slot and remove the hidden sidebar.
+            if showsSidebar {
+                sidebar
+                    .frame(width: sidebarWidth)
+                    .overlay(alignment: .trailing) { Divider() }
+            }
             SheetListView(showsQuickExpense: compact, sharedPath: $sheetPath,
                           usesDuoSidebar: !compact, showDuoSidebar: sidebarHidden ? { sidebarHidden = false } : nil)
         }
         .sheet(isPresented: $showingSettings) { SettingsView() }
-        .onChange(of: sheets.map(\.objectID), initial: true) { previousIDs, ids in
+        .onChange(of: sidebarOrderedIDs, initial: true) { previousIDs, ids in
             if !restoredSelection && !ids.isEmpty {
                 restoredSelection = true
                 let restored = ids.first { $0.uriRepresentation().absoluteString == lastOpenedSheetURI }
@@ -91,6 +91,12 @@ private struct DuoSheetsView: View {
                 sheetPath = compact ? [] : replacement.map { [$0] } ?? []
             }
         }
+    }
+
+    // Keep archived IDs in the ordering even when their section is collapsed:
+    // collapsing a section must not look like deleting the selected sheet.
+    private var sidebarOrderedIDs: [NSManagedObjectID] {
+        sheets.filter { !$0.archived }.map(\.objectID) + sheets.filter(\.archived).map(\.objectID)
     }
 
     private var firstSidebarSheetID: NSManagedObjectID? {

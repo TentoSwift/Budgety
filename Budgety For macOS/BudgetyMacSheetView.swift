@@ -543,35 +543,37 @@ struct BudgetyMacSheetView: View {
         // 残予算は今月 + 非フィルタ時のみ (予算未設定なら monthlyRemainingBudget が nil)
         let remaining: Decimal? = (period == .thisMonth && !filtering) ? monthlyRemainingBudget : nil
         return VStack(alignment: .leading, spacing: 8) {
-            SheetMemberAvatars(sheet: sheet)
-            HStack {
-                ZStack(alignment: .bottomTrailing) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(sheet.tint.gradient)
-                        Image(systemName: sheet.symbol ?? "person.2.fill")
-                            .foregroundStyle(.white)
-                            .font(.callout.weight(.semibold))
+            HStack(alignment: .top) {
+                HStack {
+                    ZStack(alignment: .bottomTrailing) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(sheet.tint.gradient)
+                            Image(systemName: sheet.symbol ?? "person.2.fill")
+                                .foregroundStyle(.white)
+                                .font(.callout.weight(.semibold))
+                        }
+                        .frame(width: 40, height: 40)
+                        // 検索/フィルタ中はアイコン右下に虫眼鏡バッジ (iOS の SummaryCard と同じ)
+                        if filtering {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color.platformSystemBackground)
+                                .padding(4)
+                                .background(Circle().fill(Color.primary))
+                                .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
+                                .offset(x: 4, y: 4)
+                        }
                     }
-                    .frame(width: 40, height: 40)
-                    // 検索/フィルタ中はアイコン右下に虫眼鏡バッジ (iOS の SummaryCard と同じ)
+                    Text(sheet.displayName).font(.title3.weight(.semibold))
+                    Spacer()
                     if filtering {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.platformSystemBackground)
-                            .padding(4)
-                            .background(Circle().fill(Color.primary))
-                            .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
-                            .offset(x: 4, y: 4)
+                        Text("\(listExpenses.count)件")
+                            .font(.sheetNumber(.caption, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
-                Text(sheet.displayName).font(.title3.weight(.semibold))
-                Spacer()
-                if filtering {
-                    Text("\(listExpenses.count)件")
-                        .font(.sheetNumber(.caption, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
+                SheetMemberAvatars(sheet: sheet).fixedSize()
             }
             periodMenu
             // 大型の収支 (収入 − 支出)。色分けはしない (primary)。
@@ -889,7 +891,8 @@ struct BudgetyMacSheetView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 16
+                    size: 16,
+                    isVirtual: UserProfileStore.isVirtualRecordName(pid)
                 )
                 .overlay(
                     Circle().stroke(Color.platformSystemBackground, lineWidth: 2)

@@ -837,7 +837,7 @@ private struct MacSheetFormDialog: View {
                             Button {
                                 manageMembersAction()
                             } label: {
-                                Label("バーチャルメンバーを管理", systemImage: "person.2")
+                                Label("バーチャルメンバーを管理", image: "persona-symmetric")
                             }
                             Spacer(minLength: 0)
                         }

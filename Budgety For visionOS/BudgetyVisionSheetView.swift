@@ -92,29 +92,31 @@ struct BudgetyVisionSheetView: View {
 
     private var summaryHero: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SheetMemberAvatars(sheet: sheet)
-            HStack {
-                Image(systemName: sheet.symbol ?? "person.2.fill")
-                    .foregroundStyle(.white)
-                    .padding(10)
-                    .background(Circle().fill(sheet.tint.gradient))
-                Text(sheet.displayName).font(.title3.weight(.semibold))
-                Spacer()
-                if sheet.isOwnedByCurrentUser == false {
-                    Label("受信中", systemImage: "tray.and.arrow.down")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(.blue.opacity(0.15)))
-                        .foregroundStyle(.blue)
-                } else if hasParticipants {
-                    Label("共有中", systemImage: "person.2.fill")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(.green.opacity(0.15)))
-                        .foregroundStyle(.green)
+            HStack(alignment: .top) {
+                HStack {
+                    Image(systemName: sheet.symbol ?? "person.2.fill")
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(Circle().fill(sheet.tint.gradient))
+                    Text(sheet.displayName).font(.title3.weight(.semibold))
+                    Spacer()
+                    if sheet.isOwnedByCurrentUser == false {
+                        Label("受信中", systemImage: "tray.and.arrow.down")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.blue.opacity(0.15)))
+                            .foregroundStyle(.blue)
+                    } else if hasParticipants {
+                        Label("共有中", systemImage: "person.2.fill")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.green.opacity(0.15)))
+                            .foregroundStyle(.green)
+                    }
                 }
+                SheetMemberAvatars(sheet: sheet).fixedSize()
             }
             HStack {
                 Text("今月")

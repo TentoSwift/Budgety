@@ -217,7 +217,7 @@ struct MacAddExpenseView: View {
                             Button {
                                 showAddMemberPrompt = true
                             } label: {
-                                Label("メンバーを追加", systemImage: "person.badge.plus")
+                                Label("メンバーを追加", image: "persona-symmetric.badge.plus.left")
                             }
                             .buttonStyle(.borderless)
                         }
@@ -506,7 +506,8 @@ struct MacAddExpenseView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 28
+                    size: 28,
+                    isVirtual: UserProfileStore.isVirtualRecordName(id)
                 )
                 Text(isMe ? "\(info.name) (自分)" : info.name)
                     .foregroundStyle(.primary)
@@ -554,7 +555,8 @@ struct MacAddExpenseView: View {
                     photoData: info.photoData,
                     displayName: info.name,
                     colorHex: info.colorHex,
-                    size: 28
+                    size: 28,
+                    isVirtual: UserProfileStore.isVirtualRecordName(id)
                 )
                 Text(isMe ? "\(info.name) (自分)" : info.name)
                     .foregroundStyle(.primary)

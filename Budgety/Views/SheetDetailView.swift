@@ -608,7 +608,7 @@ struct SheetDetailView: View {
                         VirtualMemberListView(record: record)
                             .sheetLockCover(record)
                     } label: {
-                        Label("バーチャルメンバー", systemImage: "person.crop.circle.badge.plus")
+                        Label("バーチャルメンバー", image: "persona-symmetric")
                     }
                     // ロック設定はオーナーのみ。参加者 (= 非オーナー) はロック解除画面で
                     // パスワードを入れて閲覧することしかできない。
@@ -1436,35 +1436,38 @@ private struct SummaryCard: View {
         let showBudgetMetrics = !isSearching && (period == .thisMonth || period == .lastMonth)
             && selectedCategory == nil && selectedPayerID == nil && budget != nil
         VStack(alignment: .leading, spacing: 12) {
-            SheetMemberAvatars(sheet: record)
             // 上段: シートアイコン + 名前 (Mac の summaryHero と同じ)
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(record.tint.gradient)
-                    Image(systemName: record.symbol ?? "person.2.fill")
-                        .foregroundStyle(.white)
-                        // 固定サイズ (Dynamic Type で拡大しない) にして 40×40 の枠に収める。
-                        .font(.system(size: 20, weight: .semibold))
-                }
-                .frame(width: 40, height: 40)
-                // 検索中はアイコン右下端に虫眼鏡バッジ。overlay(.bottomTrailing) で
-                // AX サイズが変わっても常に角に固定する。円は primary 色。
-                .overlay(alignment: .bottomTrailing) {
-                    if searchActive {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.platformSystemBackground)
-                            .padding(4)
-                            .background(Circle().fill(Color.primary))
-                            .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
-                            .offset(x: 4, y: 4)
+            HStack(alignment: .top, spacing: 8) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(record.tint.gradient)
+                        Image(systemName: record.symbol ?? "person.2.fill")
+                            .foregroundStyle(.white)
+                            // 固定サイズ (Dynamic Type で拡大しない) にして 40×40 の枠に収める。
+                            .font(.system(size: 20, weight: .semibold))
                     }
+                    .frame(width: 40, height: 40)
+                    // 検索中はアイコン右下端に虫眼鏡バッジ。overlay(.bottomTrailing) で
+                    // AX サイズが変わっても常に角に固定する。円は primary 色。
+                    .overlay(alignment: .bottomTrailing) {
+                        if searchActive {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color.platformSystemBackground)
+                                .padding(4)
+                                .background(Circle().fill(Color.primary))
+                                .overlay(Circle().stroke(Color.platformSystemBackground, lineWidth: 1.5))
+                                .offset(x: 4, y: 4)
+                        }
+                    }
+                    Text(record.displayName)
+                        .font(.title3.weight(.semibold))
+                        .lineLimit(2)
                 }
-                Text(record.displayName)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-                Spacer()
+                Spacer(minLength: 0)
+                SheetMemberAvatars(sheet: record)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             // 期間ピッカー + カテゴリ pill (検索中も期間を変更できるよう常に表示)
@@ -2600,7 +2603,8 @@ struct ExpenseFilterSheet: View {
             opts.append(.init(
                 id: id, name: info.name,
                 icon: AnyView(AvatarView(photoData: info.photoData, displayName: info.name,
-                                         colorHex: info.colorHex, size: 28))))
+                                         colorHex: info.colorHex, size: 28,
+                                         isVirtual: UserProfileStore.isVirtualRecordName(id)))))
         }
         return opts
     }

@@ -18,6 +18,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     @Property(title: "カテゴリのアイコン", visibility: .internal) var categorySymbol: String
     @Property(title: "表示用金額", visibility: .internal) var signedAmount: String?
     @Property(title: "支払者・受取者") var payerName: String?
+    @Property(title: "バーチャルメンバー", visibility: .internal) var payerIsVirtual: Bool?
     @Property(title: "支払者の色", visibility: .internal) var payerColorHex: String?
     @Property(title: "支払者のアイコン", visibility: .internal) var payerPhoto: IntentFile?
     @Property(title: "外貨の通貨コード") var foreignCurrencyCode: String?
@@ -28,7 +29,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
          categoryColorHex: String = "", categorySymbol: String = "tag",
          signedAmount: String? = nil, payerName: String? = nil,
          payerColorHex: String = "", payerPhoto: IntentFile? = nil,
-         foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil,
+         payerIsVirtual: Bool? = nil, foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil,
          editableTransaction: SiriEditableTransactionEntity? = nil) {
         self.expenseIdentifier = expenseIdentifier
         self.editableTransaction = editableTransaction
@@ -40,6 +41,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
         self.categorySymbol = categorySymbol
         self.signedAmount = signedAmount
         self.payerName = payerName
+        self.payerIsVirtual = payerIsVirtual
         self.payerColorHex = payerColorHex
         self.payerPhoto = payerPhoto
         self.foreignCurrencyCode = foreignCurrencyCode
@@ -64,6 +66,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
             categorySymbol: transaction.categorySymbol,
             signedAmount: transaction.formattedSignedAmount,
             payerName: payer?.name, payerColorHex: payer?.colorHex ?? "", payerPhoto: payer?.photo,
+            payerIsVirtual: UserProfileStore.isVirtualRecordName(transaction.payerProfileID ?? ""),
             foreignCurrencyCode: currency == sheet.resolvedDefaultCurrencyCode ? nil : currency,
             expenseIdentifier: virtualIdentifier ?? transaction.objectID.uriRepresentation().absoluteString,
             editableTransaction: virtualIdentifier == nil ? SiriEditableTransactionEntity.from(transaction) : nil
@@ -328,7 +331,7 @@ struct SiriExpenseCardView: View {
                              tint: Color(hex: item.categoryColorHex) ?? .gray, size: 38)
             if let payerName = item.payerName {
                 AvatarView(photoData: item.payerPhoto?.data, displayName: payerName,
-                           colorHex: item.payerColorHex ?? "", size: 18)
+                           colorHex: item.payerColorHex ?? "", size: 18, isVirtual: item.payerIsVirtual == true)
                     .background(Circle().fill(surface).padding(-2))
                     .offset(x: 5, y: 5)
             }

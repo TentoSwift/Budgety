@@ -18,6 +18,7 @@ struct AvatarView: View {
     let photoData: Data?
     let displayName: String
     let colorHex: String
+    let isVirtual: Bool
     private let baseSize: CGFloat
     @ScaledMetric private var scaledSize: CGFloat
 
@@ -27,7 +28,8 @@ struct AvatarView: View {
         min(scaledSize, baseSize * 1.5)
     }
 
-    init(photoData: Data?, displayName: String, colorHex: String, size: CGFloat = 40) {
+    init(photoData: Data?, displayName: String, colorHex: String, size: CGFloat = 40, isVirtual: Bool = false) {
+        self.isVirtual = isVirtual
         self.photoData = photoData
         self.displayName = displayName
         self.colorHex = colorHex
@@ -61,9 +63,17 @@ struct AvatarView: View {
         } else {
             ZStack {
                 Circle().fill(tint.gradient)
-                Text(initial)
-                    .font(.system(size: size * 0.45, weight: .semibold))
-                    .foregroundStyle(.white)
+                if isVirtual {
+                    Image("persona-symmetric")
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: size * 0.58, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .accessibilityHidden(true)
+                } else {
+                    Text(initial)
+                        .font(.system(size: size * 0.45, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
             .frame(width: size, height: size)
         }
@@ -90,17 +100,17 @@ extension AvatarView {
             photoData: member.photoData,
             displayName: member.displayName,
             colorHex: member.displayColorHex,
-            size: size
+            size: size, isVirtual: UserProfileStore.isVirtualRecordName(member.recordName ?? "")
         )
     }
 
     /// 名前 + 16 進カラー + 任意 photoData から生成するヘルパー (CKShare participant 用)。
-    init(name: String, colorHex: String, photoData: Data? = nil, size: CGFloat = 40) {
+    init(name: String, colorHex: String, photoData: Data? = nil, size: CGFloat = 40, isVirtual: Bool = false) {
         self.init(
             photoData: photoData,
             displayName: name,
             colorHex: colorHex,
-            size: size
+            size: size, isVirtual: isVirtual
         )
     }
 }
@@ -122,7 +132,7 @@ struct ObservedMemberAvatar: View {
             photoData: resolvedPhoto,
             displayName: member.displayName,
             colorHex: member.displayColorHex,
-            size: size
+            size: size, isVirtual: UserProfileStore.isVirtualRecordName(member.recordName ?? "")
         )
     }
 
@@ -148,7 +158,8 @@ struct ObservedParticipantProfileAvatar: View {
 
     var body: some View {
         let urn = profile.recordName ?? ""
-        let cached = pub.profileOrPrefetch(for: urn)
+        let isVirtual = UserProfileStore.isVirtualRecordName(urn)
+        let cached = isVirtual ? nil : pub.profileOrPrefetch(for: urn)
         let photo = profile.photoData ?? cached?.photoData
         let name = (cached?.displayName.isEmpty == false ? cached!.displayName
                     : (profile.displayName ?? ""))
@@ -156,7 +167,7 @@ struct ObservedParticipantProfileAvatar: View {
             photoData: photo,
             displayName: name,
             colorHex: profile.colorHex ?? "#8E8E93",
-            size: size
+            size: size, isVirtual: isVirtual
         )
     }
 }
