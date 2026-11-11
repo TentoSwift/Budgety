@@ -6,41 +6,76 @@
 import SwiftUI
 import SwiftData
 #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-import CoreTransferable
-import UniformTypeIdentifiers
+import UIKit
 
-private struct SiriSearchShortcut: Transferable {
-    let url: URL
-    static let contentType = UTType(filenameExtension: "shortcut") ?? .data
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: contentType) { SentTransferredFile($0.url) }
+private struct SiriSearchShortcutExport: Identifiable {
+    let id = UUID()
+    let file: URL
+
+    init(copying template: URL) throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(id.uuidString, isDirectory: true)
+        file = directory.appendingPathComponent("支出を検索.shortcut")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.copyItem(at: template, to: file)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
     }
 
-    static let bundled: Self? = {
+    static let template: URL? = {
         let variant: String
         switch Bundle.main.bundleIdentifier {
         case "com.tento.budgety.dev": variant = "development"
         case "com.tento.budgety": variant = "production"
         default: return nil
         }
-        return Bundle.main.url(forResource: "SiriExpenseSearch-" + variant, withExtension: "shortcut").map(Self.init(url:))
+        return Bundle.main.url(forResource: "SiriExpenseSearch-" + variant, withExtension: "shortcut")
     }()
 }
 
+private struct SiriShortcutSavePicker: UIViewControllerRepresentable {
+    let export: SiriSearchShortcutExport
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator { Coordinator(export: export, dismiss: dismiss) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: [export.file], asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ picker: UIDocumentPickerViewController, context: Context) {}
+    static func dismantleUIViewController(_ picker: UIDocumentPickerViewController, coordinator: Coordinator) {
+        try? FileManager.default.removeItem(at: coordinator.export.file.deletingLastPathComponent())
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let export: SiriSearchShortcutExport
+        let dismiss: DismissAction
+        init(export: SiriSearchShortcutExport, dismiss: DismissAction) {
+            self.export = export
+            self.dismiss = dismiss
+        }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { dismiss() }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { dismiss() }
+    }
+}
+
 private struct SiriSearchShortcutSection: View {
-    @State private var exporting = false
+    @State private var export: SiriSearchShortcutExport?
     @State private var exportFailed = false
 
     var body: some View {
         Section {
-            if let shortcut = SiriSearchShortcut.bundled {
-                Button { exporting = true } label: {
+            if let template = SiriSearchShortcutExport.template {
+                Button {
+                    do { export = try SiriSearchShortcutExport(copying: template) }
+                    catch { exportFailed = true }
+                } label: {
                     Label("「支出を検索」をファイルに保存", systemImage: "square.and.arrow.down")
                 }
-                .fileExporter(isPresented: $exporting, item: shortcut, contentTypes: [SiriSearchShortcut.contentType],
-                              defaultFilename: "支出を検索") { result in
-                    if case .failure = result { exportFailed = true }
-                }
+                .sheet(item: $export) { SiriShortcutSavePicker(export: $0) }
                 .alert("ショートカットを保存できませんでした", isPresented: $exportFailed) {
                     Button("閉じる", role: .cancel) {}
                 }
@@ -50,7 +85,7 @@ private struct SiriSearchShortcutSection: View {
         } header: {
             Text("ホーム画面から「支出を検索」と頼む")
         } footer: {
-            if SiriSearchShortcut.bundled != nil {
+            if SiriSearchShortcutExport.template != nil {
                 Text("初回だけ、保存したファイルを「ファイル」アプリで開き、「ショートカットを追加」をタップしてください。次からはSiriに「支出を検索」と言い、続けて支出名を答えます。")
             } else {
                 Text("Budgetyの「支出名で明細を確認」を追加し、支出名を「毎回尋ねる」に設定します。「支出を検索」という名前で保存すると、Siriにその名前を言うだけで使えます。")
