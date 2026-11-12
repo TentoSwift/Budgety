@@ -643,35 +643,19 @@ private struct WatchSheetPage: View {
                     ForEach(sections) { section in
                         Section {
                             ForEach(section.items) { item in
-                                switch item {
-                                case .expense(let expense):
-                                    NavigationLink {
-                                        WatchExpenseDetailView(expense: expense, sheet: sheet)
-                                    } label: {
-                                        recentRow(expense)
-                                    }
-                                    .buttonStyle(.plain)
+                                transactionRow(item)
                                     .listRowBackground(
                                         RoundedRectangle(cornerRadius: 10)
-                                            .fill(.white.opacity(0.12))
+                                            .fill(.white.opacity(item.isVirtual ? 0.08 : 0.12))
+                                            .overlay(alignment: .bottom) {
+                                                if item.id != section.items.last?.id {
+                                                    Divider()
+                                                        .padding(.horizontal, 12)
+                                                        .accessibilityHidden(true)
+                                                }
+                                            }
                                     )
                                     .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button(role: .destructive) {
-                                            pendingDeleteExpense = expense
-                                        } label: {
-                                            Label("削除", systemImage: "trash")
-                                        }
-                                    }
-                                case .occurrence(let occ):
-                                    // 仮想 occurrence (未実体化の定期分)。watch は表示のみ。
-                                    virtualRow(occ)
-                                        .listRowBackground(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(.white.opacity(0.08))
-                                        )
-                                        .listRowInsets(.init(top: 2, leading: 4, bottom: 2, trailing: 4))
-                                }
                             }
                         } header: {
                             HStack {
@@ -687,6 +671,28 @@ private struct WatchSheetPage: View {
                 .listStyle(.plain)
                 .onAppear { prefetchPayerPhotos(Array(expenses)) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func transactionRow(_ item: LedgerItem) -> some View {
+        switch item {
+        case .expense(let expense):
+            NavigationLink {
+                WatchExpenseDetailView(expense: expense, sheet: sheet)
+            } label: {
+                recentRow(expense)
+            }
+            .buttonStyle(.plain)
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    pendingDeleteExpense = expense
+                } label: {
+                    Label("削除", systemImage: "trash")
+                }
+            }
+        case .occurrence(let occurrence):
+            virtualRow(occurrence)
         }
     }
 
