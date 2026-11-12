@@ -1,12 +1,14 @@
 // The Siri AI tool trait was introduced in the iOS 27.3 App Intents SDK.
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import SwiftUI
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriRecordExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "シートに支出を記録"
     static let description = IntentDescription("シートに支出を記録して明細を表示します。共有メンバーやバーチャルメンバーがいるときは、支払った人と、全員または指定した人での均等割りを設定できます。")
@@ -57,7 +59,9 @@ struct SiriRecordExpenseIntent: AppIntent {
 }
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriRecordIncomeIntent: AppIntent {
     static let title: LocalizedStringResource = "収入を追加"
     static let description = IntentDescription("給与やお小遣い、売上など、受け取った金額を指定したBudgetyのシートに収入として1件記録し、その明細を表示します。")
@@ -151,7 +155,9 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
 }
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriMonthlySpendingIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの支出額を確認"
     static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。「今月の食費はいくら？」では食費カテゴリだけを集計します。")

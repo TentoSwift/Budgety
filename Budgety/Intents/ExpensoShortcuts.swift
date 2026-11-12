@@ -11,6 +11,13 @@ import AppIntents
 
 struct ExpensoShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        #if os(watchOS)
+        AppShortcut(
+            intent: SiriRecordExpenseIntent(),
+            phrases: ["\(.applicationName) で支出を追加", "Add an expense to \(.applicationName)"],
+            shortTitle: "支出を追加", systemImageName: "plus.circle.fill"
+        )
+        #else
         AppShortcut(
             intent: AddExpenseIntent(),
             phrases: [
@@ -21,8 +28,9 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             shortTitle: "支出を追加",
             systemImageName: "plus.circle.fill"
         )
-        #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-        if #available(iOS 27.3, *) {
+        #endif
+        #if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+        if #available(iOS 27.3, watchOS 26.2, *) {
             AppShortcut(
                 intent: SiriSettlementStatusIntent(),
                 phrases: ["\(.applicationName) で精算を確認", "Check settlements in \(.applicationName)"],
@@ -63,6 +71,27 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             )
         }
         #endif
+        #if os(watchOS)
+        AppShortcut(
+            intent: SiriFindExpenseCardsIntent(),
+            phrases: [
+                "\(.applicationName) で明細を検索",
+                "\(.applicationName) で \(\.$period) の支出を調べて",
+                "Search transactions in \(.applicationName)"
+            ],
+            shortTitle: "明細を検索", systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: SiriEditTransactionIntent(),
+            phrases: ["\(.applicationName) で明細を編集", "Edit a transaction in \(.applicationName)"],
+            shortTitle: "明細を編集", systemImageName: "pencil"
+        )
+        AppShortcut(
+            intent: SiriRecurringTransactionIntent(),
+            phrases: ["\(.applicationName) で繰り返しを追加", "Add a recurring transaction in \(.applicationName)"],
+            shortTitle: "繰り返しを追加", systemImageName: "repeat"
+        )
+        #else
         AppShortcut(
             intent: QuickBudgetIntent(),
             phrases: [
@@ -73,5 +102,6 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             shortTitle: "Budgety MCP",
             systemImageName: "yensign.circle.fill"
         )
+        #endif
     }
 }

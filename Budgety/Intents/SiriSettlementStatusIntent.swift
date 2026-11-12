@@ -1,10 +1,12 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 import SwiftUI
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriSettlementStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの精算状況を確認"
     static let description = IntentDescription(
@@ -52,9 +54,15 @@ struct SiriSettlementProfile: TransientAppEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "名前") var name: String
+    #if os(watchOS)
+    var colorHex = ""
+    var photo: IntentFile?
+    var isVirtual = false
+    #else
     @Property(title: "メンバーの色", visibility: .internal) var colorHex: String
     @Property(title: "プロフィール画像", visibility: .internal) var photo: IntentFile?
     @Property(title: "バーチャルメンバー", visibility: .internal) var isVirtual: Bool
+    #endif
 
     init() {}
 
@@ -101,13 +109,18 @@ struct SiriSettlementCardRow: TransientAppEntity {
 }
 
 @available(iOS 27.3, *)
-struct SiriSettlementCardResult: TransientAppEntity, SnippetRepresentableEntity {
+struct SiriSettlementCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "精算状況"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
+    #if os(watchOS)
+    var sheetSymbol: String?
+    var sheetColorHex: String?
+    #else
     @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
     @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
+    #endif
     @Property(title: "対象期間") var period: String
     @Property(title: "送金プラン") var rows: [SiriSettlementCardRow]
     @Property(title: "レートが見つからず除外された通貨") var missingRates: [String]
@@ -117,7 +130,7 @@ struct SiriSettlementCardResult: TransientAppEntity, SnippetRepresentableEntity 
     @MainActor
     static func status(sheetID: String) throws -> Self {
         let status = try SiriSettlementStore.status(sheetID: sheetID)
-        let card = Self()
+        var card = Self()
         card.sheetName = status.sheetName
         card.sheetSymbol = status.sheetSymbol
         card.sheetColorHex = status.sheetColorHex
@@ -145,11 +158,16 @@ struct SiriSettlementCardResult: TransientAppEntity, SnippetRepresentableEntity 
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(title: "\(sheetName)", subtitle: "\(period)")
     }
+}
 
+#if os(iOS)
+@available(iOS 27.3, *)
+extension SiriSettlementCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
             SiriSettlementCardView(result: result)
         }
     }
 }
+#endif
 #endif

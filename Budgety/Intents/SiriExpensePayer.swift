@@ -1,11 +1,11 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpensePayer {
     let name: String
     let colorHex: String

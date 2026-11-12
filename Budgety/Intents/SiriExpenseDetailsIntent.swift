@@ -1,10 +1,10 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出名で明細を確認"
     static let description = IntentDescription("指定したシートの支出を支出名、カテゴリ名、日付、月で探し、件数、通貨別の合計と最新5件までの明細をテキストで返します。")
@@ -36,8 +36,10 @@ struct SiriExpenseDetailsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriFindExpenseCardsIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
     static let description = IntentDescription("シート全体の支出、収入、または両方を日付・月・カテゴリ・店名で検索します。「今月の収支は？」「収入と支出を見せて」では両方を指定し、同じカードに表示します。「今日の支出」は今日1日、「今月の食費」は今月の食費です。", searchKeywords: ["収支", "支出", "収入", "カテゴリ"])
@@ -60,7 +62,17 @@ struct SiriFindExpenseCardsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriExpenseCardResult> & ProvidesDialog & ShowsSnippetIntent {
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period)
+        #if os(watchOS)
+        let isSpokenQuery = expenseName == nil && categoryName == nil && kind == nil && month == nil && day == nil && period == nil
+        let search = isSpokenQuery
+            ? try await $expenseName.requestValue("何を検索しますか？「今日の収支」「今月の食費」やお店の名前をどうぞ。")
+            : expenseName
+        #else
+        let isSpokenQuery = false
+        let search = expenseName
+        #endif
+        let filter = SiriExpenseSearchFilter(expenseName: search, categoryName: categoryName, month: month, day: day,
+                                            period: period, isSpokenQuery: isSpokenQuery)
         let selection = kind ?? filter.spokenKind ?? .expense
         let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, kind: selection) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を検索しますか？")
@@ -73,7 +85,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "支出明細のカードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -123,7 +135,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriOpenExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "明細を開く"
     static let isDiscoverable = false
@@ -140,12 +152,16 @@ struct SiriOpenExpenseIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        #if os(watchOS)
+        try WatchSiriNavigation.shared.requestOpenExpense(identifier: expenseIdentifier)
+        #else
         try DeepLinkRouter.shared.requestOpenExpense(identifier: expenseIdentifier)
+        #endif
         return .result()
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 enum SiriExpenseLookup {
     struct Result {
         let sheetID: String
@@ -166,7 +182,7 @@ enum SiriExpenseLookup {
                                choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> String {
         if let sheet {
             return sheet.id
-        } else if let lastID = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"), !lastID.isEmpty {
+        } else if let lastID = IntentSheetAccess.lastOpenedSheetURI, !lastID.isEmpty {
             return lastID
         }
         let viewContext = PersistenceController.shared.container.viewContext

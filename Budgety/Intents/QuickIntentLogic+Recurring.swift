@@ -137,7 +137,7 @@ extension QuickIntentLogic {
                 ?? target.resolvedDefaultCurrencyCode
             let category = firstCategory.flatMap { try? access.context.existingObject(with: $0.objectID) as? ExpenseCategory }
             let name = category.flatMap { $0.sheet == target && $0.kind == kind ? $0.name : nil }
-            try saveRecurringRule(in: target, context: access.context, kind: kind, title: title, amount: value, currency: currency,
+            try RecurringExpenseGenerator.saveRule(in: target, context: access.context, kind: kind, title: title, amount: value, currency: currency,
                                   category: name, frequency: frequency, interval: interval, start: startDate, end: endDate)
         } catch {
             return ["ok": false, "error": "save failed: \(error.localizedDescription)"]
@@ -161,37 +161,6 @@ extension QuickIntentLogic {
             summary["warning"] = "name_collision: \(nameCollisionCount) sheets named \"\(sheet.displayName)\". Using oldest by createdAt."
         }
         return summary
-    }
-
-    @MainActor
-    static func saveRecurringRule(in sheet: ExpenseSheet, context: NSManagedObjectContext, kind: TransactionKind,
-                                  title: String, amount: Decimal, currency: String, category: String?,
-                                  frequency: RecurrenceFrequency, interval: Int32, start: Date, end: Date?) throws {
-        guard !sheet.isDeleted, sheet.managedObjectContext === context,
-              PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: sheet.objectID)
-        else { throw AppIntentError.sheetNotFound }
-        let rule = RecurringRule(context: context)
-        if let store = sheet.objectID.persistentStore { context.assign(rule, to: store) }
-        rule.id = UUID()
-        rule.createdAt = .now
-        rule.sheet = sheet
-        rule.kindRaw = kind.rawValue
-        rule.title = title
-        rule.amount = NSDecimalNumber(decimal: amount)
-        rule.currencyCode = currency
-        rule.categoryRaw = category
-        rule.note = ""
-        let share = ShareCoordinator.shared.existingShare(for: sheet)
-        rule.payerProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
-        rule.frequency = frequency.rawValue
-        rule.interval = interval
-        rule.startDate = start
-        rule.endDate = end
-        // Virtual series need only the rule. Materialized mode saves its due occurrences in the same transaction.
-        if !RecurringOccurrenceService.virtualizationEnabled {
-            RecurringExpenseGenerator.generate(for: rule, in: context)
-        }
-        try context.save()
     }
 
     /// ISO8601 / epoch のいずれかを Date にパース。失敗時は nil。

@@ -32,6 +32,36 @@ enum RecurringExpenseGenerator {
     /// 数年放置されたルールが起動直後に大量の Expense を作るのを防ぐ。
     static let perRuleCap = 12
 
+    static func saveRule(in sheet: ExpenseSheet, context: NSManagedObjectContext, kind: TransactionKind,
+                         title: String, amount: Decimal, currency: String, category: String?,
+                         frequency: RecurrenceFrequency, interval: Int32, start: Date, end: Date?) throws {
+        guard !sheet.isDeleted, sheet.managedObjectContext === context,
+              PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: sheet.objectID)
+        else { throw AppIntentError.sheetNotFound }
+        let rule = RecurringRule(context: context)
+        if let store = sheet.objectID.persistentStore { context.assign(rule, to: store) }
+        rule.id = UUID()
+        rule.createdAt = .now
+        rule.sheet = sheet
+        rule.kindRaw = kind.rawValue
+        rule.title = title
+        rule.amount = NSDecimalNumber(decimal: amount)
+        rule.currencyCode = currency
+        rule.categoryRaw = category
+        rule.note = ""
+        let share = ShareCoordinator.shared.existingShare(for: sheet)
+        rule.payerProfileID = UserProfileStore.shared.canonicalSelfID(forShare: share)
+        rule.frequency = frequency.rawValue
+        rule.interval = interval
+        rule.startDate = start
+        rule.endDate = end
+        // Virtual series need only the rule. Materialized mode saves its due occurrences in the same transaction.
+        if !RecurringOccurrenceService.virtualizationEnabled {
+            generate(for: rule, in: context)
+        }
+        try context.save()
+    }
+
     /// viewContext 上の全 RecurringRule を走査して未生成分を作成する。
     /// save まで含む。
     static func generateAll(in ctx: NSManagedObjectContext) {

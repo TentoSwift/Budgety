@@ -11,8 +11,8 @@ import AppIntents
 import CoreData
 
 struct ExpenseSheetEntity: AppEntity {
-    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-    @available(iOS 27.3, *)
+    #if (os(iOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, watchOS 27.3, *)
     static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
     #endif
 
@@ -36,6 +36,14 @@ struct ExpenseSheetEntity: AppEntity {
 /// app's view context must take effect before Siri, Shortcuts, or Spotlight can expose it.
 @MainActor
 struct IntentSheetAccess {
+    static var lastOpenedSheetURI: String? {
+        #if os(watchOS)
+        UserDefaults.standard.string(forKey: "watchLastOpenedSheetURI")
+        #else
+        UserDefaults.standard.string(forKey: "lastOpenedSheetURI")
+        #endif
+    }
+
     let context: NSManagedObjectContext
     let viewContext: NSManagedObjectContext
 

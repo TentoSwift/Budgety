@@ -1,8 +1,8 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 enum SiriExpensePeriod: String, AppEnum {
     case today, yesterday, thisMonth, lastMonth, allTime
 
@@ -14,7 +14,7 @@ enum SiriExpensePeriod: String, AppEnum {
     fileprivate var isDay: Bool { self == .today || self == .yesterday }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseScope {
     // Treat the interval as half-open. Keep the bounds and label when Siri redraws the snippet.
     let interval: DateInterval?
@@ -22,7 +22,7 @@ struct SiriExpenseScope {
     let isDay: Bool
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 extension SiriExpenseScope {
     fileprivate init(containing date: Date, isDay: Bool, calendar: Calendar) {
         // Never widen a specific day or month into an all-time search if the date is unrepresentable.
@@ -46,7 +46,7 @@ extension SiriExpenseScope {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseSearchFilter {
     let name: String?
     let categoryName: String?
@@ -54,11 +54,12 @@ struct SiriExpenseSearchFilter {
     let scope: SiriExpenseScope
 
     init(expenseName: String?, categoryName: String? = nil, month: Date?, day: Date? = nil, period: SiriExpensePeriod?,
-         unnamedPeriod: SiriExpensePeriod = .thisMonth, now: Date = .now, calendar: Calendar = .current) {
+         unnamedPeriod: SiriExpensePeriod = .thisMonth, isSpokenQuery: Bool = false,
+         now: Date = .now, calendar: Calendar = .current) {
         let text = (expenseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         self.categoryName = category.isEmpty ? nil : category
-        let question = Self.searchQuestion(text)
+        let question = Self.searchQuestion(text, isSpokenQuery: isSpokenQuery)
         spokenKind = question?.kind
         let spokenPeriod = question?.period
         if let question {
@@ -81,7 +82,7 @@ struct SiriExpenseSearchFilter {
 
     // The Home Screen shortcut passes its entire text field as expenseName. Only consume
     // complete questions so names containing a period, such as 「今日のランチ」, remain searchable.
-    private static func searchQuestion(_ text: String) -> (period: SiriExpensePeriod?, term: String?, kind: SiriTransactionSelection?)? {
+    private static func searchQuestion(_ text: String, isSpokenQuery: Bool) -> (period: SiriExpensePeriod?, term: String?, kind: SiriTransactionSelection?)? {
         let question = text.trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
         let phrases: [(String, SiriExpensePeriod)] = [
             ("今日", .today), ("きょう", .today), ("本日", .today),
@@ -90,6 +91,7 @@ struct SiriExpenseSearchFilter {
         ]
         for (prefix, period) in phrases where question.hasPrefix(prefix) {
             let rest = question.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+            if isSpokenQuery, rest.isEmpty { return (period, nil, nil) }
             guard rest.hasPrefix("の") else { continue }
             let subject = rest.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
             if let kind = transactionKind(in: subject) { return (period, nil, kind) }
@@ -98,6 +100,7 @@ struct SiriExpenseSearchFilter {
                 let term = subject.dropLast(suffix.count).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !term.isEmpty { return (period, term, nil) }
             }
+            if isSpokenQuery, !subject.isEmpty { return (period, subject, nil) }
         }
         return transactionKind(in: question).map { (nil, nil, $0) }
     }

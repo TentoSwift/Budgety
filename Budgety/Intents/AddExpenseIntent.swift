@@ -19,6 +19,9 @@ struct AddExpenseIntent: AppIntent {
     /// Shortcuts 経由で実行された時の振る舞い:
     /// - openAppWhenRun = false → アプリは前面に出ない (= 完全バックグラウンド実行)
     static var openAppWhenRun: Bool = false
+    #if os(watchOS)
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    #endif
 
     @Parameter(title: "シート", description: "支出を記録するシート")
     var sheet: ExpenseSheetEntity
@@ -92,11 +95,11 @@ struct AddExpenseIntent: AppIntent {
         }
     }
 
-    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+    #if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
         let saved = try await recordSelectedExpense()
-        if #available(iOS 27.3, *) {
+        if #available(iOS 27.3, watchOS 26.0, *) {
             let snippet = SiriRecordedTransactionSnippetIntent(identifier: saved.transaction.objectID.uriRepresentation().absoluteString)
             return .result(dialog: saved.dialog, snippetIntent: snippet)
         }
@@ -170,6 +173,9 @@ struct AddExpenseIntent: AppIntent {
         let coreSheet = try transaction.resolve(selected.id)
         let resolvedCategory = categoryID.flatMap { try? ctx.existingObject(with: $0) as? ExpenseCategory }
             .flatMap { $0.sheet?.objectID == coreSheet.objectID && matchesKind($0, kind) ? $0 : nil }
+        guard PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: coreSheet.objectID) else {
+            throw AppIntentError.sheetNotFound
+        }
         let expense = Expense(context: ctx)
         let sheetStore = coreSheet.objectID.persistentStore
         if let store = sheetStore {
@@ -293,6 +299,7 @@ struct AddExpenseIntent: AppIntent {
             if let hist = CategoryHistorySuggestor.suggest(title: title, kind: kind, in: sheet), kindCats.contains(hist) {
                 return hist
             }
+            #if !os(watchOS)
             let names = kindCats.map { $0.displayName }
             guard !names.isEmpty,
                   CategoryAISuggestor.isAvailable,
@@ -301,6 +308,9 @@ struct AddExpenseIntent: AppIntent {
                   )
             else { return nil }
             return kindCats.first(where: { $0.displayName == suggestedName })
+            #else
+            return nil
+            #endif
         }
 
         // 実カテゴリ: objectID 一致 (同シート) → 名前一致

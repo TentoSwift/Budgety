@@ -1,4 +1,4 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import SwiftUI
@@ -10,7 +10,10 @@ struct SiriSettlementRecordEntity: AppEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    @Property(title: "シートの識別子", visibility: .internal) var sheetID: String
+    #if os(iOS)
+    @Property(title: "シートの識別子", visibility: .internal)
+    #endif
+    var sheetID: String
     @Property(title: "送金記録") var label: String
     var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(label)") }
 
@@ -59,7 +62,7 @@ struct SiriSettlementRecordQuery: EntityStringQuery {
     private func search(_ text: String) throws -> [SiriSettlementRecordEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let ids: [String]
-        if let selected = edit?.sheet.id ?? UserDefaults.standard.string(forKey: "lastOpenedSheetURI") {
+        if let selected = edit?.sheet.id ?? IntentSheetAccess.lastOpenedSheetURI {
             ids = [selected]
         } else {
             ids = try SiriSettlementStore.writableSheets().map(\.id)
@@ -85,7 +88,9 @@ struct SiriSettlementRecordQuery: EntityStringQuery {
 }
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriEditSettlementTransferIntent: AppIntent {
     static let title: LocalizedStringResource = "記録した送金を変更"
     static let description = IntentDescription("送金履歴や、直前に精算済みにした送金の相手・金額・通貨・日付・メモを訂正します。変更内容を確認して同じ送金記録を更新します。")
@@ -100,13 +105,32 @@ struct SiriEditSettlementTransferIntent: AppIntent {
     @Parameter(title: "新しい日付") var date: Date?
     @Parameter(title: "変更後のメモ") var note: String?
     @Parameter(title: "メモを消去") var clearNote: Bool?
+    #if os(watchOS)
+    @Parameter(title: "変更する項目") var field: SettlementEditField?
+    #endif
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriSettlementRecordEntity> & ProvidesDialog & ShowsSnippetIntent {
         guard sheet == nil || sheet?.id == record.sheetID else { throw AppIntentError.sheetNotFound }
-        let prepared = try SiriSettlementEditStore.prepare(identifier: record.id, sheetID: record.sheetID,
-            request: .init(sender: sender, recipient: recipient, amount: amount, currency: currency, date: date,
-                           note: clearNote == true ? "" : note))
+        var request = SiriSettlementEditStore.Request(sender: sender, recipient: recipient, amount: amount,
+                                                       currency: currency, date: date, note: clearNote == true ? "" : note)
+        #if os(watchOS)
+        if sender == nil, recipient == nil, amount == nil, currency == nil, date == nil, request.note == nil {
+            let selected: SettlementEditField
+            if let field { selected = field }
+            else { selected = try await $field.requestValue("送金のどの項目を変更しますか？") }
+            switch selected {
+            case .amount:    request.amount = try await $amount.requestValue("新しい金額はいくらですか？")
+            case .sender:    request.sender = try await $sender.requestValue("変更後の送金者はだれですか？")
+            case .recipient: request.recipient = try await $recipient.requestValue("変更後の受取者はだれですか？")
+            case .currency:  request.currency = try await $currency.requestValue("どの通貨に変更しますか？")
+            case .date:      request.date = try await $date.requestValue("いつの送金に変更しますか？")
+            case .note:      request.note = try await $note.requestValue("新しいメモを教えてください。")
+            case .clearNote: request.note = ""
+            }
+        }
+        #endif
+        let prepared = try SiriSettlementEditStore.prepare(identifier: record.id, sheetID: record.sheetID, request: request)
         let changes = prepared.changes.joined(separator: "\n")
         let prompt = IntentDialog("「\(prepared.sheetName)」の送金を変更しますか？\n\(changes)")
         try await requestConfirmation(actionName: .custom(acceptLabel: "アップデート", acceptAlternatives: ["変更を保存"],
@@ -123,6 +147,18 @@ struct SiriEditSettlementTransferIntent: AppIntent {
                        snippetIntent: SiriSettlementReceiptSnippetIntent(sheetID: prepared.sheetID, recordID: id))
     }
 }
+
+#if os(watchOS)
+enum SettlementEditField: String, AppEnum {
+    case amount, sender, recipient, currency, date, note, clearNote
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "変更する送金項目"
+    static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+        .amount: "金額", .sender: "送金者", .recipient: "受取者", .currency: "通貨",
+        .date: "送金日", .note: "メモ", .clearNote: "メモを消去"
+    ]
+}
+#endif
 
 @available(iOS 27.3, *)
 struct SiriSettlementEditMemberQuery: SettlementMemberOptions {

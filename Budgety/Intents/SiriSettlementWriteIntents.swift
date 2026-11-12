@@ -1,10 +1,12 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 import SwiftUI
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriSettleSuggestedTransferIntent: AppIntent {
     static let title: LocalizedStringResource = "送金の提案を精算済みにする"
     static let description = IntentDescription("「精算済みにして」「この送金を精算済みにして」と頼まれたら、現在の精算プランから送金を選び、内容を確認して記録します。", searchKeywords: ["精算", "送金"])
@@ -40,7 +42,9 @@ struct SiriSettleSuggestedTransferIntent: AppIntent {
 }
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriLogSettlementTransferIntent: AppIntent {
     static let title: LocalizedStringResource = "メンバー間の送金を記録"
     static let description = IntentDescription("「アキラからユキに1,000円を送金した」のように、すでに行った送金をシートの精算履歴に記録します。送金者・受取者・金額を確認して保存します。", searchKeywords: ["送金", "精算"])

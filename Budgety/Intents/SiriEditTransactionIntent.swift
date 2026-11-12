@@ -1,17 +1,24 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 import SwiftUI
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriEditTransactionIntent: AppIntent {
     static let title: LocalizedStringResource = "登録済みの明細を変更"
     static let description = IntentDescription("直前に登録した明細や、既存の支出・収入のカテゴリ、金額、名前などを訂正します。対象の明細と変更したい項目だけを指定し、保存前に確認します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
+    #if os(watchOS)
+    @Parameter(title: "シート") var sheet: ExpenseSheetEntity
+    @Parameter(title: "変更する項目") var editField: WatchTransactionEditField?
+    #else
     @Parameter(title: "シート", description: "明細を名前で探すシート。直前のカードの明細を指定するときは省略できます。")
     var sheet: ExpenseSheetEntity?
+    #endif
     @Parameter(title: "変更する明細", description: "直前の登録カードの編集対象、または変更したい既存の支出・収入。")
     var transaction: SiriEditableTransactionEntity
     @Parameter(title: "新しい名前") var newTitle: String?
@@ -34,6 +41,19 @@ struct SiriEditTransactionIntent: AppIntent {
     var beneficiaries: [SiriSheetMemberEntity]?
 
     static var parameterSummary: some ParameterSummary {
+        #if os(watchOS)
+        Summary("\(\.$sheet) の \(\.$transaction) を変更") {
+            \.$editField
+            \.$newTitle
+            \.$newAmount
+            \.$currencyCode
+            \.$newDate
+            \.$category
+            \.$payer
+            \.$split
+            \.$beneficiaries
+        }
+        #else
         Summary("\(\.$transaction) を変更") {
             \.$sheet
             \.$newTitle
@@ -45,13 +65,20 @@ struct SiriEditTransactionIntent: AppIntent {
             \.$split
             \.$beneficiaries
         }
+        #endif
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriRecordedTransaction> & ProvidesDialog & ShowsSnippetIntent {
+        #if os(watchOS)
+        try requestMissingEditValues()
+        let sheetID = sheet.id
+        #else
+        let sheetID = sheet?.id ?? transaction.sheetID
+        #endif
         let selected = beneficiaries ?? []
         let prepared = try SiriTransactionEditStore.prepare(
-            identifier: transaction.id, sheetIdentifier: sheet?.id ?? transaction.sheetID,
+            identifier: transaction.id, sheetIdentifier: sheetID,
             title: newTitle, amount: newAmount, date: newDate, payer: payer,
             split: split ?? (selected.isEmpty ? .unchanged : .selected), beneficiaries: selected,
             category: category, currencyCode: currencyCode)
@@ -68,7 +95,46 @@ struct SiriEditTransactionIntent: AppIntent {
         return .result(value: receipt, dialog: saved.dialog,
                        snippetIntent: SiriRecordedTransactionSnippetIntent(identifier: prepared.identifier))
     }
+
+    #if os(watchOS)
+    @MainActor
+    private func requestMissingEditValues() throws {
+        if newTitle == nil, newAmount == nil, currencyCode == nil, newDate == nil,
+           category == nil, payer == nil, split == nil, beneficiaries?.isEmpty != false {
+            let (_, row, _) = try SiriTransactionEditStore.target(transaction.id, in: sheet.id)
+            let fields = WatchTransactionEditField.allCases.filter { $0 != .split || row.kind == .expense }
+            guard let editField else {
+                throw $editField.needsDisambiguationError(among: fields, dialog: "どの項目を変更しますか？")
+            }
+            switch editField {
+            case .title: throw $newTitle.needsValueError("新しい名前は何ですか？")
+            case .amount: throw $newAmount.needsValueError("金額をいくらに変更しますか？")
+            case .currency: throw $currencyCode.needsValueError("どの通貨に変更しますか？")
+            case .date: throw $newDate.needsValueError("日付をいつに変更しますか？")
+            case .category: throw $category.needsValueError("どのカテゴリに変更しますか？")
+            case .payer: throw $payer.needsValueError("どのメンバーに変更しますか？")
+            case .split:
+                throw $split.needsDisambiguationError(among: [.off, .all, .selected], dialog: "割り勘をどう変更しますか？")
+            }
+        }
+        if split == .selected, beneficiaries?.isEmpty != false {
+            throw $beneficiaries.needsValueError("割り勘の対象にするメンバーを選んでください。")
+        }
+    }
+    #endif
 }
+
+#if os(watchOS)
+enum WatchTransactionEditField: String, AppEnum {
+    case title, amount, currency, date, category, payer, split
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "変更する項目"
+    static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+        .title: "名前", .amount: "金額", .currency: "通貨", .date: "日付",
+        .category: "カテゴリ", .payer: "支払者・受取者", .split: "割り勘"
+    ]
+}
+#endif
 
 @available(iOS 27.3, *)
 struct SiriEditingMemberQuery: SheetScopedMemberQuery {

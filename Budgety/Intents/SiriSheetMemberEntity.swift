@@ -5,8 +5,8 @@ import CoreData
 struct SiriSheetMemberEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "シートのメンバー"
     static let defaultQuery = SiriSheetMemberQuery()
-    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-    @available(iOS 27.3, *)
+    #if (os(iOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, watchOS 27.3, *)
     static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
     #endif
 
@@ -130,7 +130,7 @@ struct SiriSheetMemberRoster {
     static func searchCandidates(access: IntentSheetAccess, sheetID: String?) throws -> [SiriSheetMemberEntity] {
         if let sheetID { return try Self(sheet: access.resolve(sheetID), access: access).members }
         var sheets = try access.sheets()
-        if let last = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"),
+        if let last = IntentSheetAccess.lastOpenedSheetURI,
            let index = sheets.firstIndex(where: { $0.objectID.uriRepresentation().absoluteString == last }) {
             let current = sheets.remove(at: index)
             sheets.insert(current, at: 0)
@@ -167,7 +167,7 @@ extension SheetScopedMemberQuery {
         let exact = candidates.filter { $0.1.contains(query) }
         if exact.count > 1, exact.allSatisfy({ $0.0.isSelf }),
            ["私", "わたし", "自分", "僕", "ぼく", "me", "myself"].map(SiriSheetMemberRoster.storedNameKey).contains(query),
-           let last = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"),
+           let last = IntentSheetAccess.lastOpenedSheetURI,
            let current = exact.first(where: { $0.0.id == last + "#self" }) {
             return [current.0]
         }
@@ -234,8 +234,8 @@ struct SiriSheetMemberQuery: SheetScopedMemberQuery {
     }
 }
 
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-@available(iOS 27.3, *)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriRecordingMemberQuery: SheetScopedMemberQuery {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]

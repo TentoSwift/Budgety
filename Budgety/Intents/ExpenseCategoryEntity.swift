@@ -10,7 +10,7 @@
 
 import AppIntents
 import CoreData
-#if canImport(UIKit)
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 #endif
 #if canImport(AppKit)
@@ -19,8 +19,8 @@ import AppKit
 import SwiftUI
 
 struct ExpenseCategoryEntity: AppEntity {
-    #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-    @available(iOS 27.3, *)
+    #if (os(iOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, watchOS 27.3, *)
     static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
     #endif
 
@@ -168,7 +168,7 @@ extension ExpenseCategoryEntity {
         )
     }
 
-    #if canImport(UIKit)
+    #if canImport(UIKit) && !os(watchOS)
     /// CategoryIconView と同じ見た目 (= カテゴリ色のグラデ円 + 白の SF Symbol) を
     /// PNG Data として返す。
     @MainActor
@@ -271,7 +271,7 @@ extension ExpenseCategoryEntity {
         renderBadgeImage(symbol: symbol, colorHex: colorHex, size: size)?.pngData()
     }
     #else
-    /// macOS フォールバック: Shortcuts UI が iOS とは異なるため nil で OK。
+    // The display representation uses the SF Symbol directly on macOS and watchOS.
     @MainActor
     static func renderAISuggestionSymbol(_ name: String, colorHex: String) -> Data? { nil }
     @MainActor
@@ -279,7 +279,7 @@ extension ExpenseCategoryEntity {
     #endif
 }
 
-#if canImport(UIKit)
+#if canImport(UIKit) && !os(watchOS)
 private extension UIColor {
     /// HSB の brightness に `delta` を加算した新しい色を返す。
     /// `delta` は -1.0…1.0、ガード付き。

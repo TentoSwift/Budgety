@@ -1,27 +1,39 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import SwiftUI
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardRow: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
-    @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
     @Property(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity?
     @Property(title: "名前") var title: String
     @Property(title: "日付") var date: String
     @Property(title: "カテゴリ") var category: String
     @Property(title: "金額") var amount: String
+    @Property(title: "支払者・受取者") var payerName: String?
+    @Property(title: "外貨の通貨コード") var foreignCurrencyCode: String?
+
+    // Watch snippets reload these presentation fields from the store when invoked.
+    #if os(watchOS)
+    var expenseIdentifier: String?
+    var categoryColorHex = ""
+    var categorySymbol = ""
+    var signedAmount: String?
+    var payerIsVirtual: Bool?
+    var payerColorHex: String?
+    var payerPhoto: IntentFile?
+    #else
+    @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
     @Property(title: "カテゴリの色", visibility: .internal) var categoryColorHex: String
     @Property(title: "カテゴリのアイコン", visibility: .internal) var categorySymbol: String
     @Property(title: "表示用金額", visibility: .internal) var signedAmount: String?
-    @Property(title: "支払者・受取者") var payerName: String?
     @Property(title: "バーチャルメンバー", visibility: .internal) var payerIsVirtual: Bool?
     @Property(title: "支払者の色", visibility: .internal) var payerColorHex: String?
     @Property(title: "支払者のアイコン", visibility: .internal) var payerPhoto: IntentFile?
-    @Property(title: "外貨の通貨コード") var foreignCurrencyCode: String?
+    #endif
 
     init() {}
 
@@ -74,19 +86,25 @@ struct SiriExpenseCardRow: TransientAppEntity {
     }
 }
 
-@available(iOS 27.3, *)
-struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
+@available(iOS 27.3, watchOS 26.2, *)
+struct SiriExpenseCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細の検索結果"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
-    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
-    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "対象期間") var period: String
     @Property(title: "検索した明細名") var expenseName: String
     @Property(title: "該当件数") var count: Int
     @Property(title: "通貨別の合計") var total: String
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
+
+    #if os(watchOS)
+    var sheetSymbol: String?
+    var sheetColorHex: String?
+    #else
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
+    #endif
 
     init() {}
 
@@ -106,30 +124,34 @@ struct SiriExpenseCardResult: TransientAppEntity, SnippetRepresentableEntity {
         DisplayRepresentation(title: "\(sheetName)", subtitle: "\(period)")
     }
 
-    static var snippet: some EntitySnippetContent<Self> {
-        CardSnippet(supportedFamilies: [.standard]) { result, _ in
-            SiriExpenseCardView(result: result)
-        }
-    }
 }
 
-@available(iOS 27.3, *)
-struct SiriMemberCardResult: TransientAppEntity, SnippetRepresentableEntity {
+@available(iOS 27.3, watchOS 26.2, *)
+struct SiriMemberCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "メンバーの収支"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "メンバー") var memberName: String
-    @Property(title: "メンバーの色", visibility: .internal) var memberColorHex: String
-    @Property(title: "メンバーの写真", visibility: .internal) var memberPhoto: IntentFile?
-    @Property(title: "バーチャルメンバー", visibility: .internal) var memberIsVirtual: Bool
     @Property(title: "シート名") var sheetName: String
-    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
-    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "対象期間") var period: String
     @Property(title: "支出") var expenseTotal: String?
     @Property(title: "収入") var incomeTotal: String?
     @Property(title: "該当件数") var count: Int
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
+
+    #if os(watchOS)
+    var memberColorHex = ""
+    var memberPhoto: IntentFile?
+    var memberIsVirtual = false
+    var sheetSymbol: String?
+    var sheetColorHex: String?
+    #else
+    @Property(title: "メンバーの色", visibility: .internal) var memberColorHex: String
+    @Property(title: "メンバーの写真", visibility: .internal) var memberPhoto: IntentFile?
+    @Property(title: "バーチャルメンバー", visibility: .internal) var memberIsVirtual: Bool
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
+    #endif
 
     init() {}
 
@@ -154,25 +176,26 @@ struct SiriMemberCardResult: TransientAppEntity, SnippetRepresentableEntity {
         DisplayRepresentation(title: "\(memberName)", subtitle: "\(sheetName) · \(period)")
     }
 
-    static var snippet: some EntitySnippetContent<Self> {
-        CardSnippet(supportedFamilies: [.standard]) { result, _ in
-            SiriExpenseCardView(member: result)
-        }
-    }
 }
 
-@available(iOS 27.3, *)
-struct SiriRecordedTransaction: TransientAppEntity, SnippetRepresentableEntity {
+@available(iOS 27.3, watchOS 26.2, *)
+struct SiriRecordedTransaction: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "登録した明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Property(title: "シート名") var sheetName: String
-    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
-    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     @Property(title: "明細") var row: SiriExpenseCardRow
     @Property(title: "取引の種類") var kindName: String
     @Property(title: "割り勘の対象") var splitMemberNames: [String]?
     @ComputedProperty(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity? { row.editableTransaction }
+
+    #if os(watchOS)
+    var sheetSymbol: String?
+    var sheetColorHex: String?
+    #else
+    @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
+    @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
+    #endif
 
     init() {}
 
@@ -190,14 +213,38 @@ struct SiriRecordedTransaction: TransientAppEntity, SnippetRepresentableEntity {
         DisplayRepresentation(title: "\(row.title)", subtitle: "\(sheetName) · \(row.signedAmount ?? row.amount)")
     }
 
+}
+
+#if os(iOS)
+@available(iOS 27.3, *)
+extension SiriExpenseCardResult: SnippetRepresentableEntity {
+    static var snippet: some EntitySnippetContent<Self> {
+        CardSnippet(supportedFamilies: [.standard]) { result, _ in
+            SiriExpenseCardView(result: result)
+        }
+    }
+}
+
+@available(iOS 27.3, *)
+extension SiriMemberCardResult: SnippetRepresentableEntity {
+    static var snippet: some EntitySnippetContent<Self> {
+        CardSnippet(supportedFamilies: [.standard]) { result, _ in
+            SiriExpenseCardView(member: result)
+        }
+    }
+}
+
+@available(iOS 27.3, *)
+extension SiriRecordedTransaction: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { recorded, _ in
             SiriExpenseCardView(recorded: recorded)
         }
     }
 }
+#endif
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardView: View {
     private enum Content {
         case search(SiriExpenseCardResult)
@@ -245,7 +292,14 @@ struct SiriExpenseCardView: View {
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        #if os(watchOS)
+        let spacing: CGFloat = 4
+        let padding: CGFloat = 8
+        #else
+        let spacing: CGFloat = 8
+        let padding: CGFloat = 12
+        #endif
+        return VStack(alignment: .leading, spacing: spacing) {
             switch content {
             case .recorded(let recorded):
                 sheetHeader(name: recorded.sheetName, detail: recorded.row.date,
@@ -263,7 +317,7 @@ struct SiriExpenseCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(padding)
         .foregroundStyle(primaryInk)
         .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .privacySensitive()
@@ -272,11 +326,13 @@ struct SiriExpenseCardView: View {
     @ViewBuilder
     private func searchContent(_ result: SiriExpenseCardResult) -> some View {
         VStack(alignment: .leading, spacing: 2) {
+            #if !os(watchOS)
             if !result.expenseName.isEmpty {
                 Text(verbatim: result.expenseName)
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
             }
+            #endif
             sheetHeader(name: result.sheetName, detail: result.period,
                        symbol: result.sheetSymbol, colorHex: result.sheetColorHex)
         }
@@ -288,11 +344,32 @@ struct SiriExpenseCardView: View {
             Text(verbatim: result.total)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
-            fittingRows(result.rows, count: result.count)
+                .fixedSize(horizontal: false, vertical: true)
+            fittingRows(result.rows, count: result.count, period: result.period)
         }
     }
 
+    @ViewBuilder
     private func memberContent(_ result: SiriMemberCardResult) -> some View {
+        #if os(watchOS)
+        HStack(spacing: 6) {
+            AvatarView(photoData: result.memberPhoto?.data, displayName: result.memberName,
+                       colorHex: result.memberColorHex, size: 26, isVirtual: result.memberIsVirtual)
+                .accessibilityHidden(true)
+            Text(verbatim: result.memberName)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+        }
+        sheetHeader(name: result.sheetName, detail: result.period,
+                    symbol: result.sheetSymbol, colorHex: result.sheetColorHex)
+        if result.count == 0 {
+            Text("該当する明細はありません").font(.caption)
+        } else {
+            if let expense = result.expenseTotal { Text("支出 \(expense)").font(.caption.bold()) }
+            if let income = result.incomeTotal { Text("収入 \(income)").font(.caption.bold()) }
+            fittingRows(result.rows, count: result.count, period: result.period)
+        }
+        #else
         ViewThatFits(in: .vertical) {
             ForEach((0...result.rows.count).reversed(), id: \.self) { visibleCount in
                 VStack(alignment: .leading, spacing: 8) {
@@ -309,6 +386,7 @@ struct SiriExpenseCardView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -355,30 +433,45 @@ struct SiriExpenseCardView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func fittingRows(_ rows: [SiriExpenseCardRow], count: Int) -> some View {
+    private func fittingRows(_ rows: [SiriExpenseCardRow], count: Int, period: String) -> some View {
         ViewThatFits(in: .vertical) {
+            #if os(watchOS)
+            list(rows, count: count, limit: min(2, rows.count), omittingDate: period)
+            list(rows, count: count, limit: min(1, rows.count), omittingDate: period)
+            #else
             ForEach((0...rows.count).reversed(), id: \.self) { visibleCount in
                 list(rows, count: count, limit: visibleCount)
             }
+            #endif
         }
     }
 
     private func sheetHeader(name: String, detail: String, symbol: String?, colorHex: String?) -> some View {
+        #if os(watchOS)
+        HStack(spacing: 4) {
+            SheetSymbolIcon(symbol: symbol ?? "person.2.fill", tint: Color(hex: colorHex ?? "#5B8DEF") ?? .indigo,
+                            size: 16)
+                .accessibilityHidden(true)
+            Text("\(name) · \(detail)").font(.caption2).foregroundStyle(secondaryInk)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        #else
         HStack(spacing: 8) {
-            SheetIconView.baseIcon(symbol: symbol ?? "person.2.fill",
-                                  tint: Color(hex: colorHex ?? "#5B8DEF") ?? .indigo, size: 24)
+            SheetSymbolIcon(symbol: symbol ?? "person.2.fill",
+                            tint: Color(hex: colorHex ?? "#5B8DEF") ?? .indigo, size: 24)
                 .accessibilityHidden(true)
             Text("\(name) · \(detail)")
                 .font(.subheadline)
                 .foregroundStyle(secondaryInk)
         }
+        #endif
     }
 
-    private func list(_ rows: [SiriExpenseCardRow], count: Int, limit: Int) -> some View {
+    private func list(_ rows: [SiriExpenseCardRow], count: Int, limit: Int, omittingDate: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(0..<limit, id: \.self) { index in
                 let item = rows[index]
-                if index == 0 || rows[index - 1].date != item.date {
+                if item.date != omittingDate, index == 0 || rows[index - 1].date != item.date {
                     Text(verbatim: item.date)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(secondaryInk)
@@ -412,6 +505,25 @@ struct SiriExpenseCardView: View {
     }
 
     private func row(_ item: SiriExpenseCardRow) -> some View {
+        #if os(watchOS)
+        return HStack(spacing: 6) {
+            categoryIcon(item)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: item.category).font(.caption.weight(.semibold))
+                if !item.title.isEmpty, item.title != item.category {
+                    Text(verbatim: item.title).font(.caption2).foregroundStyle(secondaryInk)
+                }
+                if let payer = item.payerName, !payer.isEmpty {
+                    Text(verbatim: payer).font(.caption2).foregroundStyle(secondaryInk)
+                }
+                let amount = item.signedAmount ?? item.amount
+                Text(verbatim: item.foreignCurrencyCode.map { "\(amount) \($0)" } ?? amount)
+                    .font(.caption.monospacedDigit())
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        #else
         let amount = VStack(alignment: .trailing, spacing: 2) {
             Text(verbatim: item.signedAmount ?? item.amount)
                 .font(.subheadline.monospacedDigit())
@@ -444,15 +556,21 @@ struct SiriExpenseCardView: View {
         .padding(.vertical, 6)
         .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
+        #endif
     }
 
     private func categoryIcon(_ item: SiriExpenseCardRow) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        #if os(watchOS)
+        let size: CGFloat = 26
+        #else
+        let size: CGFloat = 38
+        #endif
+        return ZStack(alignment: .bottomTrailing) {
             CategoryIconView(symbol: item.categorySymbol.isEmpty ? "tag.slash" : item.categorySymbol,
-                             tint: Color(hex: item.categoryColorHex) ?? .gray, size: 38)
+                             tint: Color(hex: item.categoryColorHex) ?? .gray, size: size)
             if let payerName = item.payerName {
                 AvatarView(photoData: item.payerPhoto?.data, displayName: payerName,
-                           colorHex: item.payerColorHex ?? "", size: 18, isVirtual: item.payerIsVirtual == true)
+                           colorHex: item.payerColorHex ?? "", size: size * 0.47, isVirtual: item.payerIsVirtual == true)
                     .background(Circle().fill(surface).padding(-2))
                     .offset(x: 5, y: 5)
             }

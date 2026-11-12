@@ -1,4 +1,4 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import SwiftUI
 
@@ -64,7 +64,11 @@ struct SiriSettlementCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #if os(watchOS)
+        .padding(6)
+        #else
         .padding(12)
+        #endif
         .foregroundStyle(ink)
         .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .privacySensitive()
@@ -72,8 +76,8 @@ struct SiriSettlementCardView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            SheetIconView.baseIcon(symbol: sheetSymbol ?? "person.2.fill",
-                                   tint: Color(hex: sheetColorHex ?? "#5B8DEF") ?? .indigo, size: 32)
+            SheetSymbolIcon(symbol: sheetSymbol ?? "person.2.fill",
+                            tint: Color(hex: sheetColorHex ?? "#5B8DEF") ?? .indigo, size: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline).accessibilityAddTraits(.isHeader)
@@ -87,7 +91,17 @@ struct SiriSettlementCardView: View {
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(secondaryInk)
         let amount = Text(verbatim: row.amount).font(.headline.monospacedDigit())
-        return ViewThatFits(in: .horizontal) {
+        #if os(watchOS)
+        let content = VStack(spacing: 4) {
+            HStack(alignment: .top, spacing: 4) {
+                profile(row.sender).frame(maxWidth: .infinity)
+                direction.padding(.top, 5)
+                profile(row.recipient).frame(maxWidth: .infinity)
+            }
+            amount
+        }
+        #else
+        let content = ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 10) {
                 profile(row.sender)
                     .frame(minWidth: 54, maxWidth: .infinity)
@@ -103,14 +117,21 @@ struct SiriSettlementCardView: View {
                 inlineProfile(row.recipient)
             }
         }
-        .padding(.vertical, 3)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: row.spokenDetail))
+        #endif
+        return content
+            .padding(.vertical, 3)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: row.spokenDetail))
     }
 
     private func avatar(_ profile: SiriSettlementProfile) -> some View {
-        AvatarView(photoData: profile.photo?.data, displayName: profile.name, colorHex: profile.colorHex,
-                   size: 40, isVirtual: profile.isVirtual)
+        #if os(watchOS)
+        let size: CGFloat = 26
+        #else
+        let size: CGFloat = 40
+        #endif
+        return AvatarView(photoData: profile.photo?.data, displayName: profile.name, colorHex: profile.colorHex,
+                          size: size, isVirtual: profile.isVirtual)
             .accessibilityHidden(true)
     }
 

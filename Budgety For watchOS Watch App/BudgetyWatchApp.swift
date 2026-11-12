@@ -7,6 +7,7 @@
 //  CloudKit 経由でシート / 支出が自動同期される。
 //
 
+import AppIntents
 import SwiftUI
 import CoreData
 import CloudKit
@@ -14,13 +15,18 @@ import CloudKit
 @main
 struct BudgetyWatchApp: App {
     @StateObject private var persistence = PersistenceController.shared
+    @StateObject private var siriNavigation = WatchSiriNavigation.shared
     @WKApplicationDelegateAdaptor(BudgetyWatchAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
             WatchHomeView()
+                .sheet(item: $siriNavigation.selection) { selection in
+                    WatchSiriExpenseDetail(identifier: selection.id, sheet: selection.sheet)
+                }
                 .environment(\.managedObjectContext, persistence.container.viewContext)
                 .task {
+                    ExpensoShortcuts.updateAppShortcutParameters()
                     // 起動時に自分の userRecordName をキャッシュ + selfMemberID (UUID) を生成。
                     // 支出追加時に payerProfileID / payerMemberID として書き込むため。
                     await UserProfileStore.shared.ensureUserRecordNameLoaded()

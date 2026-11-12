@@ -1,4 +1,4 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
@@ -10,7 +10,10 @@ struct SiriSettlementProposalEntity: AppEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    @Property(title: "シートの識別子", visibility: .internal) var sheetID: String
+    #if os(iOS)
+    @Property(title: "シートの識別子", visibility: .internal)
+    #endif
+    var sheetID: String
     @Property(title: "シート名") var sheetName: String
     @Property(title: "送金者") var fromName: String
     @Property(title: "受取者") var toName: String

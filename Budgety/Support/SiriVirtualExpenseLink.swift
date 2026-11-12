@@ -1,4 +1,4 @@
-#if os(iOS)
+#if os(iOS) || os(watchOS)
 import CoreData
 import Foundation
 
@@ -48,7 +48,7 @@ enum SiriVirtualExpenseLink {
         let segmentID = storedRule?.id ?? ruleID
         var liveRule: RecurringRule?
         if let storedRule {
-            guard storedRule.kind == .expense, !storedRule.isSkippedDay(day),
+            guard !storedRule.isSkippedDay(day),
                   let rule = try access.viewContext.existingObject(with: storedRule.objectID) as? RecurringRule,
                   !rule.isDeleted, !rule.hasPersistentChangedValues, let sheetInView = rule.sheet,
                   sheetInView.objectID == sheet.objectID, access.allows(sheetInView)
@@ -62,7 +62,7 @@ enum SiriVirtualExpenseLink {
         }
         let matches = (sheet.expenses as? Set<Expense> ?? []).filter(isSlot)
         if let row = matches.first {
-            guard matches.count == 1, !row.isSkipped, row.kind == .expense,
+            guard matches.count == 1, !row.isSkipped,
                   let date = row.date, calendar.startOfDay(for: date).compare(calendar.startOfDay(for: .now)) != .orderedDescending else { throw AppIntentError.expenseUnavailable }
             let live = try access.transactionForDisplay(identifier: row.objectID.uriRepresentation().absoluteString)
             guard !live.hasPersistentChangedValues, isSlot(live) else { throw AppIntentError.expenseUnavailable }
@@ -72,7 +72,7 @@ enum SiriVirtualExpenseLink {
         guard let liveRule, let liveSheet = liveRule.sheet, let posting = storedRule?.postingDay(for: day),
               !(liveSheet.expenses as? Set<Expense> ?? []).contains(where: isSlot),
               let occurrence = RecurringOccurrenceService.virtualOccurrences(for: sheet, in: posting...posting)
-                .first(where: { $0.ruleID == segmentID && $0.scheduledDate == day && $0.kind == .expense })
+                .first(where: { $0.ruleID == segmentID && $0.scheduledDate == day })
         else { throw AppIntentError.expenseUnavailable }
         return .virtual(occurrence, sheet: liveSheet, rule: liveRule)
     }

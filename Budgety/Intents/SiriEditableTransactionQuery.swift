@@ -1,4 +1,4 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
@@ -10,7 +10,10 @@ struct SiriEditableTransactionEntity: AppEntity {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    @Property(title: "シートの識別子", visibility: .internal) var sheetID: String
+    #if os(iOS)
+    @Property(title: "シートの識別子", visibility: .internal)
+    #endif
+    var sheetID: String
     @Property(title: "シート名") var sheetName: String
     @Property(title: "名前") var title: String
     @Property(title: "日付") var date: Date?
@@ -77,7 +80,7 @@ struct SiriEditableTransactionQuery: EntityStringQuery {
         let sheet: ExpenseSheet
         if let sheetID {
             sheet = try access.resolve(sheetID)
-        } else if let last = UserDefaults.standard.string(forKey: "lastOpenedSheetURI"), !last.isEmpty {
+        } else if let last = IntentSheetAccess.lastOpenedSheetURI, !last.isEmpty {
             // A locked or deleted last-used sheet cannot silently redirect an edit into another sheet.
             guard let accessible = try? access.resolve(last) else { throw SelectionError.sheetRequired }
             sheet = accessible

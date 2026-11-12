@@ -1,9 +1,9 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CloudKit
 import CoreData
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 @MainActor
 enum SiriMemberTransactionLookup {
     struct Result {

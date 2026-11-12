@@ -1,10 +1,10 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
 /// A read-only ledger for Siri. Keep amounts in the original currency of each transaction.
-@available(iOS 27.3, *)
+@available(iOS 27.3, watchOS 26.2, *)
 @MainActor
 struct SiriTransactionLedger {
     let count: Int

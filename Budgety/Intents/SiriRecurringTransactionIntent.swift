@@ -1,4 +1,4 @@
-#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
@@ -18,7 +18,9 @@ nonisolated extension RecurrenceFrequency: AppEnum {
 }
 
 @available(iOS 27.3, *)
+#if os(iOS)
 @AppIntent(.tool)
+#endif
 struct SiriRecurringTransactionIntent: AppIntent {
     static let title: LocalizedStringResource = "定期収入・定期支出を設定"
     static let description = IntentDescription("毎月の給与や家賃、毎週の交通費など、繰り返す収入や支出をシートに登録します。")
@@ -59,7 +61,7 @@ struct SiriRecurringTransactionIntent: AppIntent {
 
         let category = CategoryHistorySuggestor.suggest(title: name, kind: kind, in: target)
         try Task.checkCancellation()
-        try QuickIntentLogic.saveRecurringRule(in: target, context: access.context, kind: kind, title: name, amount: value,
+        try RecurringExpenseGenerator.saveRule(in: target, context: access.context, kind: kind, title: name, amount: value,
                                               currency: currency, category: category?.name, frequency: frequency,
                                               interval: Int32(step), start: start, end: end)
         let amountLabel = "\(value.formatted(.number.precision(.fractionLength(0...38)))) \(currency)"
