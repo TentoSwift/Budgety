@@ -14,11 +14,11 @@ enum SiriMemberTransactionLookup {
     static func ledger(in sheet: ExpenseSheet, access: IntentSheetAccess, member: SiriSheetMemberEntity,
                        roster: SiriSheetMemberRoster, interval: DateInterval?,
                        includeExpenses: Bool, includeIncome: Bool, previewOnly: Bool,
-                       pageOffset: Int? = nil, pageSize: Int = 3) throws -> SiriTransactionLedger {
+                       pageOffset: Int? = nil, pageSize: Int = 3, payerPhotoLimit: Int? = nil) throws -> SiriTransactionLedger {
         let payer = Payer(member: member, roster: roster, sheet: sheet)
         return try SiriTransactionLedger.read(sheet: sheet, access: access, interval: interval,
                                               includeExpenses: includeExpenses, includeIncome: includeIncome,
-                                              previewOnly: previewOnly, pageOffset: pageOffset, pageSize: pageSize,
+                                              previewOnly: previewOnly, pageOffset: pageOffset, pageSize: pageSize, payerPhotoLimit: payerPhotoLimit,
                                               matchesPayer: payer.matches)
     }
 

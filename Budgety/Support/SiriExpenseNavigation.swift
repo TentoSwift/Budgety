@@ -70,7 +70,7 @@ private struct SiriExpenseDetail: View {
     }
 }
 /// The detail reads a disposable child-context row. Only an explicit edit needs a live occurrence.
-private struct SiriVirtualExpenseDetail: View {
+struct SiriVirtualExpenseDetail: View {
     let identifier: String
     let occurrence: RecurringOccurrence
     @ObservedObject var sheet: ExpenseSheet

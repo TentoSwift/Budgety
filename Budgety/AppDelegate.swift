@@ -24,6 +24,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     @objc private func windowDidBecomeKey(_ notification: Notification) {
         if let scene = (notification.object as? UIWindow)?.windowScene {
             DeepLinkRouter.shared.presentPendingExpense(in: scene)
+            #if canImport(AppIntents, _version: 301.2.7.2)
+            if #available(iOS 27.3, *) { SiriResultsPresenter.shared.presentIfNeeded(in: scene) }
+            #endif
         }
     }
 
@@ -82,6 +85,9 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func sceneDidBecomeActive(_ scene: UIScene) {
         if let windowScene = scene as? UIWindowScene {
             DeepLinkRouter.shared.presentPendingExpense(in: windowScene)
+            #if canImport(AppIntents, _version: 301.2.7.2)
+            if #available(iOS 27.3, *) { SiriResultsPresenter.shared.presentIfNeeded(in: windowScene) }
+            #endif
         }
     }
 

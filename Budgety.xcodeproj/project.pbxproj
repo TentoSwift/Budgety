@@ -366,6 +366,7 @@
 				Intents/SiriEditableTransactionQuery.swift,
 				Intents/SiriEditingCategoryQuery.swift,
 				Intents/SiriExpandedTransactions.swift,
+				Intents/SiriOpenResultsInAppIntent.swift,
 				Intents/SiriExpenseCards.swift,
 				Intents/SiriExpenseDetailsIntent.swift,
 				Intents/SiriExpensePayer.swift,

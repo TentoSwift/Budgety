@@ -65,10 +65,10 @@ struct SiriExpenseCardRow: TransientAppEntity {
 
     @MainActor
     static func from(_ transaction: Expense, in sheet: ExpenseSheet, isSoloSheet: Bool,
-                     virtualIdentifier: String? = nil) -> Self {
+                     virtualIdentifier: String? = nil, includePayerPhoto: Bool = true) -> Self {
         let currency = transaction.resolvedCurrencyCode.uppercased()
         let category = transaction.categoryDisplayName
-        let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet)
+        let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet, includePhoto: includePayerPhoto)
         return Self(
             title: transaction.displayTitle.isEmpty ? category : transaction.displayTitle,
             date: transaction.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明"),
@@ -224,6 +224,15 @@ struct SiriRecordedTransaction: TransientAppEntity {
 
 #if os(iOS) || os(macOS)
 @available(iOS 27.3, macOS 27.3, *)
+extension SiriExpenseCardRow: SnippetRepresentableEntity {
+    static var snippet: some EntitySnippetContent<Self> {
+        CardSnippet(supportedFamilies: [.standard]) { item, _ in
+            SiriExpenseCardView(item: item)
+        }
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriExpenseCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
@@ -258,6 +267,10 @@ struct SiriExpenseCardView: View {
         case recorded(SiriRecordedTransaction)
         case member(SiriMemberCardResult)
         case page(SiriTransactionPage)
+        #if os(iOS) || os(macOS)
+        case overview(SiriTransactionOverview)
+        case item(SiriExpenseCardRow)
+        #endif
         case unavailable
     }
     private let content: Content
@@ -270,6 +283,10 @@ struct SiriExpenseCardView: View {
         content = Self.content(for: .member(member), search: member.expandedSearch, resumePage: resumePage)
     }
     init(page: SiriTransactionPage) { content = .page(page) }
+    #if os(iOS) || os(macOS)
+    init(overview: SiriTransactionOverview) { content = .overview(overview) }
+    init(item: SiriExpenseCardRow) { content = .item(item) }
+    #endif
 
     // Siri rebuilds an entity card's archive after running a button, even when it
     // elects to keep that card instead of presenting the button's returned snippet.
@@ -279,6 +296,11 @@ struct SiriExpenseCardView: View {
             if offset == SiriSnippetCursor.compact {
                 return try SiriExpandedSearch.decode(search).compactView(search: search).content
             }
+            #if os(iOS) || os(macOS)
+            if offset == SiriSnippetCursor.overview {
+                return .overview(try SiriTransactionOverview.load(search: search))
+            }
+            #endif
             return .page(try SiriTransactionPage.load(search: search, offset: offset))
         } catch {
             return .unavailable
@@ -314,8 +336,11 @@ struct SiriExpenseCardView: View {
             recorded.row.expenseIdentifier
         case .search(let result):
             result.count == 1 && result.rows.count == 1 ? result.rows.first?.expenseIdentifier : nil
-        case .member, .page, .unavailable:
-            nil
+        #if os(iOS) || os(macOS)
+        case .item(let item):
+            item.expenseIdentifier
+        #endif
+        default: nil
         }
     }
 
@@ -323,7 +348,7 @@ struct SiriExpenseCardView: View {
         switch content {
         case .search(let result): result.expandedSearch
         case .member(let result): result.expandedSearch
-        case .recorded, .page, .unavailable: nil
+        default: nil
         }
     }
 
@@ -352,6 +377,13 @@ struct SiriExpenseCardView: View {
                 memberContent(member)
             case .page(let page):
                 pageContent(page)
+            #if os(iOS) || os(macOS)
+            case .overview(let overview):
+                overviewContent(overview)
+            case .item(let item):
+                Text(verbatim: item.date).font(.caption.weight(.semibold)).foregroundStyle(secondaryInk)
+                row(item)
+            #endif
             case .unavailable:
                 Label("この検索結果は現在表示できません。", systemImage: "lock")
             }
@@ -478,6 +510,70 @@ struct SiriExpenseCardView: View {
         .accessibilityElement(children: .combine)
     }
 
+    #if os(iOS) || os(macOS)
+    // Siri can lay out the returned rows itself, or re-render our interactive card.
+    // The latter has a host-defined height, so reserve space for both footer actions.
+    private func overviewContent(_ overview: SiriTransactionOverview) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: overview.title).font(.headline).lineLimit(1)
+                    Text(verbatim: overview.period).font(.caption).foregroundStyle(secondaryInk)
+                }
+                Spacer()
+                Button(intent: SiriShowAllTransactionsIntent(search: overview.search, offset: SiriSnippetCursor.compact)) {
+                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(secondaryInk)
+                        .frame(minWidth: 32, minHeight: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("閉じる")
+                .accessibilityIdentifier("siriCloseOverview")
+            }
+            if overview.rows.isEmpty {
+                Text("該当する明細はありません")
+            } else {
+                ViewThatFits(in: .vertical) {
+                    ForEach((1...overview.rows.count).reversed(), id: \.self) { visible in
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(0..<visible, id: \.self) { index in
+                                let item = overview.rows[index]
+                                if item.date != overview.period, index == 0 || overview.rows[index - 1].date != item.date {
+                                    Text(verbatim: item.date).font(.caption.weight(.semibold)).foregroundStyle(secondaryInk)
+                                }
+                                if let identifier = item.expenseIdentifier {
+                                    openButton(identifier: identifier) { row(item) }
+                                } else {
+                                    row(item)
+                                }
+                            }
+                            if visible < overview.totalCount {
+                                Button(intent: SiriShowAllTransactionsIntent(search: overview.search, offset: visible)) {
+                                    Text("残り\(overview.totalCount - visible)件の明細を表示").font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            Button(intent: SiriOpenResultsInAppIntent(search: overview.search)) {
+                HStack(spacing: 6) {
+                    Image("BudgetySnippetIcon").renderingMode(.original).resizable().frame(width: 18, height: 18)
+                    Text("“Budgety”を開く").font(.subheadline.weight(.semibold))
+                }
+                .padding(.horizontal, 14).padding(.vertical, 7)
+                .foregroundStyle(primaryInk)
+                .background(primaryInk.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("siriOpenSearchInBudgety")
+            .frame(maxWidth: .infinity)
+        }
+        .accessibilityIdentifier("siriTransactionOverview")
+    }
+    #endif
+
     private func pageContent(_ page: SiriTransactionPage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(verbatim: page.title).font(.headline).lineLimit(1)
@@ -588,7 +684,12 @@ struct SiriExpenseCardView: View {
             let hiddenCount = count - limit
             if hiddenCount > 0 {
                 if let expandedSearch {
-                    Button(intent: SiriShowAllTransactionsIntent(search: expandedSearch, offset: limit)) {
+                    #if os(iOS) || os(macOS)
+                    let showMore = SiriShowTransactionListIntent(search: expandedSearch)
+                    #else
+                    let showMore = SiriShowAllTransactionsIntent(search: expandedSearch, offset: limit)
+                    #endif
+                    Button(intent: showMore) {
                         HStack(spacing: 5) {
                             Image("BudgetySnippetIcon")
                                 .renderingMode(.original)

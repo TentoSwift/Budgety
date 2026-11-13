@@ -27,7 +27,7 @@ struct SiriExpandedSearch: Codable, Hashable {
     }
 
     @MainActor
-    func load(pageOffset: Int, pageSize: Int) throws -> (title: String, ledger: SiriTransactionLedger) {
+    func load(pageOffset: Int? = nil, pageSize: Int = SiriTransactionPage.pageSize, payerPhotoLimit: Int? = nil) throws -> (title: String, ledger: SiriTransactionLedger) {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let sheet = try access.resolve(sheetID)
         if let memberID {
@@ -37,18 +37,23 @@ struct SiriExpandedSearch: Codable, Hashable {
                     try SiriMemberTransactionLookup.ledger(in: sheet, access: access, member: member, roster: roster,
                                                           interval: interval, includeExpenses: kind.includesExpenses,
                                                           includeIncome: kind.includesIncome, previewOnly: false,
-                                                          pageOffset: pageOffset, pageSize: pageSize))
+                                                          pageOffset: pageOffset, pageSize: pageSize, payerPhotoLimit: payerPhotoLimit))
         }
         let title = [sheet.displayName, category, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return (title, try SiriTransactionLedger.read(sheet: sheet, access: access, interval: interval,
                                                       includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome,
                                                       expenseName: name, categoryName: category, previewOnly: false,
-                                                      pageOffset: pageOffset, pageSize: pageSize))
+                                                      pageOffset: pageOffset, pageSize: pageSize, payerPhotoLimit: payerPhotoLimit))
     }
 
     @MainActor
     static func currentView(search: String) throws -> SiriExpenseCardView {
         if let position = SiriSnippetCursor.read(search), position != SiriSnippetCursor.compact {
+            #if os(iOS) || os(macOS)
+            if position == SiriSnippetCursor.overview {
+                return SiriExpenseCardView(overview: try SiriTransactionOverview.load(search: search))
+            }
+            #endif
             return SiriExpenseCardView(page: try SiriTransactionPage.load(search: search, offset: position))
         }
         return try decode(search).compactView(search: search)
@@ -77,6 +82,7 @@ struct SiriExpandedSearch: Codable, Hashable {
 enum SiriSnippetCursor {
     private static let key = "SiriTransactionSnippetCursors.v1"
     static let compact = -1
+    static let overview = -2
 
     private static func cardKey(_ search: String) -> String {
         let request = try? SiriExpandedSearch.decode(search)
@@ -125,6 +131,67 @@ struct SiriTransactionPage {
     }
 }
 
+#if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
+@MainActor
+struct SiriTransactionOverview {
+    let search: String
+    let title: String
+    let period: String
+    let rows: [SiriExpenseCardRow]
+    let totalCount: Int
+    static let maxRows = 8
+
+    static func load(search: String) throws -> Self {
+        let request = try SiriExpandedSearch.decode(search)
+        let (title, ledger) = try request.load(pageOffset: 0, pageSize: maxRows)
+        return Self(search: search, title: title, period: request.period, rows: ledger.rows, totalCount: ledger.count)
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriTransactionListSnippetIntent: SnippetIntent {
+    static let title: LocalizedStringResource = "検索した明細の一覧カードを表示"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "検索条件") var search: String
+
+    init() {}
+    init(search: String) { self.search = search }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ShowsSnippetView {
+        if let position = SiriSnippetCursor.read(search), position != SiriSnippetCursor.overview {
+            return .result(view: try SiriExpandedSearch.currentView(search: search))
+        }
+        return .result(view: SiriExpenseCardView(overview: try SiriTransactionOverview.load(search: search)))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriShowTransactionListIntent: AppIntent {
+    static let title: LocalizedStringResource = "検索した明細の一覧を表示"
+    static let isDiscoverable = false
+    static let supportedModes: IntentModes = .background
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "検索条件") var search: String
+
+    init() {}
+    init(search: String) { self.search = search }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<[SiriExpenseCardRow]> & ShowsSnippetIntent {
+        let request = try SiriExpandedSearch.decode(search)
+        let (_, ledger) = try request.load(payerPhotoLimit: SiriTransactionOverview.maxRows)
+        // Siri can present the individual entities as a collection. Other hosts can
+        // redraw the existing answer with the same query, starting at the first match.
+        SiriSnippetCursor.set(SiriSnippetCursor.overview, for: search)
+        return .result(value: ledger.rows, snippetIntent: SiriTransactionListSnippetIntent(search: search))
+    }
+}
+#endif
+
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriShowAllTransactionsIntent: AppIntent {
     static let title: LocalizedStringResource = "明細をすべて表示"
@@ -144,6 +211,16 @@ struct SiriShowAllTransactionsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
         let requested = offset ?? 0
+        #if os(iOS) || os(macOS)
+        // Older Siri transcripts called this paging action from their compact preview.
+        // Their first tap now opens the overview, just like a newly archived button.
+        if requested >= 0, (SiriSnippetCursor.read(search) ?? SiriSnippetCursor.compact) == SiriSnippetCursor.compact {
+            let overview = try SiriTransactionOverview.load(search: search)
+            SiriSnippetCursor.set(SiriSnippetCursor.overview, for: search)
+            let dialog: IntentDialog = overview.rows.isEmpty ? "該当する明細はありません。" : "明細の一覧を表示しました。"
+            return .result(dialog: dialog, snippetIntent: SiriTransactionListSnippetIntent(search: search))
+        }
+        #endif
         let page = try SiriTransactionPage.load(search: search, offset: requested)
         let position = requested == SiriSnippetCursor.compact ? requested : page.start
         SiriSnippetCursor.set(position, for: search)
@@ -178,6 +255,11 @@ struct SiriTransactionPageSnippetIntent: SnippetIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
         let position = SiriSnippetCursor.read(search) ?? offset
+        #if os(iOS) || os(macOS)
+        if position == SiriSnippetCursor.overview {
+            return .result(view: SiriExpenseCardView(overview: try SiriTransactionOverview.load(search: search)))
+        }
+        #endif
         if position == SiriSnippetCursor.compact {
             let view = try SiriExpandedSearch.decode(search).compactView(search: search)
             return .result(view: view)

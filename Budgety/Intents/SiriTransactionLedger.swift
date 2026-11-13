@@ -28,7 +28,7 @@ struct SiriTransactionLedger {
 
     static func read(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                      includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
-                     previewOnly: Bool = true, pageOffset: Int? = nil, pageSize: Int = 3,
+                     previewOnly: Bool = true, pageOffset: Int? = nil, pageSize: Int = 3, payerPhotoLimit: Int? = nil,
                      matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
@@ -85,13 +85,14 @@ struct SiriTransactionLedger {
         }
         let backing = VirtualRowBacking()
         lazy var isSolo = !record.hasAcceptedOtherMembers()
-        let rows: [SiriExpenseCardRow] = visible.map { item in
+        let rows: [SiriExpenseCardRow] = visible.enumerated().map { index, item in
+            let includePhoto = index < (payerPhotoLimit ?? Int.max)
             switch item {
             case .expense(let row):
-                return .from(row, in: record, isSoloSheet: isSolo)
+                return .from(row, in: record, isSoloSheet: isSolo, includePayerPhoto: includePhoto)
             case .occurrence(let occurrence):
                 return .from(backing.displayExpense(for: occurrence, sheet: record), in: record, isSoloSheet: isSolo,
-                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record))
+                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record), includePayerPhoto: includePhoto)
             }
         }
         return Self(count: count, rows: rows, expenseTotals: expenses, incomeTotals: income,
