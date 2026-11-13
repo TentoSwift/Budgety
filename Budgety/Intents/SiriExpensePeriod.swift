@@ -4,11 +4,11 @@ import Foundation
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 enum SiriExpensePeriod: String, AppEnum {
-    case today, yesterday, thisMonth, lastMonth, allTime
+    case today, yesterday, thisMonth, lastMonth, thisYear, lastYear, allTime
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "検索期間"
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .today: "今日", .yesterday: "昨日", .thisMonth: "今月", .lastMonth: "先月", .allTime: "全期間"
+        .today: "今日", .yesterday: "昨日", .thisMonth: "今月", .lastMonth: "先月", .thisYear: "今年", .lastYear: "昨年", .allTime: "全期間"
     ]
 
     fileprivate var isDay: Bool { self == .today || self == .yesterday }
@@ -36,6 +36,11 @@ extension SiriExpenseScope {
         switch period {
         case .allTime:
             self.init(interval: nil, label: String(localized: "全期間"), isDay: false)
+        case .thisYear, .lastYear:
+            let anchor = period == .lastYear ? calendar.date(byAdding: .year, value: -1, to: now) ?? now : now
+            let interval = calendar.dateInterval(of: .year, for: anchor) ?? DateInterval(start: anchor, duration: 0)
+            let label = anchor.formatted(Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone).year())
+            self.init(interval: interval, label: label, isDay: false)
         case .today, .thisMonth:
             self.init(containing: now, isDay: period.isDay, calendar: calendar)
         case .yesterday, .lastMonth:
@@ -60,7 +65,7 @@ struct SiriTransactionReplyRequest {
             requestsAll = true
             return
         }
-        let quantityBeforeSubject = #/((?:今日|きょう|本日|昨日|きのう|今月|先月|全期間)の)?(?:すべて|全て|全部|全件)の(明細|取引一覧|取引|支出|収入|収支)(?:を(?:見せて|表示して|教えて)(?:ください)?)?/#
+        let quantityBeforeSubject = #/((?:今日|きょう|本日|昨日|きのう|今月|先月|今年|去年|昨年|全期間)の)?(?:すべて|全て|全部|全件)の(明細|取引一覧|取引|支出|収入|収支)(?:を(?:見せて|表示して|教えて)(?:ください)?)?/#
         if let match = question.wholeMatch(of: quantityBeforeSubject) {
             self.search = (match.output.1.map(String.init) ?? "") + match.output.2
             requestsAll = true
@@ -97,6 +102,8 @@ struct SiriExpenseSearchFilter {
         } else if let daily = [period, spokenPeriod].compactMap({ $0 }).first(where: \.isDay) {
             // Siri may also populate the month parameter while interpreting a question about a day.
             scope = SiriExpenseScope(period: daily, now: now, calendar: calendar)
+        } else if let year = [period, spokenPeriod].compactMap({ $0 }).first(where: { $0 == .thisYear || $0 == .lastYear }) {
+            scope = SiriExpenseScope(period: year, now: now, calendar: calendar)
         } else if let month {
             scope = SiriExpenseScope(containing: month, isDay: false, calendar: calendar)
         } else {
@@ -112,7 +119,7 @@ struct SiriExpenseSearchFilter {
         let phrases: [(String, SiriExpensePeriod)] = [
             ("今日", .today), ("きょう", .today), ("本日", .today),
             ("昨日", .yesterday), ("きのう", .yesterday),
-            ("今月", .thisMonth), ("先月", .lastMonth), ("全期間", .allTime)
+            ("今月", .thisMonth), ("先月", .lastMonth), ("今年", .thisYear), ("昨年", .lastYear), ("去年", .lastYear), ("全期間", .allTime)
         ]
         for (prefix, period) in phrases where question.hasPrefix(prefix) {
             let rest = question.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)

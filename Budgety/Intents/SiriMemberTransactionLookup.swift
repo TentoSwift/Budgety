@@ -12,14 +12,14 @@ enum SiriMemberTransactionLookup {
     }
 
     static func search(sheetID: String, memberIdentifier: String, scope: SiriExpenseScope,
-                       kind: SiriTransactionSelection, showAll: Bool = false) throws -> Result {
+                       kind: SiriTransactionSelection, showAll: Bool = false, currency: SiriLedgerCurrency = .init()) throws -> Result {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let sheet = try access.resolve(sheetID)
         let roster = try SiriSheetMemberRoster(sheet: sheet, access: access)
         guard let member = roster.members.first(where: { $0.id == memberIdentifier }) else { throw AppIntentError.missingPayer }
         let payer = Payer(member: member, roster: roster, sheet: sheet)
         let ledger = try SiriTransactionLedger.read(sheet: sheet, access: access, interval: scope.interval,
-                                                    includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome, allRows: showAll,
+                                                    includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome, allRows: showAll, currency: currency,
                                                     matchesPayer: payer.matches)
         let color: String
         let photo: Data?
@@ -34,11 +34,16 @@ enum SiriMemberTransactionLookup {
         let isVirtual = UserProfileStore.isVirtualRecordName(member.profileID)
         let expenseTotal = kind.includesExpenses ? ledger.expenseTotal : nil
         let incomeTotal = kind.includesIncome ? ledger.incomeTotal : nil
-        var card = SiriMemberCardResult(memberName: member.name, memberColorHex: color,
+        let card = SiriMemberCardResult(memberName: member.name, memberColorHex: color,
                                         memberPhoto: SiriExpensePayer.thumbnail(from: photo), memberIsVirtual: isVirtual,
                                         sheetName: sheet.displayName, sheetSymbol: sheet.displaySymbol, sheetColorHex: sheet.displayColorHex,
-                                        period: scope.label, expenseTotal: expenseTotal, incomeTotal: incomeTotal,
+                                        period: currency.periodLabel(scope.label), expenseTotal: expenseTotal, incomeTotal: incomeTotal,
                                         count: ledger.count, rows: ledger.rows)
+        card.questionContext = try SiriLedgerQuestionContext(sheetID: sheetID, interval: scope.interval, period: scope.label, kind: kind,
+            memberID: memberIdentifier, sourceCurrency: currency.sourceCurrency, targetCurrency: currency.targetCurrency,
+            foreignOnly: currency.foreignOnly, grouped: currency.groupByOriginal,
+            singleID: ledger.count == 1 ? ledger.rows.first?.expenseIdentifier : nil)
+        card.questionContext?.editableTransaction = card.editableTransaction
         card.netTotal = kind == .both ? ledger.netTotal : nil
         let reply = ledger.reply(for: kind, sheetName: sheet.displayName, period: scope.label, member: member.name,
                                  category: nil, name: nil, showAll: showAll)

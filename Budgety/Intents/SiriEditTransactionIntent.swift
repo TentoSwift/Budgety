@@ -9,7 +9,7 @@ import SwiftUI
 #endif
 struct SiriEditTransactionIntent: AppIntent {
     static let title: LocalizedStringResource = "登録済みの明細を変更"
-    static let description = IntentDescription("直前に登録した明細や、既存の支出・収入のカテゴリ、金額、名前などを訂正します。対象の明細と変更したい項目だけを指定し、保存前に確認します。")
+    static let description = IntentDescription("「食費に変更して」「それを交通費にして」は、直前に追加・表示した明細のカテゴリ変更です。カードの編集対象と変更先のカテゴリ名を受け取り、対象が複数なら明細を選び、変更前後を確認してから保存します。金額、通貨、名前、日付、支払者、割り勘も訂正できます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     #if os(watchOS)
@@ -31,6 +31,8 @@ struct SiriEditTransactionIntent: AppIntent {
     @Parameter(title: "変更後のカテゴリ", description: "変更先のカテゴリ。支出はそのシートの支出カテゴリ、収入は収入カテゴリから選びます。解除するときは未分類、変更しないときは省略します。",
                optionsProvider: SiriEditingCategoryQuery())
     var category: ExpenseCategoryEntity?
+    @Parameter(title: "変更先のカテゴリ名", description: "「食費に変更して」なら「食費」。変更後のカテゴリが名前だけで指定されたときに設定します。")
+    var newCategoryName: String?
     @Parameter(title: "支払者・受取者", description: "変更後の支払者。収入の場合は受取者。省略すると元の人を維持します。",
                optionsProvider: SiriEditingMemberQuery())
     var payer: SiriSheetMemberEntity?
@@ -49,6 +51,7 @@ struct SiriEditTransactionIntent: AppIntent {
             \.$currencyCode
             \.$newDate
             \.$category
+            \.$newCategoryName
             \.$payer
             \.$split
             \.$beneficiaries
@@ -61,6 +64,7 @@ struct SiriEditTransactionIntent: AppIntent {
             \.$currencyCode
             \.$newDate
             \.$category
+            \.$newCategoryName
             \.$payer
             \.$split
             \.$beneficiaries
@@ -76,12 +80,24 @@ struct SiriEditTransactionIntent: AppIntent {
         #else
         let sheetID = sheet?.id ?? transaction.sheetID
         #endif
+        var chosenCategory = category
+        if chosenCategory == nil, let name = newCategoryName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            let (access, row, _) = try SiriTransactionEditStore.target(transaction.id, in: sheetID)
+            let choices = try SiriEditingCategoryQuery.choices(for: row, access: access, matching: name, exact: true)
+            guard let first = choices.first else {
+                throw $category.needsValueError("この明細に使えるカテゴリに「\(name)」が見つかりません。どのカテゴリに変更しますか？")
+            }
+            if choices.count == 1 { chosenCategory = first }
+            else {
+                chosenCategory = try await $category.requestDisambiguation(among: choices, dialog: "同じ名前のカテゴリがあります。どれに変更しますか？")
+            }
+        }
         let selected = beneficiaries ?? []
         let prepared = try SiriTransactionEditStore.prepare(
             identifier: transaction.id, sheetIdentifier: sheetID,
             title: newTitle, amount: newAmount, date: newDate, payer: payer,
             split: split ?? (selected.isEmpty ? .unchanged : .selected), beneficiaries: selected,
-            category: category, currencyCode: currencyCode)
+            category: chosenCategory, currencyCode: currencyCode)
         let changes = prepared.changes.map { String(localized: "\($0.label)：\($0.before) → \($0.after)") }
             .joined(separator: "\n")
         let prompt = IntentDialog("「\(prepared.sheetName)」の「\(prepared.transactionTitle)」を変更しますか？\n\(changes)")
@@ -100,7 +116,7 @@ struct SiriEditTransactionIntent: AppIntent {
     @MainActor
     private func requestMissingEditValues() throws {
         if newTitle == nil, newAmount == nil, currencyCode == nil, newDate == nil,
-           category == nil, payer == nil, split == nil, beneficiaries?.isEmpty != false {
+           category == nil, newCategoryName == nil, payer == nil, split == nil, beneficiaries?.isEmpty != false {
             let (_, row, _) = try SiriTransactionEditStore.target(transaction.id, in: sheet.id)
             let fields = WatchTransactionEditField.allCases.filter { $0 != .split || row.kind == .expense }
             guard let editField else {

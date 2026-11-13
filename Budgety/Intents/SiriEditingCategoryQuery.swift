@@ -40,14 +40,19 @@ struct SiriEditingCategoryQuery: EntityStringQuery {
     @MainActor
     private func choices(matching string: String) throws -> [ExpenseCategoryEntity] {
         guard let (access, row, _) = try target() else { return [] }
-        let query = Self.searchKey(string)
+        return try Self.choices(for: row, access: access, matching: string)
+    }
+
+    @MainActor
+    static func choices(for row: Expense, access: IntentSheetAccess, matching string: String, exact: Bool = false) throws -> [ExpenseCategoryEntity] {
+        let query = searchKey(string)
         let unassigned = ExpenseCategoryEntity.skipEntity()
         let aliases = [unassigned.name, String(localized: "未分類")]
-        var choices: [ExpenseCategoryEntity] = query.isEmpty || aliases.contains(where: { Self.searchKey($0).contains(query) })
+        var choices: [ExpenseCategoryEntity] = query.isEmpty || aliases.contains(where: { (exact ? Self.searchKey($0) == query : Self.searchKey($0).contains(query)) })
             ? [unassigned] : []
         for item in try Self.labeledCategories(for: row, access: access) {
             guard Self.allows(item.category, for: row, access: access),
-                  query.isEmpty || Self.searchKey(item.label).contains(query) else { continue }
+                  query.isEmpty || (exact ? (searchKey(item.category.displayName) == query || searchKey(item.label) == query) : searchKey(item.label).contains(query)) else { continue }
             choices.append(item.entity)
         }
         return choices

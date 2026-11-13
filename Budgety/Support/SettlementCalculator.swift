@@ -37,6 +37,8 @@ struct SettlementTransfer: Identifiable, Hashable {
 struct SettlementResult {
     let currencyCode: String
     let balances: [MemberBalance]
+    /// Gross amount paid for other beneficiaries, before any settlement payments.
+    let originalAdvances: [String: Decimal]
     let transfers: [SettlementTransfer]
     /// FX 換算でレートが見つからずスキップした通貨
     let missingRateCurrencies: Set<String>
@@ -248,6 +250,7 @@ enum SettlementCalculator {
 
         var missing: Set<String> = []
         var includedCount = 0
+        var originalAdvances: [String: Decimal] = [:]
         var debugRows: [SettlementDebugInfo.ExpenseRow] = []
 
         // カテゴリ別集計用 (key = displayName)。fx 換算後の金額を加算する。
@@ -363,6 +366,7 @@ enum SettlementCalculator {
                 }
                 // ペア集計: 受益者 (payer 自身を除く) は payer に perShare を借りる
                 for b in normalizedBeneficiaries where b != payer {
+                    originalAdvances[payer, default: 0] += perShare
                     addPairDebt(&pairDebts, from: b, to: payer, amount: perShare)
                 }
                 // 精算対象としてカウントするのは「割り勘設定された (= 受益者がいる)」
@@ -439,6 +443,7 @@ enum SettlementCalculator {
                 balances[payer, default: 0] += perShare * Decimal(normalizedBeneficiaries.count)
                 for b in normalizedBeneficiaries { balances[b, default: 0] -= perShare }
                 for b in normalizedBeneficiaries where b != payer {
+                    originalAdvances[payer, default: 0] += perShare
                     addPairDebt(&pairDebts, from: b, to: payer, amount: perShare)
                 }
                 includedCount += 1
@@ -545,6 +550,7 @@ enum SettlementCalculator {
         return SettlementResult(
             currencyCode: target,
             balances: memberBalances,
+            originalAdvances: originalAdvances,
             transfers: transfers,
             missingRateCurrencies: missing,
             includedExpenseCount: includedCount,

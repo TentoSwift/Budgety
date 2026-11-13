@@ -9,10 +9,10 @@ import Foundation
 #endif
 struct SiriListCategoriesIntent: AppIntent {
     static let title: LocalizedStringResource = "シートのカテゴリを表示"
-    static let description = IntentDescription("「家計のカテゴリ一覧」「どんな収入カテゴリがある？」に、シートのカテゴリ名とアイコンを一覧カードで返します。", searchKeywords: ["カテゴリ一覧", "カテゴリー", "分類"])
+    static let description = IntentDescription("「家計のカテゴリ一覧」「どんな収入カテゴリがある？」など、利用できるカテゴリの一覧を明示的に求めたときに、シートのカテゴリ名とアイコンを一覧カードで返します。", searchKeywords: ["カテゴリ一覧", "カテゴリー一覧", "利用できるカテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
-    @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
+    @Parameter(title: "シート", description: "カテゴリの一覧を表示するシート。変更する明細の指定ではありません。") var sheet: ExpenseSheetEntity?
     @Parameter(title: "種別", description: "支出か収入が指定された場合だけ設定します。") var kind: TransactionKind?
 
     @MainActor
@@ -37,11 +37,11 @@ struct SiriListCategoriesIntent: AppIntent {
 #endif
 struct SiriAddCategoryIntent: AppIntent {
     static let title: LocalizedStringResource = "シートにカテゴリを追加"
-    static let description = IntentDescription("「家計に習い事という支出カテゴリを追加」や「副業を収入カテゴリにして」に、指定したシートにカテゴリを作成します。", searchKeywords: ["カテゴリを作成", "カテゴリを登録", "カテゴリー追加"])
+    static let description = IntentDescription("「家計に習い事という支出カテゴリを追加」「副業という収入カテゴリを新しく作成」など、新しいカテゴリ自体の作成を明示的に求めたときに、指定したシートにカテゴリを追加します。", searchKeywords: ["カテゴリを作成", "カテゴリを登録", "カテゴリー追加"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
-    @Parameter(title: "カテゴリ名") var name: String
+    @Parameter(title: "カテゴリ名", description: "新しく作成するカテゴリの名前。明細に割り当てる既存のカテゴリ名ではありません。") var name: String
     @Parameter(title: "種別", description: "種別が省略された場合は支出です。") var kind: TransactionKind?
 
     @MainActor

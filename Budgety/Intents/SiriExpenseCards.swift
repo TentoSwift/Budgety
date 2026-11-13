@@ -64,8 +64,9 @@ struct SiriListedTransactionEntity: AppEntity {
         id = identifier
         title = row.title
         date = row.date
-        amount = row.signedAmount ?? row.amount
-        if let currency = row.foreignCurrencyCode { amount += " " + currency }
+        amount = row.signedOriginal
+        if let conversion = row.convertedAmount { amount += "（" + conversion + "）" }
+        else if let currency = row.foreignCurrencyCode { amount += " " + currency }
         category = row.category
         payerName = row.payerName
         kind = row.transactionKind
@@ -135,6 +136,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     @Property(title: "金額") var amount: String
     @Property(title: "支払者・受取者") var payerName: String?
     @Property(title: "外貨の通貨コード") var foreignCurrencyCode: String?
+    @Property(title: "換算額") var convertedAmount: String?
 
     // Watch snippets reload these presentation fields from the store when invoked.
     #if os(watchOS)
@@ -191,12 +193,22 @@ struct SiriExpenseCardRow: TransientAppEntity {
         #else
         let image = DisplayRepresentation.Image(systemName: categorySymbol.isEmpty ? "tag.slash" : categorySymbol)
         #endif
-        return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)", image: image)
+        let detail = convertedAmount.map { "\(amount)（\($0)）" } ?? amount
+        return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(detail)", image: image)
+    }
+
+    var signedOriginal: String {
+        if convertedAmount != nil {
+            // Include the ISO code on both sides of a conversion, even when both currencies use "$".
+            return (transactionKind == .expense ? "−" : "+") + amount
+        }
+        return signedAmount ?? amount
     }
 
     @MainActor
     static func from(_ transaction: Expense, in sheet: ExpenseSheet, isSoloSheet: Bool,
-                     virtualIdentifier: String? = nil, includePayerPhoto: Bool = true) -> Self {
+                     virtualIdentifier: String? = nil, includePayerPhoto: Bool = true,
+                     valuation: SiriTransactionValue? = nil) -> Self {
         let currency = transaction.resolvedCurrencyCode.uppercased()
         let category = transaction.categoryDisplayName
         let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet, includePhoto: includePayerPhoto)
@@ -208,7 +220,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
         #else
         let categoryIcon: IntentFile? = nil
         #endif
-        return Self(
+        let row = Self(
             title: transaction.displayTitle.isEmpty ? category : transaction.displayTitle,
             date: transaction.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明"),
             category: category,
@@ -222,6 +234,9 @@ struct SiriExpenseCardRow: TransientAppEntity {
             expenseIdentifier: virtualIdentifier ?? transaction.objectID.uriRepresentation().absoluteString,
             editableTransaction: editableTransaction, categoryIcon: categoryIcon
         )
+        let value = valuation ?? SiriTransactionValue(.expense(transaction), target: sheet.resolvedDefaultCurrencyCode)
+        row.convertedAmount = value.conversion()
+        return row
     }
 }
 
@@ -234,10 +249,14 @@ struct SiriExpenseCardResult: TransientAppEntity {
     @Property(title: "対象期間") var period: String
     @Property(title: "検索した明細名") var expenseName: String
     @Property(title: "該当件数") var count: Int
-    @Property(title: "通貨別の合計") var total: String
+    @Property(title: "合計") var total: String
     @Property(title: "収入") var incomeTotal: String?
     @Property(title: "支出") var expenseTotal: String?
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
+    @Property(title: "続けて質問する集計条件") var questionContext: SiriLedgerQuestionContext?
+    @ComputedProperty(title: "この1件の編集対象") var editableTransaction: SiriEditableTransactionEntity? {
+        count == 1 ? rows.first?.editableTransaction : nil
+    }
 
     #if os(watchOS)
     var sheetSymbol: String?
@@ -280,6 +299,10 @@ struct SiriMemberCardResult: TransientAppEntity {
     @Property(title: "収支") var netTotal: String?
     @Property(title: "該当件数") var count: Int
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
+    @Property(title: "続けて質問する集計条件") var questionContext: SiriLedgerQuestionContext?
+    @ComputedProperty(title: "この1件の編集対象") var editableTransaction: SiriEditableTransactionEntity? {
+        count == 1 ? rows.first?.editableTransaction : nil
+    }
 
     #if os(watchOS)
     var memberColorHex = ""
@@ -696,18 +719,26 @@ struct SiriExpenseCardView: View {
                 if let payer = item.payerName, !payer.isEmpty {
                     Text(verbatim: payer).font(.caption2).foregroundStyle(secondaryInk)
                 }
-                let amount = item.signedAmount ?? item.amount
-                Text(verbatim: item.foreignCurrencyCode.map { "\(amount) \($0)" } ?? amount)
+                let amount = item.signedOriginal
+                let code = item.convertedAmount == nil ? item.foreignCurrencyCode : nil
+                Text(verbatim: code.map { "\(amount) \($0)" } ?? amount)
                     .font(.caption.monospacedDigit())
+                if let converted = item.convertedAmount {
+                    Text(verbatim: converted).font(.caption2.monospacedDigit()).foregroundStyle(secondaryInk)
+                }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
         .accessibilityElement(children: .combine)
         #else
         let amount = VStack(alignment: .trailing, spacing: 2) {
-            Text(verbatim: item.signedAmount ?? item.amount)
+            Text(verbatim: item.signedOriginal)
                 .font(.subheadline.monospacedDigit())
-            if let code = item.foreignCurrencyCode {
+            if let converted = item.convertedAmount {
+                Text(verbatim: converted)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(secondaryInk)
+            } else if let code = item.foreignCurrencyCode {
                 Text(verbatim: code)
                     .font(.caption2)
                     .foregroundStyle(secondaryInk)

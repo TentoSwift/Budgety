@@ -195,10 +195,11 @@ enum RecurringOccurrenceService {
         in range: ClosedRange<Date>? = nil,
         includeFuture: Bool = false,
         futureHorizon: Date? = nil,
+        projectUnmaterialized: Bool = false,
         calendar: Calendar = .current
     ) -> [RecurringOccurrence] {
         guard featureEnabled else { return [] }          // 機能オフ: 仮想ゼロ (既存ルールは休眠)
-        guard virtualizationEnabled else { return [] }   // OFF: 完全ハイブリッド (仮想ゼロ)
+        guard virtualizationEnabled || projectUnmaterialized else { return [] }   // OFF: 完全ハイブリッド (仮想ゼロ)
         let rules = (sheet.recurringRules as? Set<RecurringRule>) ?? []
         guard !rules.isEmpty else { return [] }
 

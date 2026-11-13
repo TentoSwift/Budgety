@@ -5,10 +5,19 @@ import Foundation
 import SwiftUI
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-struct SiriExpenseDetailsIntent: AppIntent {
+struct SiriExpenseDetailsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "支出名で明細を確認"
-    static let description = IntentDescription("指定したシートの支出を支出名、カテゴリ名、日付、月で探し、通貨別の合計、直近3件と残り件数をテキストで返します。明細をすべて求められたときは全件を返します。")
+    static let description = IntentDescription("指定したシートの支出を支出名、カテゴリ名、日付、月で探し、シートの既定通貨での合計、直近3件と残り件数をテキストで返します。明細をすべて求められたときは全件を返します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
+    var targetCurrency: String?
+    @Parameter(title: "記録時の通貨", description: "「ドルで払った分だけ」はUSD。この通貨で記録された明細に絞ります。", optionsProvider: SiriCurrencyOptions())
+    var sourceCurrency: String?
+    @Parameter(title: "外貨のみ", description: "シートの既定通貨と異なる通貨で記録された明細だけを選びます。")
+    var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計", description: "「通貨別で」と明示されたとき、記録時の通貨別に合計を返します。")
+    var groupByOriginal: Bool?
 
     @Parameter(title: "シート", description: "シート名を指定された場合だけ設定します。省略時は最後に開いたシートを使い、特定できなければ選択を求めます。")
     var sheet: ExpenseSheetEntity?
@@ -31,12 +40,13 @@ struct SiriExpenseDetailsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetIntent {
         // Existing personal shortcuts consume this action's text output.
+        let currency = try currencyOptions()
         let request = SiriTransactionReplyRequest(expenseName)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day, period: period, unnamedPeriod: .allTime, isSpokenQuery: request.requestsAll)
-        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, showAll: showAllInReply ?? request.requestsAll) {
+        let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, showAll: showAllInReply ?? request.requestsAll, currency: currency) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, currency: currency)
         return .result(value: result.report, dialog: IntentDialog("\(result.report)"), snippetIntent: snippet)
     }
 }
@@ -44,11 +54,20 @@ struct SiriExpenseDetailsIntent: AppIntent {
 #if os(iOS) || os(macOS)
 @available(iOS 27.3, macOS 27.3, *)
 @AppIntent(.tool)
-struct SiriListTransactionsIntent: AppIntent {
+struct SiriListTransactionsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "すべての明細を一覧で表示"
     static let description = IntentDescription("「全件を一覧で表示」「すべての明細を見せて」のように、全件の一覧を明示したときの検索です。「全期間」は検索期間の指定です。各明細を新しい順で返します。通常の支出・収入・収支の質問には「シートの収入・支出を検索して表示」を使います。", searchKeywords: ["全件一覧", "すべての明細"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     static let supportedModes: IntentModes = .background
+
+    @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
+    var targetCurrency: String?
+    @Parameter(title: "記録時の通貨", description: "「ドルで払った分だけ」はUSD。この通貨で記録された明細に絞ります。", optionsProvider: SiriCurrencyOptions())
+    var sourceCurrency: String?
+    @Parameter(title: "外貨のみ", description: "シートの既定通貨と異なる通貨で記録された明細だけを選びます。")
+    var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計", description: "「通貨別で」と明示されたとき、記録時の通貨別に合計を返します。")
+    var groupByOriginal: Bool?
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は指定したメンバーのシート、または最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
@@ -71,6 +90,7 @@ struct SiriListTransactionsIntent: AppIntent {
         let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet, member: member) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を一覧にしますか？")
         }
+        let currency = try currencyOptions()
         let request = SiriTransactionReplyRequest(expenseName)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day, period: period, isSpokenQuery: request.requestsAll)
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
@@ -82,14 +102,14 @@ struct SiriListTransactionsIntent: AppIntent {
         }
         let ledger = try SiriTransactionLedger.read(sheet: selected, access: access, interval: filter.scope.interval,
                                                     includeExpenses: selection.includesExpenses, includeIncome: selection.includesIncome,
-                                                    expenseName: filter.name, categoryName: filter.categoryName, allRows: true,
+                                                    expenseName: filter.name, categoryName: filter.categoryName, allRows: true, currency: currency,
                                                     matchesPayer: { payer?.matches($0) ?? true })
         let reply = ledger.reply(for: selection, sheetName: selected.displayName, period: filter.scope.label,
                                  member: member?.name, category: filter.categoryName, name: filter.name,
                                  showAll: showAllInReply ?? request.requestsAll)
         let entities = try ledger.rows.map(SiriListedTransactionEntity.init(row:))
         let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, filter: filter, kind: selection,
-                                                     memberIdentifier: member?.id)
+                                                     memberIdentifier: member?.id, currency: currency)
         return .result(value: entities, dialog: IntentDialog("\(reply)"), snippetIntent: snippet)
     }
 }
@@ -114,10 +134,19 @@ struct SiriListMemberQuery: SheetScopedMemberQuery {
 #if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
-struct SiriFindExpenseCardsIntent: AppIntent {
+struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
     static let description = IntentDescription("「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
+    var targetCurrency: String?
+    @Parameter(title: "記録時の通貨", description: "「ドルで払った分だけ」はUSD。この通貨で記録された明細に絞ります。", optionsProvider: SiriCurrencyOptions())
+    var sourceCurrency: String?
+    @Parameter(title: "外貨のみ", description: "シートの既定通貨と異なる通貨で記録された明細だけを選びます。")
+    var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計", description: "「通貨別で」と明示されたとき、記録時の通貨別に合計を返します。")
+    var groupByOriginal: Bool?
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
@@ -144,6 +173,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
         #if os(watchOS)
         let defaultKind: SiriTransactionSelection = .expense
         let isSpokenQuery = member == nil && expenseName == nil && categoryName == nil && kind == nil && month == nil && day == nil && period == nil && showAllInReply != true
+            && targetCurrency == nil && sourceCurrency == nil && foreignOnly != true && groupByOriginal != true
         let search = isSpokenQuery
             ? try await $expenseName.requestValue("何を検索しますか？「今日の収支」「今月の食費」やお店の名前をどうぞ。")
             : expenseName
@@ -152,14 +182,15 @@ struct SiriFindExpenseCardsIntent: AppIntent {
         let isSpokenQuery = false
         let search = expenseName
         #endif
+        let currency = try currencyOptions()
         let request = SiriTransactionReplyRequest(search)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day,
                                             period: period, isSpokenQuery: isSpokenQuery || request.requestsAll)
         let selection = filter.spokenKind ?? kind ?? defaultKind
-        let result = try await SiriExpenseLookup.run(sheet: sheet, member: member, filter: filter, kind: selection, showAll: showAllInReply ?? request.requestsAll) {
+        let result = try await SiriExpenseLookup.run(sheet: sheet, member: member, filter: filter, kind: selection, showAll: showAllInReply ?? request.requestsAll, currency: currency) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を検索しますか？")
         }
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection, memberIdentifier: member?.id)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection, memberIdentifier: member?.id, currency: currency)
         return .result(value: result.card, dialog: IntentDialog("\(result.report)"),
                        snippetIntent: snippet)
     }
@@ -181,9 +212,14 @@ struct SiriCardMemberQuery: SheetScopedMemberQuery {
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-struct SiriExpenseResultsSnippetIntent: SnippetIntent {
+struct SiriExpenseResultsSnippetIntent: SnippetIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "支出明細のカードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨") var targetCurrency: String?
+    @Parameter(title: "記録時の通貨") var sourceCurrency: String?
+    @Parameter(title: "外貨のみ") var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計") var groupByOriginal: Bool?
 
     @Parameter(title: "シートの識別子") var sheetIdentifier: String
     @Parameter(title: "メンバーの識別子") var memberIdentifier: String?
@@ -199,19 +235,20 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     init() {}
 
     init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense,
-         memberIdentifier: String? = nil) {
-        self.init(sheetIdentifier: sheetIdentifier, scope: filter.scope, categoryName: filter.categoryName, kind: kind)
+         memberIdentifier: String? = nil, currency: SiriLedgerCurrency = .init()) {
+        self.init(sheetIdentifier: sheetIdentifier, scope: filter.scope, categoryName: filter.categoryName, kind: kind, currency: currency)
         self.expenseName = filter.name
         self.memberIdentifier = memberIdentifier
     }
 
-    init(sheetIdentifier: String, scope: SiriExpenseScope, categoryName: String?, kind: SiriTransactionSelection) {
+    init(sheetIdentifier: String, scope: SiriExpenseScope, categoryName: String?, kind: SiriTransactionSelection, currency: SiriLedgerCurrency = .init()) {
         self.kind = kind
         self.sheetIdentifier = sheetIdentifier
         self.categoryName = categoryName
         self.intervalStart = scope.interval?.start
         self.intervalEnd = scope.interval?.end
         self.periodLabel = scope.label
+        restoreCurrencyOptions(currency)
     }
 
     @MainActor
@@ -234,7 +271,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         }
         let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName,
                                                  interval: interval, periodLabel: label, kind: kind ?? .expense,
-                                                 memberIdentifier: memberIdentifier)
+                                                 memberIdentifier: memberIdentifier, currency: currencyOptions())
         return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
@@ -276,10 +313,10 @@ enum SiriExpenseLookup {
     }
 
     @MainActor
-    static func run(sheet: ExpenseSheetEntity?, member: SiriSheetMemberEntity? = nil, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense, showAll: Bool,
+    static func run(sheet: ExpenseSheetEntity?, member: SiriSheetMemberEntity? = nil, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense, showAll: Bool, currency: SiriLedgerCurrency = .init(),
                     choosing: ([ExpenseSheetEntity]) async throws -> ExpenseSheetEntity) async throws -> Result {
         let sheetID = try await sheetIdentifier(sheet: sheet, member: member, choosing: choosing)
-        return try search(sheetID: sheetID, expenseName: filter.name, categoryName: filter.categoryName, interval: filter.scope.interval, periodLabel: filter.scope.label, kind: kind, showAll: showAll, memberIdentifier: member?.id)
+        return try search(sheetID: sheetID, expenseName: filter.name, categoryName: filter.categoryName, interval: filter.scope.interval, periodLabel: filter.scope.label, kind: kind, showAll: showAll, memberIdentifier: member?.id, currency: currency)
     }
 
     @MainActor
@@ -306,7 +343,7 @@ enum SiriExpenseLookup {
     @MainActor
     static func search(sheetID: String, expenseName: String?, categoryName: String? = nil, interval: DateInterval?, periodLabel period: String,
                        kind: SiriTransactionSelection = .expense, showAll: Bool = false,
-                       memberIdentifier: String? = nil) throws -> Result {
+                       memberIdentifier: String? = nil, currency: SiriLedgerCurrency = .init()) throws -> Result {
         // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
         let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
@@ -320,7 +357,7 @@ enum SiriExpenseLookup {
         }
         let ledger = try SiriTransactionLedger.read(sheet: record, access: access, interval: interval,
                                                     includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome,
-                                                    expenseName: name, categoryName: category, allRows: showAll,
+                                                    expenseName: name, categoryName: category, allRows: showAll, currency: currency,
                                                     matchesPayer: { person?.payer.matches($0) ?? true })
         let report = ledger.reply(for: kind, sheetName: record.displayName, period: period, member: person?.name,
                                   category: category.isEmpty ? nil : category, name: name.isEmpty ? nil : name, showAll: showAll)
@@ -330,9 +367,14 @@ enum SiriExpenseLookup {
         case .income: amounts = ledger.incomeTotal
         case .both: amounts = String(localized: "収支 \(ledger.netTotal)")
         }
-        var card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name.isEmpty ? category : name,
+        let card = SiriExpenseCardResult(sheetName: record.displayName, period: currency.periodLabel(period), expenseName: name.isEmpty ? category : name,
                                          count: ledger.count, total: amounts, rows: ledger.rows,
                                          sheetSymbol: record.displaySymbol, sheetColorHex: record.displayColorHex)
+        card.questionContext = try SiriLedgerQuestionContext(sheetID: sheetID, interval: interval, period: period, kind: kind,
+            name: name.isEmpty ? nil : name, category: category.isEmpty ? nil : category, memberID: memberIdentifier,
+            sourceCurrency: currency.sourceCurrency, targetCurrency: currency.targetCurrency, foreignOnly: currency.foreignOnly,
+            grouped: currency.groupByOriginal, singleID: ledger.count == 1 ? ledger.rows.first?.expenseIdentifier : nil)
+        card.questionContext?.editableTransaction = card.editableTransaction
         if kind == .both {
             card.incomeTotal = ledger.incomeTotal
             card.expenseTotal = ledger.expenseTotal
@@ -340,13 +382,5 @@ enum SiriExpenseLookup {
         return Result(sheetID: sheetID, report: report, card: card)
     }
 
-    @MainActor
-    static func dueExpenses(in sheet: ExpenseSheet, interval: DateInterval?) -> [RecurringOccurrence] {
-        let range = interval.map { $0.start...$0.end }
-        // The ledger excludes materialized, skipped and future slots. Its range includes both ends.
-        return RecurringOccurrenceService.virtualOccurrences(for: sheet, in: range, includeFuture: false).filter { occurrence in
-            occurrence.kind == .expense && (interval.map { occurrence.date < $0.end } ?? true)
-        }
-    }
 }
 #endif

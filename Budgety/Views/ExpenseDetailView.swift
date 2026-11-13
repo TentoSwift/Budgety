@@ -7,6 +7,10 @@
 //
 
 import SwiftUI
+#if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+import AppIntents
+import CoreData
+#endif
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -55,6 +59,17 @@ struct ExpenseDetailView: View {
                 }
             }
         }
+        #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
+        .appEntityUIElements { context in
+            guard #available(iOS 27.3, *), !isVirtualDraft, !expense.objectID.isTemporaryID,
+                  let sheet = expense.sheet, let viewContext = expense.managedObjectContext,
+                  let access = try? IntentSheetAccess(checking: viewContext),
+                  (try? access.transactionForDisplay(identifier: expense.objectID.uriRepresentation().absoluteString)) != nil,
+                  (try? access.resolve(sheet.objectID.uriRepresentation().absoluteString)) != nil else { return [] }
+            let id = EntityIdentifier(for: SiriEditableTransactionEntity.self, identifier: expense.objectID.uriRepresentation().absoluteString)
+            return [AppEntityUIElement(identifier: id, bounds: context.bounds, state: .init(isSelected: true))]
+        }
+        #endif
         .navigationTitle("詳細")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

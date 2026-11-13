@@ -158,10 +158,19 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
 #if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
-struct SiriMonthlySpendingIntent: AppIntent {
+struct SiriMonthlySpendingIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "シートの支出額を確認"
     static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。「今月の食費はいくら？」では食費カテゴリだけを集計します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
+    var targetCurrency: String?
+    @Parameter(title: "記録時の通貨", description: "「ドルで払った分だけ」はUSD。この通貨で記録された明細に絞ります。", optionsProvider: SiriCurrencyOptions())
+    var sourceCurrency: String?
+    @Parameter(title: "外貨のみ", description: "シートの既定通貨と異なる通貨で記録された明細だけを選びます。")
+    var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計", description: "「通貨別で」と明示されたとき、記録時の通貨別に合計を返します。")
+    var groupByOriginal: Bool?
 
     @Parameter(title: "シート", description: "集計したいシート。省略すると最後に開いたシートを使います。")
     var sheet: ExpenseSheetEntity?
@@ -185,34 +194,16 @@ struct SiriMonthlySpendingIntent: AppIntent {
         let record = try access.resolve(sheetID)
         let scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period).scope
         let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let term = TransactionSearchTerm(category)
-        var totals = record.convertedTotals { expense in
-            guard expense.kind == .expense, !expense.isSkipped,
-                  term.isEmpty || term.matchesCategory(expense.categoryDisplayName) else { return false }
-            guard let interval = scope.interval else { return true }
-            guard let paidOn = expense.date else { return false }
-            return interval.start <= paidOn && paidOn < interval.end
-        }
-        let target = record.resolvedDefaultCurrencyCode
-        for occurrence in SiriExpenseLookup.dueExpenses(in: record, interval: scope.interval)
-            where term.isEmpty || term.matchesCategory(occurrence.categoryDisplayName) {
-            if let amount = FXRatesService.shared.convert(occurrence.amount, from: occurrence.currencyCode, to: target) {
-                totals.expense += amount
-            } else {
-                totals.missing.insert(occurrence.currencyCode)
-            }
-        }
-        let amount = CurrencyCatalog.format(totals.expense, code: target)
-        let periodLabel = category.isEmpty ? scope.label : String(localized: "\(scope.label)のカテゴリ「\(category)」")
-        let report: LocalizedStringResource
-        if totals.missing.isEmpty {
-            report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。"
-        } else {
-            let currencies = totals.missing.sorted().joined(separator: ", ")
-            report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。為替レートを取得できない通貨（\(currencies)）の明細は合計に含まれていません。"
-        }
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, scope: scope, categoryName: category, kind: .expense)
-        return .result(value: String(localized: report), dialog: IntentDialog(report), snippetIntent: snippet)
+        let currency = try currencyOptions()
+        let ledger = try SiriTransactionLedger.read(sheet: record, access: access, interval: scope.interval,
+                                                    includeExpenses: true, includeIncome: false,
+                                                    categoryName: category, currency: currency)
+        let scopeLabel = currency.periodLabel(scope.label)
+        let periodLabel = category.isEmpty ? scopeLabel : String(localized: "\(scopeLabel)のカテゴリ「\(category)」")
+        let report = String(localized: "「\(record.displayName)」の\(periodLabel)の支出は\(ledger.expenseTotal)です。")
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, scope: scope, categoryName: category,
+                                                     kind: .expense, currency: currency)
+        return .result(value: report, dialog: IntentDialog("\(report)"), snippetIntent: snippet)
     }
 }
 #endif

@@ -22,10 +22,19 @@ enum SiriTransactionSelection: String, AppEnum {
 #if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
-struct SiriFindMemberTransactionsIntent: AppIntent {
+struct SiriFindMemberTransactionsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "人別に収入と支出を検索"
     static let description = IntentDescription("「はるさんの今月の支出は？」「私の収入は？」「はるさんの収入と支出を見せて」のように、家計簿のメンバー別に明細を検索し、写真と名前の付いたカードで返します。支出は支払った人、収入は受け取った人で検索します。", searchKeywords: ["メンバー", "収支", "支出", "収入"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
+    var targetCurrency: String?
+    @Parameter(title: "記録時の通貨", description: "「ドルで払った分だけ」はUSD。この通貨で記録された明細に絞ります。", optionsProvider: SiriCurrencyOptions())
+    var sourceCurrency: String?
+    @Parameter(title: "外貨のみ", description: "シートの既定通貨と異なる通貨で記録された明細だけを選びます。")
+    var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計", description: "「通貨別で」と明示されたとき、記録時の通貨別に合計を返します。")
+    var groupByOriginal: Bool?
 
     @Parameter(title: "シート", description: "発話で指定されたシート。省略時は選んだメンバーのシートを使います。")
     var sheet: ExpenseSheetEntity?
@@ -50,21 +59,27 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
 
     @MainActor
     func search() throws -> (lookup: SiriMemberTransactionLookup.Result, snippet: SiriMemberResultsSnippetIntent) {
+        let currency = try currencyOptions()
         let selection = kind ?? .both
         let scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period).scope
         guard let separator = member.id.firstIndex(of: "#") else { throw AppIntentError.sheetNotFound }
         let sheetID = String(member.id[..<separator])
         guard sheet == nil || sheet?.id == sheetID else { throw AppIntentError.sheetNotFound }
         let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: member.id,
-                                                           scope: scope, kind: selection, showAll: showAllInReply == true)
-        return (result, SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id, kind: selection, scope: scope))
+                                                           scope: scope, kind: selection, showAll: showAllInReply == true, currency: currency)
+        return (result, SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id, kind: selection, scope: scope, currency: currency))
     }
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-struct SiriMemberResultsSnippetIntent: SnippetIntent {
+struct SiriMemberResultsSnippetIntent: SnippetIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "メンバーの収支カードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "表示通貨") var targetCurrency: String?
+    @Parameter(title: "記録時の通貨") var sourceCurrency: String?
+    @Parameter(title: "外貨のみ") var foreignOnly: Bool?
+    @Parameter(title: "通貨別の合計") var groupByOriginal: Bool?
 
     @Parameter(title: "シートの識別子") var sheetID: String
     @Parameter(title: "メンバーの識別子") var memberID: String
@@ -75,13 +90,14 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
 
     init() {}
 
-    init(sheetID: String, memberID: String, kind: SiriTransactionSelection, scope: SiriExpenseScope) {
+    init(sheetID: String, memberID: String, kind: SiriTransactionSelection, scope: SiriExpenseScope, currency: SiriLedgerCurrency = .init()) {
         self.sheetID = sheetID
         self.memberID = memberID
         self.kind = kind
         periodLabel = scope.label
         start = scope.interval?.start
         end = scope.interval?.end
+        restoreCurrencyOptions(currency)
     }
 
     @MainActor
@@ -97,7 +113,7 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
         }
         let scope = SiriExpenseScope(interval: interval, label: periodLabel, isDay: false)
         let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: memberID,
-                                                           scope: scope, kind: kind)
+                                                           scope: scope, kind: kind, currency: currencyOptions())
         return .result(view: SiriExpenseCardView(member: result.card))
     }
 }
