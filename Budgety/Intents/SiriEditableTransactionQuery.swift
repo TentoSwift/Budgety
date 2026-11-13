@@ -27,24 +27,6 @@ struct SiriEditableTransactionEntity: AppEntity {
     @MainActor
     static func from(_ expense: Expense) -> Self { Self(expense) }
 
-    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-    func withoutEmbeddedCategoryImage() -> Self { Self(listedCopy: self) }
-
-    // EntityProperty is a reference type; build fresh wrappers instead of
-    // mutating the image on a shallow copy shared with the original result.
-    private init(listedCopy source: Self) {
-        id = source.id
-        categorySymbol = source.categorySymbol
-        categoryIcon = nil
-        sheetID = source.sheetID
-        sheetName = source.sheetName
-        title = source.title
-        date = source.date
-        amount = source.amount
-        kindName = source.kindName
-    }
-    #endif
-
     @MainActor
     private init(_ expense: Expense) {
         id = expense.objectID.uriRepresentation().absoluteString

@@ -33,16 +33,6 @@ enum SiriTransactionCategoryIcon {
         if let data = file?.data { return .init(data: data, isTemplate: false, displayStyle: .circular) }
         return .init(systemName: symbol.isEmpty ? "tag.slash" : symbol)
     }
-
-    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-    static func thumbnail(symbol: String, colorHex: String) -> DisplayRepresentation.Image {
-        guard let data = file(symbol: symbol, colorHex: colorHex)?.data, !data.isEmpty else {
-            return image(nil, symbol: symbol)
-        }
-        SiriCompactExperimentDiagnostics.record(.thumbnailResolved)
-        return .init(data: data, isTemplate: false, displayStyle: .circular)
-    }
-    #endif
 }
 
 @available(iOS 27.3, macOS 27.3, *)
@@ -79,54 +69,20 @@ struct SiriListedTransactionEntity: AppEntity {
         category = row.category
         payerName = row.payerName
         kind = row.transactionKind
+        editableTransaction = row.editableTransaction
         categorySymbol = row.categorySymbol
         categoryColorHex = row.categoryColorHex
-        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-        // Keep the editable entity and its identifiers for follow-up requests, but
-        // avoid transferring the same category PNG twice for every listed row.
-        editableTransaction = row.editableTransaction?.withoutEmbeddedCategoryImage()
-        categoryIcon = nil
-        #else
-        editableTransaction = row.editableTransaction
         categoryIcon = SiriTransactionCategoryIcon.file(symbol: row.categorySymbol, colorHex: row.categoryColorHex)
-        #endif
     }
 
     var displayRepresentation: DisplayRepresentation {
-        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-        SiriCompactExperimentDiagnostics.record(.representationRequested)
-        // Capture only lightweight values. Rasterize only when the system
-        // materializes this representation's image component.
-        let symbol = categorySymbol
-        let color = categoryColorHex
-        return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)", image: {
-            await SiriTransactionCategoryIcon.thumbnail(symbol: symbol, colorHex: color)
-        })
-        #else
         DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)",
                               image: SiriTransactionCategoryIcon.image(categoryIcon, symbol: categorySymbol))
-        #endif
     }
 }
 
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriListedTransactionQuery: EntityQuery {
-    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-    @MainActor
-    func displayRepresentations(for identifiers: [String]) async throws -> [String: DisplayRepresentation] {
-        SiriCompactExperimentDiagnostics.record(.displayQueryRequested)
-        let resolved = try await entities(for: identifiers)
-        // Siri can re-fetch visible rows without evaluating a deferred image.
-        // Supply the bitmap directly for the IDs in this display-only request.
-        return resolved.reduce(into: [:]) { representations, entity in
-            let image = SiriTransactionCategoryIcon.thumbnail(symbol: entity.categorySymbol, colorHex: entity.categoryColorHex)
-            representations[entity.id] = DisplayRepresentation(
-                title: "\(entity.title)", subtitle: "\(entity.date) · \(entity.amount)", image: image
-            )
-        }
-    }
-    #endif
-
     @MainActor
     func entities(for identifiers: [String]) async throws -> [SiriListedTransactionEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
@@ -402,99 +358,35 @@ struct SiriRecordedTransaction: TransientAppEntity {
 }
 
 #if os(iOS) || os(macOS)
-#if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-// Opt-in Duo development build. The 27.3 beta exports this family but omits it
-// from the public Swift interface. Keep its symbol out of distribution builds.
-@available(iOS 27.3, *)
-private extension CardSnippetFamily {
-    static var budgetyCompact: Self {
-        @_silgen_name("$s19_AppIntents_SwiftUI17CardSnippetFamilyV7compactACvgZ")
-        get
-    }
-}
-
-// Development-only breadcrumbs for container inspection. Record only fixed
-// event names, never transaction data. Each event writes at most one file.
-nonisolated enum SiriCompactExperimentDiagnostics {
-    enum Event: String, Sendable {
-        case searchStarted
-        case searchFinished
-        case snippetRequested
-        case displayQueryRequested
-        case representationRequested
-        case thumbnailResolved
-        case legacyTextResult
-        case singleCardResult
-        case compactRowBodyEvaluated
-        case standardRowBodyEvaluated
-    }
-
-    nonisolated static func record(_ event: Event) {
-        let manager = FileManager.default
-        guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
-        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v4", isDirectory: true)
-        let file = directory.appendingPathComponent(event.rawValue + ".json")
-        guard !manager.fileExists(atPath: file.path) else { return }
-        do {
-            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
-            let payload: [String: Any] = [
-                "event": event.rawValue,
-                "timestamp": Date().timeIntervalSince1970,
-                "processID": ProcessInfo.processInfo.processIdentifier
-            ]
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            // Exclusive creation also avoids duplicate writes from concurrent
-            // entity renders. Existing markers survive subsequent app builds.
-            try data.write(to: file, options: .withoutOverwriting)
-        } catch {
-            // Diagnostics must never change the intent or snippet result.
-        }
-    }
-}
-#endif
-
 @available(iOS 27.3, macOS 27.3, *)
 extension SiriListedTransactionEntity: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
-        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-        CardSnippet(supportedFamilies: [.budgetyCompact, .standard]) { transaction, context in
-            SiriListedTransactionCard(transaction: transaction, isCompact: context.family == .budgetyCompact)
-        }
-        #else
         CardSnippet(supportedFamilies: [.standard]) { transaction, _ in
             SiriListedTransactionCard(transaction: transaction)
         }
-        #endif
     }
 }
 
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriListedTransactionCard: View {
     let transaction: SiriListedTransactionEntity
-    var isCompact = false
 
     var body: some View {
-        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-        let _ = SiriCompactExperimentDiagnostics.record(isCompact ? .compactRowBodyEvaluated : .standardRowBodyEvaluated)
-        #endif
         HStack(spacing: 12) {
             CategoryIconView(symbol: transaction.categorySymbol.isEmpty ? "tag.slash" : transaction.categorySymbol,
-                             tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: isCompact ? 30 : 38)
+                             tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: 38)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: transaction.title)
                     .font(.body.weight(.semibold))
-                    .lineLimit(isCompact ? 2 : nil)
                 Text(verbatim: "\(transaction.date) · \(transaction.amount)")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.primary.opacity(0.78))
             }
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        .padding(isCompact ? 6 : 10)
-        .background {
-            if !isCompact { RoundedRectangle(cornerRadius: 12).fill(.background) }
-        }
+        .padding(10)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
     }
 }
