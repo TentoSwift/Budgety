@@ -205,9 +205,6 @@ struct SheetDetailView: View {
     /// ピルの横パディング / アイコンスロット幅。高さと同じく Dynamic Type に追従させる。
     @ScaledMetric(relativeTo: .caption) private var filterPillHPadding: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var filterPillIconWidth: CGFloat = 24
-    #if os(iOS)
-    @State private var batchMode: BatchTransactionMode?
-    #endif
     @State private var showingAddExpense = false
     @State private var showingCSVImport = false
     @State private var showingShare = false
@@ -573,9 +570,6 @@ struct SheetDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    #if os(iOS)
-                    BatchTransactionActions(sheet: record, selection: $batchMode)
-                    #endif
                     Button { showingSettlement = true } label: {
                         Label("精算", systemImage: "arrow.left.arrow.right.circle")
                     }
@@ -687,11 +681,6 @@ struct SheetDetailView: View {
             }
         }
         }
-        #if os(iOS)
-        .sheet(item: $batchMode) { mode in
-            BatchTransactionView(sheet: record, mode: mode)
-        }
-        #endif
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(record: record)
         }

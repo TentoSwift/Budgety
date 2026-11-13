@@ -22,7 +22,6 @@ struct BudgetyMacSheetView: View {
     /// FX レート更新で月合計 / 日合計を再計算するために observe する。
     @ObservedObject private var fx = FXRatesService.shared
 
-    @State private var batchMode: BatchTransactionMode?
     @State private var showingAdd: Bool = false
     @State private var editingExpense: Expense?
     @State private var detailExpense: Expense?
@@ -335,7 +334,6 @@ struct BudgetyMacSheetView: View {
         // detail の BudgetyMacSheetView は位置が同じため再生成されず @State が残るので、
         // sheet の変化を検知して明示的にクリアする。
         .onChange(of: sheet.objectID) { _, _ in
-            batchMode = nil
             clearFilters()
         }
         // タイトルは常時シート名を表示する (ウィンドウのタイトルバー用)。
@@ -357,7 +355,6 @@ struct BudgetyMacSheetView: View {
             }
             ToolbarItem {
                 Menu {
-                    BatchTransactionActions(sheet: sheet, selection: $batchMode)
                     Button { showingSettlement = true } label: {
                         Label("精算", systemImage: "yensign.circle")
                     }
@@ -410,9 +407,6 @@ struct BudgetyMacSheetView: View {
                 .menuIndicator(.hidden)
                 .help("その他")
             }
-        }
-        .sheet(item: $batchMode) { mode in
-            BatchTransactionView(sheet: sheet, mode: mode)
         }
         .sheet(isPresented: $showingAdd) {
             MacAddExpenseView(sheet: sheet, expense: nil)

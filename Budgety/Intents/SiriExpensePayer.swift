@@ -12,7 +12,7 @@ struct SiriExpensePayer {
     let photo: IntentFile?
 
     @MainActor
-    static func snapshot(for expense: Expense, isSoloSheet: Bool, includePhoto: Bool = true) -> Self? {
+    static func snapshot(for expense: Expense, isSoloSheet: Bool) -> Self? {
         let savedID = expense.payerProfileID ?? ""
         let profileID = UserProfileStore.isSelfPlaceholderRecordName(savedID) ? "" : savedID
         let savedName = (expense.paidBy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -54,7 +54,6 @@ struct SiriExpensePayer {
         ].compactMap { $0 }.first { !$0.isEmpty } ?? String(localized: "メンバー")
         let color = participant?.colorHex ?? (isSelf ? store.avatarBgColorHex : nil)
             ?? member?.colorHex ?? "#8E8E93"
-        guard includePhoto else { return Self(name: name, colorHex: color, photo: nil) }
         let photoData = participant?.photoData ?? (isSelf ? store.photoData : nil)
             ?? cached?.photoData ?? member?.photoData
         return Self(name: name, colorHex: color, photo: thumbnail(from: photoData))

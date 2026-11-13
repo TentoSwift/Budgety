@@ -360,8 +360,6 @@ private struct WatchSummaryOptionsView: View {
 private struct WatchSheetPage: View {
     let sheet: ExpenseSheet
     @Environment(\.managedObjectContext) private var ctx
-    @State private var showingBatchOptions = false
-    @State private var batchMode: BatchTransactionMode?
     @State private var showingAdd: Bool = false
     /// 収支サマリーの期間 (端末に永続化・全シート共通)。
     @AppStorage("watchSummaryPeriod") private var periodRaw: String = WatchPeriod.thisMonth.rawValue
@@ -500,16 +498,6 @@ private struct WatchSheetPage: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if BatchTransactionActions.isAvailable(for: sheet) {
-                ToolbarItem(placement: .bottomBar) {
-                    Button { showingBatchOptions = true } label: {
-                        Label("その他", systemImage: "ellipsis")
-                    }
-                    .confirmationDialog("明細の操作", isPresented: $showingBatchOptions) {
-                        BatchTransactionActions(sheet: sheet, selection: $batchMode)
-                    }
-                }
-            }
             // 支出の追加はツールバーの + から (サマリー内のボタンは廃止)。
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -518,9 +506,6 @@ private struct WatchSheetPage: View {
                     Image(systemName: "plus")
                 }
             }
-        }
-        .sheet(item: $batchMode) { mode in
-            BatchTransactionView(sheet: sheet, mode: mode)
         }
         .sheet(isPresented: $showingAdd) {
             NavigationStack {

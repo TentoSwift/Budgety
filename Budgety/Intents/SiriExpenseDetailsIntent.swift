@@ -36,65 +36,6 @@ struct SiriExpenseDetailsIntent: AppIntent {
     }
 }
 
-#if os(iOS) || os(macOS)
-@available(iOS 27.3, macOS 27.3, *)
-@AppIntent(.tool)
-struct SiriListTransactionsIntent: AppIntent {
-    static let title: LocalizedStringResource = "明細を一覧にする"
-    static let description = IntentDescription("「今月の明細を一覧にして」「今日の食費を全部並べて」など、個々の取引の一覧を求められたとき、該当する明細を日付の新しい順にすべて返します。", searchKeywords: ["明細一覧", "全件", "取引一覧"])
-    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
-    static let supportedModes: IntentModes = .background
-
-    @Parameter(title: "シート", description: "指定されたシート。省略時は指定したメンバーのシート、または最後に開いたシートを使います。")
-    var sheet: ExpenseSheetEntity?
-    @Parameter(title: "メンバー", description: "支払った人や受け取った人で絞る場合に指定します。", optionsProvider: SiriListMemberQuery())
-    var member: SiriSheetMemberEntity?
-    @Parameter(title: "支出名・収入名", description: "お店の名前や明細名の検索語。全件を一覧にするときは省略します。")
-    var expenseName: String?
-    @Parameter(title: "カテゴリ名") var categoryName: String?
-    @Parameter(title: "対象の収支", description: "支出のみ、収入のみ、または両方。明細の一覧は両方が対象です。")
-    var kind: SiriTransactionSelection?
-    @Parameter(title: "対象月") var month: Date?
-    @Parameter(title: "対象日") var day: Date?
-    @Parameter(title: "検索期間", description: "今日・昨日・今月・先月・全期間。")
-    var period: SiriExpensePeriod?
-
-    @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<[SiriExpenseCardRow]> {
-        let sheetID: String
-        if let member {
-            guard let separator = member.id.firstIndex(of: "#") else { throw AppIntentError.missingPayer }
-            sheetID = String(member.id[..<separator])
-            guard sheet == nil || sheet?.id == sheetID else { throw AppIntentError.sheetNotFound }
-        } else {
-            sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
-                try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を一覧にしますか？")
-            }
-        }
-        let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period)
-        let search = SiriExpandedSearch(sheetID: sheetID, memberID: member?.id, name: filter.name, category: filter.categoryName,
-                                        kind: kind ?? filter.spokenKind ?? .both, interval: filter.scope.interval, period: filter.scope.label)
-        let (_, ledger) = try search.load(payerPhotoLimit: SiriTransactionOverview.maxRows)
-        return .result(value: ledger.rows)
-    }
-}
-
-@available(iOS 27.3, macOS 27.3, *)
-struct SiriListMemberQuery: SheetScopedMemberQuery {
-    typealias Entity = SiriSheetMemberEntity
-    typealias Result = [SiriSheetMemberEntity]
-    typealias DefaultValue = SiriSheetMemberEntity
-    @IntentParameterDependency<SiriListTransactionsIntent>(\.$sheet) var list
-
-    @MainActor func selectedSheetID(access: IntentSheetAccess) throws -> String? { list?.sheet.id }
-
-    @MainActor func suggestedEntities() async throws -> [SiriSheetMemberEntity] {
-        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
-        return try SiriSheetMemberRoster.searchCandidates(access: access, sheetID: selectedSheetID(access: access))
-    }
-}
-#endif
-
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 #if os(iOS) || os(macOS)
 @AppIntent(.tool)
@@ -138,7 +79,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
         }
         let supporting: LocalizedStringResource = result.card.count == 0
             ? "該当する明細はありません" : "明細が見つかりました。"
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection, search: result.card.expandedSearch)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
     }
@@ -158,12 +99,10 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     @Parameter(title: "期間の開始") var intervalStart: Date?
     @Parameter(title: "期間の終了") var intervalEnd: Date?
     @Parameter(title: "対象期間") var periodLabel: String?
-    @Parameter(title: "検索結果の表示条件") var search: String?
 
     init() {}
 
-    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense, search: String? = nil) {
-        self.search = search
+    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense) {
         self.kind = kind
         self.sheetIdentifier = sheetIdentifier
         self.expenseName = filter.name
@@ -175,7 +114,6 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
-        if let search { return .result(view: try SiriExpandedSearch.currentView(search: search)) }
         let interval: DateInterval?
         let label: String
         switch (intervalStart, intervalEnd, periodLabel) {
@@ -192,9 +130,8 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let legacySearch = try SiriExpandedSearch(sheetID: sheetIdentifier, memberID: nil, name: expenseName, category: categoryName,
-                                                  kind: kind ?? .expense, interval: interval, period: label, presentationID: nil).encoded()
-        return .result(view: try SiriExpandedSearch.currentView(search: legacySearch))
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label, kind: kind ?? .expense)
+        return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
 
@@ -303,8 +240,6 @@ enum SiriExpenseLookup {
         var card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name.isEmpty ? category : name,
                                          count: count, total: amounts, rows: rows,
                                          sheetSymbol: record.displaySymbol, sheetColorHex: record.displayColorHex)
-        card.expandedSearch = try SiriExpandedSearch(sheetID: sheetID, memberID: nil, name: name, category: category,
-                                                     kind: kind, interval: interval, period: period).encoded()
         if kind == .both {
             card.incomeTotal = ledger.incomeTotal
             card.expenseTotal = ledger.expenseTotal

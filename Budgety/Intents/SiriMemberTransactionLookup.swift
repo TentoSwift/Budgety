@@ -11,25 +11,16 @@ enum SiriMemberTransactionLookup {
         let summary: String
     }
 
-    static func ledger(in sheet: ExpenseSheet, access: IntentSheetAccess, member: SiriSheetMemberEntity,
-                       roster: SiriSheetMemberRoster, interval: DateInterval?,
-                       includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil, previewOnly: Bool,
-                       pageOffset: Int? = nil, pageSize: Int = 3, payerPhotoLimit: Int? = nil) throws -> SiriTransactionLedger {
-        let payer = Payer(member: member, roster: roster, sheet: sheet)
-        return try SiriTransactionLedger.read(sheet: sheet, access: access, interval: interval,
-                                              includeExpenses: includeExpenses, includeIncome: includeIncome,
-                                              expenseName: expenseName, categoryName: categoryName, previewOnly: previewOnly, pageOffset: pageOffset, pageSize: pageSize, payerPhotoLimit: payerPhotoLimit,
-                                              matchesPayer: payer.matches)
-    }
-
     static func search(sheetID: String, memberIdentifier: String, scope: SiriExpenseScope,
                        includeExpenses: Bool, includeIncome: Bool) throws -> Result {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let sheet = try access.resolve(sheetID)
         let roster = try SiriSheetMemberRoster(sheet: sheet, access: access)
         guard let member = roster.members.first(where: { $0.id == memberIdentifier }) else { throw AppIntentError.missingPayer }
-        let ledger = try ledger(in: sheet, access: access, member: member, roster: roster, interval: scope.interval,
-                                includeExpenses: includeExpenses, includeIncome: includeIncome, previewOnly: true)
+        let payer = Payer(member: member, roster: roster, sheet: sheet)
+        let ledger = try SiriTransactionLedger.read(sheet: sheet, access: access, interval: scope.interval,
+                                                    includeExpenses: includeExpenses, includeIncome: includeIncome,
+                                                    matchesPayer: payer.matches)
         let color: String
         let photo: Data?
         if member.isSelf {
@@ -48,10 +39,7 @@ enum SiriMemberTransactionLookup {
                                         sheetName: sheet.displayName, sheetSymbol: sheet.displaySymbol, sheetColorHex: sheet.displayColorHex,
                                         period: scope.label, expenseTotal: expenseTotal, incomeTotal: incomeTotal,
                                         count: ledger.count, rows: ledger.rows)
-        let kind: SiriTransactionSelection = includeExpenses ? (includeIncome ? .both : .expense) : .income
-        card.expandedSearch = try SiriExpandedSearch(sheetID: sheetID, memberID: memberIdentifier, name: nil, category: nil,
-                                                     kind: kind, interval: scope.interval, period: scope.label).encoded()
-        card.netTotal = kind == .both ? ledger.netTotal : nil
+        card.netTotal = includeExpenses && includeIncome ? ledger.netTotal : nil
         let totals = [card.netTotal.map { String(localized: "収支") + " " + $0 },
                       expenseTotal.map { String(localized: "支出") + " " + $0 },
                       incomeTotal.map { String(localized: "収入") + " " + $0 }].compactMap { $0 }
