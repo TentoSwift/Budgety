@@ -47,7 +47,7 @@ enum SiriMemberTransactionLookup {
     }
 
     @MainActor
-    private struct Payer {
+    struct Payer {
         let profileIDs: Set<String>
         let legacyMemberID: UUID?
         let legacyNames: Set<String>

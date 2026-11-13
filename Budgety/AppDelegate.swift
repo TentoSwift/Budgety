@@ -12,19 +12,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey),
-                                               name: UIWindow.didBecomeKeyNotification, object: nil)
         // フォアグラウンドでも割り勘通知のバナーを出すため delegate を設定。
         UNUserNotificationCenter.current().delegate = self
         // CloudKit のサイレントプッシュでバックグラウンド起動 → import → 割り勘検出ができるよう登録。
         application.registerForRemoteNotifications()
         return true
-    }
-
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
-        if let scene = (notification.object as? UIWindow)?.windowScene {
-            DeepLinkRouter.shared.presentPendingExpense(in: scene)
-        }
     }
 
     /// CloudKit のサイレントプッシュ受信。NSPersistentCloudKitContainer がバックグラウンドで
@@ -78,12 +70,6 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
 final class SceneDelegate: NSObject, UIWindowSceneDelegate {
     var window: UIWindow?
-
-    func sceneDidBecomeActive(_ scene: UIScene) {
-        if let windowScene = scene as? UIWindowScene {
-            DeepLinkRouter.shared.presentPendingExpense(in: windowScene)
-        }
-    }
 
     func scene(_ scene: UIScene,
                willConnectTo session: UISceneSession,

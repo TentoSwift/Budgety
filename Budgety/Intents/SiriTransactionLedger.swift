@@ -19,6 +19,17 @@ struct SiriTransactionLedger {
         formatted(incomeTotals.merging(expenseTotals.mapValues { -$0 }, uniquingKeysWith: +))
     }
 
+    func summary(for kind: SiriTransactionSelection, sheetName: String, period: String, member: String?,
+                 category: String?, name: String?) -> String {
+        let scope = [sheetName, period, member, category, name].compactMap { $0 }.joined(separator: "・")
+        guard count > 0 else { return String(localized: "「\(scope)」に該当する明細はありません。") }
+        switch kind {
+        case .expense: return String(localized: "「\(scope)」の支出は\(expenseTotal)です。")
+        case .income: return String(localized: "「\(scope)」の収入は\(incomeTotal)です。")
+        case .both: return String(localized: "「\(scope)」の収入は\(incomeTotal)、支出は\(expenseTotal)、収支は\(netTotal)です。")
+        }
+    }
+
     private func formatted(_ totals: [String: Decimal]) -> String {
         let values = totals.isEmpty ? [currency: Decimal.zero] : totals
         return values.sorted { $0.key < $1.key }.map { code, amount in
@@ -28,7 +39,7 @@ struct SiriTransactionLedger {
 
     static func read(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                      includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
-                     matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
+                     allRows: Bool = false, matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
         var predicates = [NSPredicate(format: "sheet == %@", record)]
@@ -57,6 +68,10 @@ struct SiriTransactionLedger {
             if item.kind == .expense { expenses[code, default: 0] += item.amountDecimal }
             else { income[code, default: 0] += item.amountDecimal }
             count += 1
+            if allRows {
+                newest.append(item)
+                return
+            }
             let index = newest.firstIndex { isNewer(item, than: $0) } ?? newest.count
             if index < 5 {
                 newest.insert(item, at: index)
@@ -71,15 +86,17 @@ struct SiriTransactionLedger {
             if let interval, occurrence.date >= interval.end { continue }
             collect(.occurrence(occurrence))
         }
+        if allRows { newest.sort { isNewer($0, than: $1) } }
         let backing = VirtualRowBacking()
         lazy var isSolo = !record.hasAcceptedOtherMembers()
-        let rows: [SiriExpenseCardRow] = newest.map { item in
+        let rows: [SiriExpenseCardRow] = newest.enumerated().map { index, item in
+            let includePhoto = index < 8
             switch item {
             case .expense(let row):
-                return .from(row, in: record, isSoloSheet: isSolo)
+                return .from(row, in: record, isSoloSheet: isSolo, includePayerPhoto: includePhoto)
             case .occurrence(let occurrence):
                 return .from(backing.displayExpense(for: occurrence, sheet: record), in: record, isSoloSheet: isSolo,
-                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record))
+                             virtualIdentifier: SiriVirtualExpenseLink.identifier(for: occurrence, in: record), includePayerPhoto: includePhoto)
             }
         }
         return Self(count: count, rows: rows, expenseTotals: expenses, incomeTotals: income,

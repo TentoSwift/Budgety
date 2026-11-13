@@ -15,15 +15,11 @@ import CloudKit
 @main
 struct BudgetyWatchApp: App {
     @StateObject private var persistence = PersistenceController.shared
-    @StateObject private var siriNavigation = WatchSiriNavigation.shared
     @WKApplicationDelegateAdaptor(BudgetyWatchAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
             WatchHomeView()
-                .sheet(item: $siriNavigation.selection) { selection in
-                    WatchSiriExpenseDetail(identifier: selection.id, sheet: selection.sheet)
-                }
                 .environment(\.managedObjectContext, persistence.container.viewContext)
                 .task {
                     ExpensoShortcuts.updateAppShortcutParameters()

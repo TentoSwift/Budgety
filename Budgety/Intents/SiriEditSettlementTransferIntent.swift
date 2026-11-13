@@ -39,30 +39,43 @@ struct SiriSettlementRecordEntity: AppEntity {
 struct SiriSettlementRecordQuery: EntityStringQuery {
     @IntentParameterDependency<SiriEditSettlementTransferIntent>(\.$sheet) var edit
 
-    @MainActor
-    func suggestedEntities() async throws -> [SiriSettlementRecordEntity] { try search("") }
+    @IntentParameterDependency<SiriCancelSettlementIntent>(\.$sheet) var cancel
+
+    private var sheetID: String? { edit?.sheet.id ?? cancel?.sheet.id }
 
     @MainActor
-    func entities(matching string: String) async throws -> [SiriSettlementRecordEntity] { try search(string) }
+    func suggestedEntities() async throws -> [SiriSettlementRecordEntity] {
+        try Self.search("", sheetID: sheetID, forCancellation: cancel != nil)
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [SiriSettlementRecordEntity] {
+        try Self.search(string, sheetID: sheetID, forCancellation: cancel != nil)
+    }
 
     @MainActor
     func entities(for identifiers: [String]) async throws -> [SiriSettlementRecordEntity] {
+        try Self.resolve(identifiers, sheetID: sheetID, forCancellation: cancel != nil)
+    }
+
+    @MainActor
+    static func resolve(_ identifiers: [String], sheetID selected: String?, forCancellation: Bool) throws -> [SiriSettlementRecordEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         return identifiers.compactMap { id in
             guard let end = id.firstIndex(of: "#") else { return nil }
             let sheetID = String(id[..<end])
-            guard edit?.sheet.id == nil || sheetID == edit?.sheet.id,
+            guard selected == nil || sheetID == selected,
                   let sheet = try? SiriSettlementStore.writableSheet(sheetID, access: access),
-                  let row = try? SiriSettlementEditStore.record(identifier: id, in: sheet, access: access) else { return nil }
+                  let row = try? SiriSettlementEditStore.record(identifier: id, in: sheet, access: access, forCancellation: forCancellation) else { return nil }
             return SiriSettlementRecordEntity(row, sheet: sheet)
         }
     }
 
     @MainActor
-    private func search(_ text: String) throws -> [SiriSettlementRecordEntity] {
+    static func search(_ text: String, sheetID: String?, forCancellation: Bool) throws -> [SiriSettlementRecordEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let ids: [String]
-        if let selected = edit?.sheet.id ?? IntentSheetAccess.lastOpenedSheetURI {
+        if let selected = sheetID ?? IntentSheetAccess.lastOpenedSheetURI {
             ids = [selected]
         } else {
             ids = try SiriSettlementStore.writableSheets().map(\.id)
@@ -76,7 +89,7 @@ struct SiriSettlementRecordQuery: EntityStringQuery {
         let terms = text.split(whereSeparator: \.isWhitespace).map(String.init)
         var results: [SiriSettlementRecordEntity] = []
         for row in try access.context.fetch(request) {
-            guard let sheet = row.sheet, SiriSettlementEditStore.canEdit(row, access: access) else { continue }
+            guard let sheet = row.sheet, SiriSettlementEditStore.canModify(row, access: access, forCancellation: forCancellation) else { continue }
             let entity = SiriSettlementRecordEntity(row, sheet: sheet)
             let searchable = [entity.label, row.resolvedCurrencyCode, NSDecimalNumber(decimal: row.amountDecimal).stringValue,
                               row.note ?? ""].joined(separator: " ")
@@ -145,6 +158,35 @@ struct SiriEditSettlementTransferIntent: AppIntent {
         return .result(value: SiriSettlementRecordEntity(sheetID: prepared.sheetID, recordID: id, label: label),
                        dialog: "送金記録を変更しました。",
                        snippetIntent: SiriSettlementReceiptSnippetIntent(sheetID: prepared.sheetID, recordID: id))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
+@AppIntent(.tool)
+#endif
+struct SiriCancelSettlementIntent: AppIntent {
+    static let title: LocalizedStringResource = "記録した精算を取り消す"
+    static let description = IntentDescription("精算済みにした送金や、手動で追加した送金を取り消します。送金元・送金先・金額を確認してから、選んだ送金記録を削除し、シートの精算残高に反映します。")
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "シート", optionsProvider: SiriSettlementWritableSheetQuery()) var sheet: ExpenseSheetEntity?
+    @Parameter(title: "取り消す送金", optionsProvider: SiriSettlementRecordQuery()) var record: SiriSettlementRecordEntity
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard sheet == nil || sheet?.id == record.sheetID else { throw AppIntentError.sheetNotFound }
+        let prepared = try SiriSettlementEditStore.prepareCancellation(identifier: record.id, sheetID: record.sheetID)
+        let prompt = IntentDialog("「\(prepared.sheetName)」の\(prepared.from.name)から\(prepared.to.name)への\(prepared.formattedAmount)の送金記録を取り消しますか？")
+        try await requestConfirmation(actionName: .custom(acceptLabel: "精算を取り消す", acceptAlternatives: ["取り消す"],
+                                                          denyLabel: "キャンセル", denyAlternatives: [], destructive: true),
+                                      dialog: prompt, showDialogAsPrompt: true) {
+            SiriSettlementCardView(sheetName: prepared.sheetName, sheetSymbol: prepared.sheetSymbol,
+                                   sheetColorHex: prepared.sheetColorHex, period: prepared.date?.formatted(date: .abbreviated, time: .omitted) ?? "",
+                                   title: "取り消す送金", rows: [.init(from: prepared.from, to: prepared.to, amount: prepared.formattedAmount)])
+        }
+        try SiriSettlementEditStore.cancel(prepared)
+        return .result(dialog: "送金記録を取り消しました。")
     }
 }
 

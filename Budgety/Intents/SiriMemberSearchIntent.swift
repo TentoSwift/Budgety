@@ -42,6 +42,12 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriMemberCardResult> & ProvidesDialog & ShowsSnippetIntent {
+        let result = try search()
+        return .result(value: result.lookup.card, dialog: IntentDialog("\(result.lookup.summary)"), snippetIntent: result.snippet)
+    }
+
+    @MainActor
+    func search() throws -> (lookup: SiriMemberTransactionLookup.Result, snippet: SiriMemberResultsSnippetIntent) {
         let selection = kind ?? .both
         let scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period).scope
         guard let separator = member.id.firstIndex(of: "#") else { throw AppIntentError.sheetNotFound }
@@ -50,9 +56,7 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
         let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: member.id,
                                                            scope: scope, includeExpenses: selection.includesExpenses,
                                                            includeIncome: selection.includesIncome)
-        return .result(value: result.card, dialog: IntentDialog("\(result.summary)"),
-                       snippetIntent: SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id,
-                                                                    kind: selection, scope: scope))
+        return (result, SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id, kind: selection, scope: scope))
     }
 }
 

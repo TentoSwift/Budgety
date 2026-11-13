@@ -1,7 +1,6 @@
 #if os(iOS)
 import CoreData
 import SwiftUI
-import UIKit
 
 @MainActor
 extension DeepLinkRouter {
@@ -9,64 +8,29 @@ extension DeepLinkRouter {
         let context = PersistenceController.shared.container.viewContext
         _ = try SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
         pendingExpenseIdentifier = identifier
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive && $0.keyWindow != nil }) {
-            presentPendingExpense(in: scene)
-        }
-    }
-
-    func presentPendingExpense(in scene: UIWindowScene) {
-        guard let identifier = pendingExpenseIdentifier, scene.activationState == .foregroundActive,
-              var presenter = scene.keyWindow?.rootViewController else { return }
-        while let next = presenter.presentedViewController { presenter = next }
-        if let transition = presenter.transitionCoordinator,
-           transition.animate(alongsideTransition: nil, completion: { _ in
-               Task { @MainActor in self.presentPendingExpense(in: scene) }
-           }) { return }
-
-        pendingExpenseIdentifier = nil
-        let context = PersistenceController.shared.container.viewContext
-        let target = try? SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
-        let detail = SiriExpenseDetail(identifier: identifier, target: target, context: context)
-        if let current = presenter as? UIHostingController<SiriExpenseDetail> {
-            current.rootView = detail
-        } else {
-            // Present above the current editor so following a card never discards an open draft.
-            presenter.present(UIHostingController(rootView: detail), animated: true)
-        }
+        NotificationCenter.default.post(name: .expensoOpenExpense, object: nil)
     }
 }
 
-private struct SiriExpenseDetail: View {
+struct SiriExpenseDestination: View {
     let identifier: String
-    let target: SiriVirtualExpenseLink.Target?
-    let context: NSManagedObjectContext
+    @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch target {
-                case .stored(let expense):
-                    ExpenseDetailView(expense: expense, onCommit: {
-                        if expense.isDeleted || expense.managedObjectContext == nil { dismiss() }
-                    })
-                    .id(expense.objectID)
-                case .virtual(let occurrence, let sheet, let rule):
-                    SiriVirtualExpenseDetail(identifier: identifier, occurrence: occurrence, sheet: sheet, rule: rule)
-                        .id(identifier)
-                case nil:
-                    ContentUnavailableView("この明細は現在表示できません。", systemImage: "doc.text.magnifyingglass")
-                }
+        if let access = try? IntentSheetAccess(checking: context),
+           let target = try? SiriVirtualExpenseLink.resolve(identifier, access: access) {
+            switch target {
+            case .stored(let expense):
+                ExpenseDetailView(expense: expense, onCommit: {
+                    if expense.isDeleted || expense.managedObjectContext == nil { dismiss() }
+                }, lockRecord: expense.sheet)
+            case .virtual(let occurrence, let sheet, let rule):
+                SiriVirtualExpenseDetail(identifier: identifier, occurrence: occurrence, sheet: sheet, rule: rule)
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる", systemImage: "xmark") { dismiss() }
-                }
-            }
+        } else {
+            ContentUnavailableView("この明細は現在表示できません。", systemImage: "doc.text.magnifyingglass")
         }
-        .environment(\.managedObjectContext, context)
-        .appUpdateGate()
     }
 }
 /// The detail reads a disposable child-context row. Only an explicit edit needs a live occurrence.

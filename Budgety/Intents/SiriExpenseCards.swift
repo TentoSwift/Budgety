@@ -2,12 +2,132 @@
 import AppIntents
 import CoreData
 import SwiftUI
+import UniformTypeIdentifiers
+
+#if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
+@MainActor
+enum SiriTransactionCategoryIcon {
+    private static let images: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 96
+        return cache
+    }()
+
+    static func file(symbol: String, colorHex: String) -> IntentFile? {
+        let glyph = symbol.isEmpty ? "tag.slash" : symbol
+        let color = colorHex.isEmpty ? "#8E8E93" : colorHex
+        let key = (glyph + "|" + color) as NSString
+        let data: Data
+        if let cached = images.object(forKey: key) { data = cached as Data }
+        else {
+            guard let rendered = ExpenseCategoryEntity.renderColoredSymbol(glyph, colorHex: color)
+                    ?? ExpenseCategoryEntity.renderColoredSymbol("tag.slash", colorHex: color) else { return nil }
+            images.setObject(rendered as NSData, forKey: key)
+            data = rendered
+        }
+        return IntentFile(data: data, filename: "category.png", type: .png)
+    }
+
+    nonisolated static func image(_ file: IntentFile?, symbol: String) -> DisplayRepresentation.Image {
+        if let data = file?.data { return .init(data: data, isTemplate: false, displayStyle: .circular) }
+        return .init(systemName: symbol.isEmpty ? "tag.slash" : symbol)
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriListedTransactionEntity: AppEntity {
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細"
+    static let defaultQuery = SiriListedTransactionQuery()
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    let id: String
+    @Property(title: "名前") var title: String
+    @Property(title: "日付") var date: String
+    @Property(title: "金額") var amount: String
+    @Property(title: "カテゴリ") var category: String
+    @Property(title: "支払者・受取者") var payerName: String?
+    @Property(title: "取引の種類") var kind: TransactionKind
+    @Property(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity?
+    @Property(title: "カテゴリのシンボル", visibility: .internal) var categorySymbol: String
+    @Property(title: "カテゴリの色", visibility: .internal) var categoryColorHex: String
+    @Property(title: "カテゴリの画像", visibility: .internal) var categoryIcon: IntentFile?
+
+    @MainActor
+    init(row: SiriExpenseCardRow) throws {
+        try self.init(row: row, originalID: nil)
+    }
+
+    @MainActor
+    fileprivate init(row: SiriExpenseCardRow, originalID: String?) throws {
+        guard let identifier = originalID ?? row.expenseIdentifier else { throw AppIntentError.expenseUnavailable }
+        id = identifier
+        title = row.title
+        date = row.date
+        amount = row.signedAmount ?? row.amount
+        if let currency = row.foreignCurrencyCode { amount += " " + currency }
+        category = row.category
+        payerName = row.payerName
+        kind = row.transactionKind
+        editableTransaction = row.editableTransaction
+        categorySymbol = row.categorySymbol
+        categoryColorHex = row.categoryColorHex
+        categoryIcon = SiriTransactionCategoryIcon.file(symbol: row.categorySymbol, colorHex: row.categoryColorHex)
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)",
+                              image: SiriTransactionCategoryIcon.image(categoryIcon, symbol: categorySymbol))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriListedTransactionQuery: EntityQuery {
+    @MainActor
+    func entities(for identifiers: [String]) async throws -> [SiriListedTransactionEntity] {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let backing = VirtualRowBacking()
+        return try identifiers.compactMap { id in
+            guard let target = try? SiriVirtualExpenseLink.resolve(id, access: access) else { return nil }
+            let expense: Expense
+            let sheet: ExpenseSheet
+            switch target {
+            case .stored(let stored):
+                guard let owner = stored.sheet else { return nil }
+                sheet = owner
+                expense = stored
+            case .virtual(let occurrence, let owner, _):
+                sheet = owner
+                expense = backing.displayExpense(for: occurrence, sheet: owner)
+            }
+            let row = SiriExpenseCardRow.from(expense, in: sheet, isSoloSheet: !sheet.hasAcceptedOtherMembers(),
+                                              virtualIdentifier: expense.objectID.isTemporaryID ? id : nil, includePayerPhoto: false)
+            return try SiriListedTransactionEntity(row: row, originalID: id)
+        }
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriOpenListedTransactionIntent: OpenIntent {
+    static let title: LocalizedStringResource = "指定した明細を開く"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    static let supportedModes: IntentModes = .foreground(.immediate)
+    @Parameter(title: "明細") var target: SiriListedTransactionEntity
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        _ = try await SiriOpenExpenseIntent(expenseIdentifier: target.id).perform()
+        return .result()
+    }
+}
+#endif
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardRow: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
+    var transactionKind: TransactionKind = .expense
     @Property(title: "編集対象") var editableTransaction: SiriEditableTransactionEntity?
     @Property(title: "名前") var title: String
     @Property(title: "日付") var date: String
@@ -37,12 +157,13 @@ struct SiriExpenseCardRow: TransientAppEntity {
 
     init() {}
 
-    init(title: String, date: String, category: String, amount: String,
+    init(title: String, date: String, category: String, amount: String, kind: TransactionKind = .expense,
          categoryColorHex: String = "", categorySymbol: String = "tag",
          signedAmount: String? = nil, payerName: String? = nil,
          payerColorHex: String = "", payerPhoto: IntentFile? = nil,
          payerIsVirtual: Bool? = nil, foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil,
          editableTransaction: SiriEditableTransactionEntity? = nil) {
+        self.transactionKind = kind
         self.expenseIdentifier = expenseIdentifier
         self.editableTransaction = editableTransaction
         self.title = title
@@ -65,15 +186,15 @@ struct SiriExpenseCardRow: TransientAppEntity {
 
     @MainActor
     static func from(_ transaction: Expense, in sheet: ExpenseSheet, isSoloSheet: Bool,
-                     virtualIdentifier: String? = nil) -> Self {
+                     virtualIdentifier: String? = nil, includePayerPhoto: Bool = true) -> Self {
         let currency = transaction.resolvedCurrencyCode.uppercased()
         let category = transaction.categoryDisplayName
-        let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet)
+        let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet, includePhoto: includePayerPhoto)
         return Self(
             title: transaction.displayTitle.isEmpty ? category : transaction.displayTitle,
             date: transaction.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明"),
             category: category,
-            amount: transaction.amountDecimal.formatted(.currency(code: currency).presentation(.isoCode)),
+            amount: transaction.amountDecimal.formatted(.currency(code: currency).presentation(.isoCode)), kind: transaction.kind,
             categoryColorHex: transaction.resolvedCategory?.displayColorHex ?? "",
             categorySymbol: transaction.categorySymbol,
             signedAmount: transaction.formattedSignedAmount,

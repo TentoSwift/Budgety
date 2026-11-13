@@ -129,11 +129,49 @@ enum SiriSettlementEditStore {
         return id
     }
 
+    struct Cancellation {
+        let sheetID: String
+        let sheetName: String
+        let sheetSymbol: String
+        let sheetColorHex: String
+        let date: Date?
+        let from: Store.Avatar
+        let to: Store.Avatar
+        let formattedAmount: String
+        fileprivate let identifier: String
+        fileprivate let objectID: NSManagedObjectID
+        fileprivate let original: NSDictionary
+    }
+
+    static func prepareCancellation(identifier: String, sheetID: String) throws -> Cancellation {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let sheet = try Store.writableSheet(sheetID, access: access)
+        let row = try record(identifier: identifier, in: sheet, access: access, forCancellation: true)
+        return Cancellation(sheetID: sheetID, sheetName: sheet.displayName, sheetSymbol: sheet.displaySymbol,
+                            sheetColorHex: sheet.displayColorHex, date: row.date,
+                            from: Store.avatar(row.fromProfileID ?? "", in: sheet), to: Store.avatar(row.toProfileID ?? "", in: sheet),
+                            formattedAmount: Store.formatAmount(row.amountDecimal, currency: row.resolvedCurrencyCode),
+                            identifier: identifier, objectID: row.objectID, original: snapshot(row))
+    }
+
+    static func cancel(_ prepared: Cancellation) throws {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let sheet = try Store.writableSheet(prepared.sheetID, access: access)
+        let row = try record(identifier: prepared.identifier, in: sheet, access: access, forCancellation: true)
+        guard row.objectID == prepared.objectID, snapshot(row) == prepared.original,
+              sheet.displayName == prepared.sheetName,
+              Store.avatar(row.fromProfileID ?? "", in: sheet).name == prepared.from.name,
+              Store.avatar(row.toProfileID ?? "", in: sheet).name == prepared.to.name else { throw Store.Failure.changed }
+        try Task.checkCancellation()
+        access.context.delete(row)
+        try access.context.save()
+    }
+
     private static func snapshot(_ row: SettlementRecord) -> NSDictionary {
         row.committedValues(forKeys: Array(row.entity.attributesByName.keys)) as NSDictionary
     }
 
-    static func record(identifier: String, in sheet: ExpenseSheet, access: IntentSheetAccess) throws -> SettlementRecord {
+    static func record(identifier: String, in sheet: ExpenseSheet, access: IntentSheetAccess, forCancellation: Bool = false) throws -> SettlementRecord {
         let prefix = sheet.objectID.uriRepresentation().absoluteString + "#"
         guard identifier.hasPrefix(prefix) else { throw Store.Failure.unavailable }
         let suffix = String(identifier.dropFirst(prefix.count))
@@ -151,13 +189,16 @@ enum SiriSettlementEditStore {
         } else {
             record = nil
         }
-        guard let record, record.sheet == sheet, canEdit(record, access: access) else { throw Store.Failure.unavailable }
+        guard let record, record.sheet == sheet, canModify(record, access: access, forCancellation: forCancellation) else { throw Store.Failure.unavailable }
         return record
     }
 
-    static func canEdit(_ row: SettlementRecord, access: IntentSheetAccess) -> Bool {
-        guard !row.isDeleted, !row.objectID.isTemporaryID,
-              PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: row.objectID) else { return false }
+    static func canModify(_ row: SettlementRecord, access: IntentSheetAccess, forCancellation: Bool) -> Bool {
+        guard !row.isDeleted, !row.objectID.isTemporaryID else { return false }
+        let container = PersistenceController.shared.container
+        let allowed = forCancellation ? container.canDeleteRecord(forManagedObjectWith: row.objectID)
+                                      : container.canUpdateRecord(forManagedObjectWith: row.objectID)
+        guard allowed else { return false }
         if let live = access.viewContext.registeredObject(for: row.objectID) as? SettlementRecord {
             return !live.isDeleted && !live.hasPersistentChangedValues
         }

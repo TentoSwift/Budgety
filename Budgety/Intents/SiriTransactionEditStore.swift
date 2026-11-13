@@ -59,11 +59,13 @@ enum SiriTransactionEditStore {
         }
     }
 
-    fileprivate struct MemberIdentity: Equatable {
+    struct MemberIdentity: Equatable {
         let selectionID: String
+        let name: String
         let profileID: String
         let localMember: UUID?
         init(_ person: SiriSheetMemberEntity) {
+            name = person.name
             selectionID = person.id
             profileID = person.profileID
             localMember = person.memberID
@@ -78,9 +80,27 @@ enum SiriTransactionEditStore {
         var date: Date?
         var category: ExpenseCategory?
         var changesCategory = false
+        var members = MemberChanges()
+    }
+
+    struct MemberChanges {
+        var changes: [Change] = []
         var payer: SiriSheetMemberEntity?
         var splitMembers: [SiriSheetMemberEntity]?
         var selectedMembers: [MemberIdentity] = []
+
+        @MainActor
+        func apply(to row: Expense) {
+            if let payer {
+                row.payerProfileID = payer.profileID
+                row.payerMemberID = payer.memberID
+                row.paidBy = nil
+            }
+            if let members = splitMembers {
+                row.beneficiaryIDList = members.map(\.profileID).sorted()
+                row.pruneSettledBeneficiaries()
+            }
+        }
     }
 
     private enum EditError: Error, CustomLocalizedStringResourceConvertible {
@@ -106,7 +126,7 @@ enum SiriTransactionEditStore {
                         transactionTitle: row.displayTitle.isEmpty ? row.categoryDisplayName : row.displayTitle,
                         changes: plan.changes, originalReceipt: SiriRecordedTransaction(transaction: row, sheet: sheet),
                         sheetIdentifier: sheetIdentifier, original: Snapshot(row),
-                        request: request, selectedMembers: plan.selectedMembers, selectedCategoryName: plan.category?.displayName)
+                        request: request, selectedMembers: plan.members.selectedMembers, selectedCategoryName: plan.category?.displayName)
     }
 
     static func commit(_ prepared: Prepared) throws -> AddExpenseIntent.RecordedTransaction {
@@ -116,10 +136,10 @@ enum SiriTransactionEditStore {
               title == prepared.transactionTitle else { throw EditError.stale }
         var updates = try plan(prepared.request, for: row, sheet: sheet, access: access)
         guard !updates.changes.isEmpty, updates.changes == prepared.changes,
-              updates.selectedMembers == prepared.selectedMembers, updates.category?.displayName == prepared.selectedCategoryName
+              updates.members.selectedMembers == prepared.selectedMembers, updates.category?.displayName == prepared.selectedCategoryName
         else { throw EditError.stale }
         // A newly configured account may have no stored self UUID until it saves for the first time.
-        if updates.selectedMembers.contains(where: { $0.profileID.isEmpty }) {
+        if updates.members.selectedMembers.contains(where: { $0.profileID.isEmpty }) {
             updates = try plan(prepared.request, for: row, sheet: sheet, access: access, preparingToSave: true)
         }
         if let title = updates.title { row.title = title }
@@ -138,15 +158,7 @@ enum SiriTransactionEditStore {
             row.category = updates.category
             row.categoryRaw = updates.category?.name
         }
-        if let payer = updates.payer {
-            row.payerProfileID = payer.profileID
-            row.payerMemberID = payer.memberID
-            row.paidBy = nil
-        }
-        if let members = updates.splitMembers {
-            row.beneficiaryIDList = members.map(\.profileID).sorted()
-            row.pruneSettledBeneficiaries()
-        }
+        updates.members.apply(to: row)
         // The default error merge policy also rejects concurrent writes between this read and save.
         try access.context.save()
         return AddExpenseIntent.RecordedTransaction(transaction: row, sheet: sheet,
@@ -211,12 +223,22 @@ enum SiriTransactionEditStore {
                 plan.changes.append(Change(label: String(localized: "カテゴリ"), before: before, after: after))
             }
         }
-        guard request.payer != nil || request.split != .unchanged || !request.beneficiaries.isEmpty else { return plan }
-        if request.split != .unchanged, row.kind != .expense { throw AppIntentError.incomeCannotSplit }
+        plan.members = try memberChanges(payer: request.payer, split: request.split, beneficiaries: request.beneficiaries,
+                                        for: row, sheet: sheet, access: access, preparingToSave: preparingToSave)
+        plan.changes += plan.members.changes
+        return plan
+    }
+
+    static func memberChanges(payer: SiriSheetMemberEntity?, split: SiriTransactionSplitChange,
+                              beneficiaries: [SiriSheetMemberEntity], for row: Expense, sheet: ExpenseSheet,
+                              access: IntentSheetAccess, preparingToSave: Bool = false) throws -> MemberChanges {
+        var plan = MemberChanges()
+        guard payer != nil || split != .unchanged || !beneficiaries.isEmpty else { return plan }
+        if split != .unchanged, row.kind != .expense { throw AppIntentError.incomeCannotSplit }
         let roster = try SiriSheetMemberRoster(sheet: sheet, access: access, preparingToSave: preparingToSave)
-        let enablingSplit = request.split == .all || request.split == .selected
+        let enablingSplit = split == .all || split == .selected
         let person: SiriSheetMemberEntity?
-        if let selected = request.payer {
+        if let selected = payer {
             person = try roster.resolve(selected)
         } else if enablingSplit {
             if let id = row.payerProfileID, !id.isEmpty {
@@ -238,23 +260,23 @@ enum SiriTransactionEditStore {
         }
         if let person {
             plan.selectedMembers.append(MemberIdentity(person))
-            let needsPayer = (row.payerProfileID ?? "").isEmpty || (request.payer != nil && person.profileID != row.payerProfileID)
+            let needsPayer = (row.payerProfileID ?? "").isEmpty || (payer != nil && person.profileID != row.payerProfileID)
             if needsPayer {
                 plan.payer = person
-                let oldName = request.payer == nil ? "" : row.displayPaidBy
+                let oldName = payer == nil ? "" : row.displayPaidBy
                 plan.changes.append(Change(label: row.kind == .expense ? String(localized: "支払者") : String(localized: "受取者"),
                                            before: oldName.isEmpty ? String(localized: "未選択") : oldName, after: person.name))
             }
         }
         let members: [SiriSheetMemberEntity]
-        switch request.split {
+        switch split {
         case .unchanged, .off:
-            guard request.beneficiaries.isEmpty else { throw AppIntentError.conflictingSplitMembers }
-            if request.split == .unchanged { return plan }
+            guard beneficiaries.isEmpty else { throw AppIntentError.conflictingSplitMembers }
+            if split == .unchanged { return plan }
             members = []
         case .all, .selected:
-            members = try AddExpenseIntent.splitMembers(in: roster, splitAll: request.split == .all,
-                                                        beneficiaries: request.beneficiaries)
+            members = try AddExpenseIntent.splitMembers(in: roster, splitAll: split == .all,
+                                                        beneficiaries: beneficiaries)
         }
         plan.selectedMembers += members.map(MemberIdentity.init)
         if Set(members.map(\.profileID)) != Set(row.beneficiaryIDList) {

@@ -51,7 +51,7 @@ extension EnvironmentValues {
 private struct DuoSheetsView: View {
     let compact: Bool
     let sidebarWidth: CGFloat
-    @State private var sheetPath: [NSManagedObjectID] = []
+    @State private var sheetPath: [SheetNavigationDestination] = []
     @State private var restoredSelection = false
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \ExpenseSheet.createdAt, ascending: false)])
     private var sheets: FetchedResults<ExpenseSheet>
@@ -79,8 +79,8 @@ private struct DuoSheetsView: View {
             if !restoredSelection && !ids.isEmpty {
                 restoredSelection = true
                 let restored = ids.first { $0.uriRepresentation().absoluteString == lastOpenedSheetURI }
-                if sheetPath.isEmpty, let id = restored ?? (compact ? nil : firstSidebarSheetID) { sheetPath = [id] }
-            } else if let id = sheetPath.last, !ids.contains(id) {
+                if sheetPath.isEmpty, let id = restored ?? (compact ? nil : firstSidebarSheetID) { sheetPath = [.sheet(id)] }
+            } else if let id = sheetPath.last?.sheetID, !ids.contains(id) {
                 // Keep the neighboring visible row selected, as in the sidebar.
                 // A deleted row must never remain the detail destination.
                 let visible = Set(sheets.filter { !$0.archived || archivedExpanded }.map(\.objectID))
@@ -88,7 +88,7 @@ private struct DuoSheetsView: View {
                     Array(previousIDs.dropFirst(index + 1)) + Array(previousIDs.prefix(index).reversed())
                 } ?? []
                 let replacement = neighbors.first(where: visible.contains) ?? firstSidebarSheetID
-                sheetPath = compact ? [] : replacement.map { [$0] } ?? []
+                sheetPath = compact ? [] : replacement.map { [.sheet($0)] } ?? []
             }
         }
     }
@@ -107,10 +107,10 @@ private struct DuoSheetsView: View {
         NavigationStack {
             let archived = sheets.filter { $0.archived }
             List(selection: Binding<NSManagedObjectID?>(
-                get: { sheetPath.last },
+                get: { sheetPath.last?.sheetID },
                 set: { id in
-                    if let id, id != sheetPath.last, sheets.contains(where: { $0.objectID == id && !$0.isDeleted }) {
-                        sheetPath = [id]
+                    if let id, id != sheetPath.last?.sheetID, sheets.contains(where: { $0.objectID == id && !$0.isDeleted }) {
+                        sheetPath = [.sheet(id)]
                     }
                 }
             )) {

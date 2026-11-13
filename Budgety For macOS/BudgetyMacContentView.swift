@@ -21,6 +21,8 @@ struct BudgetyMacContentView: View {
     ) private var sheets: FetchedResults<ExpenseSheet>
 
     @State private var selectedSheet: ExpenseSheet?
+    @ObservedObject private var siriNavigation = MacSiriNavigation.shared
+    @State private var siriDetailPath: [MacSiriNavigation.Selection] = []
     @State private var showingAddSheet: Bool = false
     @State private var showSettingsView: Bool = false
     @State private var showingProfileEdit: Bool = false
@@ -45,26 +47,11 @@ struct BudgetyMacContentView: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            if !trimmedQuery.isEmpty {
-                // 横断検索中は全シートの検索結果を detail に表示。
-                searchResultsDetail
-            } else if let sheet = selectedSheet {
-                if lockManager.isUnlocked(sheet) {
-                    BudgetyMacSheetView(sheet: sheet)
-                } else {
-                    // ロック中はパスワード入力画面を detail に表示。
-                    // macOS は物理キーボードで入力できる MacSheetLockView を使う。
-                    // 解錠すると lockManager の変化で自動的にシート本体へ切り替わる。
-                    MacSheetLockView(
-                        record: sheet,
-                        onUnlock: { },
-                        onCancel: { selectedSheet = nil }
-                    )
-                }
-            } else {
-                ContentUnavailableView {
-                    Label("シートを選択", systemImage: "rectangle.stack")
-                }
+            NavigationStack(path: $siriDetailPath) {
+                sheetContent
+                    .navigationDestination(for: MacSiriNavigation.Selection.self) { selection in
+                        MacSiriExpenseDetail(identifier: selection.identifier)
+                    }
             }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -94,8 +81,17 @@ struct BudgetyMacContentView: View {
         }
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
+            openSiriSelectionIfPossible()
+        }
+        .onChange(of: siriNavigation.selection?.identifier) { _, _ in openSiriSelectionIfPossible() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification)) { _ in
+            Task { @MainActor in openSiriSelectionIfPossible() }
+        }
+        .onChange(of: trimmedQuery) { _, query in
+            if !query.isEmpty { siriDetailPath.removeAll() }
         }
         .onChange(of: selectedSheet) { old, new in
+            if let detail = siriDetailPath.last, detail.sheetID != new?.objectID { siriDetailPath.removeAll() }
             UserDefaults.standard.set(new?.objectID.uriRepresentation().absoluteString, forKey: "lastOpenedSheetURI")
             // 別シートへ移動したら、離れたシートを再ロックする。
             if let old, lockManager.hasPassword(for: old) {
@@ -118,10 +114,44 @@ struct BudgetyMacContentView: View {
         }
         .task {
             // cold launch 時、ビュー生成前に届いた Spotlight 遷移要求を拾う。
-            if let identifier = DeepLinkRouter.shared.consumePendingSheetIdentifier() {
+            if siriDetailPath.isEmpty, let identifier = DeepLinkRouter.shared.consumePendingSheetIdentifier() {
                 openSheet(spotlightIdentifier: identifier)
             }
         }
+    }
+
+    @ViewBuilder private var sheetContent: some View {
+        if !trimmedQuery.isEmpty {
+            // 横断検索中は全シートの検索結果を detail に表示。
+            searchResultsDetail
+        } else if let sheet = selectedSheet {
+            if lockManager.isUnlocked(sheet) {
+                BudgetyMacSheetView(sheet: sheet)
+            } else {
+                // ロック中はパスワード入力画面を detail に表示。
+                // macOS は物理キーボードで入力できる MacSheetLockView を使う。
+                // 解錠すると lockManager の変化で自動的にシート本体へ切り替わる。
+                MacSheetLockView(
+                    record: sheet,
+                    onUnlock: { },
+                    onCancel: { selectedSheet = nil }
+                )
+            }
+        } else {
+            ContentUnavailableView {
+                Label("シートを選択", systemImage: "rectangle.stack")
+            }
+        }
+    }
+
+    private func openSiriSelectionIfPossible() {
+        guard !NSApp.windows.contains(where: { $0.attachedSheet != nil }),
+              let selection = siriNavigation.takeSelection(),
+              let sheet = try? viewContext.existingObject(with: selection.sheetID) as? ExpenseSheet
+        else { return }
+        searchText = ""
+        selectedSheet = sheet
+        siriDetailPath = [selection]
     }
 
     /// Spotlight の一意識別子 (objectID の URI) から該当シートを選択する。

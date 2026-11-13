@@ -51,7 +51,13 @@ struct WatchExpenseDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { loadSplit(); prefetchMemberPhotos() }
-        .sheet(isPresented: $showingSplitPicker, onDismiss: applySplit) {
+        .onChange(of: showingSplitPicker) { _, presented in
+            if presented { WatchSiriNavigation.shared.editingDraft = true }
+        }
+        .sheet(isPresented: $showingSplitPicker, onDismiss: {
+            applySplit()
+            WatchSiriNavigation.shared.editingDraft = false
+        }) {
             WatchSplitPicker(
                 sheet: sheet,
                 splitEnabled: $splitEnabled,

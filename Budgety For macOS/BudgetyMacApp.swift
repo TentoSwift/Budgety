@@ -37,9 +37,11 @@ struct BudgetyMacApp: App {
     @NSApplicationDelegateAdaptor(BudgetyMacAppDelegate.self) private var appDelegate
 
     @State private var toast: String?
+    @ObservedObject private var siriNavigation = MacSiriNavigation.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup(id: "main") {
+        Window("Budgety", id: "main") {
             BudgetyMacContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .frame(minWidth: 900, minHeight: 600)
@@ -100,6 +102,9 @@ struct BudgetyMacApp: App {
                     }
                 }
                 #endif
+        }
+        .onChange(of: siriNavigation.selection?.identifier, initial: true) { _, identifier in
+            if identifier != nil { openWindow(id: "main") }
         }
         .defaultSize(width: 1100, height: 750)
         .commands {

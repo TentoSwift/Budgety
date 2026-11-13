@@ -270,8 +270,22 @@ extension ExpenseCategoryEntity {
     private static func renderBadge(symbol: String, colorHex: String, size: CGFloat = 96) -> Data? {
         renderBadgeImage(symbol: symbol, colorHex: colorHex, size: size)?.pngData()
     }
+    #elseif os(macOS)
+    @MainActor
+    static func renderColoredSymbol(_ name: String, colorHex: String) -> Data? {
+        guard NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil else { return nil }
+        let badge = CategoryIconView(symbol: name, tint: Color(hex: colorHex) ?? .gray, size: 64)
+            .environment(\.dynamicTypeSize, .medium)
+        let renderer = ImageRenderer(content: badge)
+        renderer.scale = 1
+        guard let image = renderer.cgImage else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    }
+
+    @MainActor
+    static func renderAISuggestionSymbol(_ name: String, colorHex: String) -> Data? { renderColoredSymbol(name, colorHex: colorHex) }
     #else
-    // The display representation uses the SF Symbol directly on macOS and watchOS.
+    // Watch pickers use the SF Symbol directly.
     @MainActor
     static func renderAISuggestionSymbol(_ name: String, colorHex: String) -> Data? { nil }
     @MainActor

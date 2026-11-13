@@ -9,7 +9,7 @@ import Foundation
 #endif
 struct SiriBatchAddTransactionsIntent: AppIntent {
     static let title: LocalizedStringResource = "複数の明細を追加"
-    static let description = IntentDescription("複数の支出や収入を1度に追加します。各明細を「支出 ランチ 1,200円」「収入 給与 100 USD」のように別々の行で指定してください。全件を確認してから保存します。")
+    static let description = IntentDescription("複数の支出や収入を1度に追加します。各明細を「支出 ランチ 1,200円」「収入 給与 100 USD」のように別々の行で指定してください。全件に共通の支払者・受取者を選べます。支出だけを追加するときは割り勘も指定できます。保存前に全件を確認します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity
@@ -20,14 +20,41 @@ struct SiriBatchAddTransactionsIntent: AppIntent {
     @Parameter(title: "日付") var date: Date?
     @Parameter(title: "通貨", description: "行に通貨がない場合に使用します。省略するとシートの既定通貨です。", optionsProvider: SiriCurrencyOptions())
     var currencyCode: String?
+    @Parameter(title: "支払者・受取者", description: "すべての明細で支払った人、または収入を受け取った人。", optionsProvider: SiriBatchMemberQuery())
+    var payer: SiriSheetMemberEntity?
+    @Parameter(title: "全員で割り勘", description: "すべての支出をシートの全メンバーで均等に負担します。")
+    var splitAll: Bool?
+    @Parameter(title: "割り勘の対象", description: "すべての支出を均等に負担するメンバー。支払者も負担するときは含めてください。", optionsProvider: SiriBatchMemberQuery())
+    var beneficiaries: [SiriSheetMemberEntity]?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("\(\.$sheet) に \(\.$lines) をまとめて追加") {
+            \.$kind
+            \.$date
+            \.$currencyCode
+            \.$payer
+            \.$splitAll
+            \.$beneficiaries
+        }
+    }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let entries = try Self.parse(lines: lines, defaultKind: kind ?? .expense, currency: currencyCode, date: date ?? .now)
-        let prepared = try SiriBatchTransactionStore.prepareAdd(sheetID: sheet.id, entries: entries)
+        let prepared = try Self.prepare(sheetID: sheet.id, lines: lines, defaultKind: kind ?? .expense,
+                                        currency: currencyCode, date: date ?? .now, payer: payer,
+                                        splitAll: splitAll ?? false, beneficiaries: beneficiaries ?? [])
         try await requestConfirmation(actionName: .add, dialog: IntentDialog("次の\(prepared.count)件を追加しますか？\n\(prepared.summary)"))
         let count = try SiriBatchTransactionStore.commit(prepared).count
         return .result(dialog: "\(count)件の明細を追加しました。")
+    }
+
+    @MainActor
+    static func prepare(sheetID: String, lines: [String], defaultKind: TransactionKind, currency: String?, date: Date,
+                        payer: SiriSheetMemberEntity? = nil, splitAll: Bool = false,
+                        beneficiaries: [SiriSheetMemberEntity] = []) throws -> SiriBatchTransactionStore.Prepared {
+        let entries = try parse(lines: lines, defaultKind: defaultKind, currency: currency, date: date)
+        return try SiriBatchTransactionStore.prepareAdd(sheetID: sheetID, entries: entries, payer: payer,
+                                                       splitAll: splitAll, beneficiaries: beneficiaries)
     }
 
     static func parse(lines: [String], defaultKind: TransactionKind, currency: String?, date: Date) throws -> [SiriBatchTransactionStore.Entry] {
@@ -69,7 +96,7 @@ struct SiriBatchAddTransactionsIntent: AppIntent {
 #endif
 struct SiriBatchEditTransactionsIntent: AppIntent {
     static let title: LocalizedStringResource = "複数の明細を編集"
-    static let description = IntentDescription("選んだ支出・収入の名前、金額、通貨、日付またはカテゴリをまとめて変更します。選んだ各明細に同じ変更を適用し、保存前にすべての差分を確認します。")
+    static let description = IntentDescription("選んだ支出・収入の名前、金額、通貨、日付、カテゴリ、支払者・受取者をまとめて変更します。支出の割り勘の設定・解除もできます。選んだ各明細に同じ変更を適用し、保存前にすべての差分を確認します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity
@@ -81,6 +108,12 @@ struct SiriBatchEditTransactionsIntent: AppIntent {
     @Parameter(title: "変更後の通貨", optionsProvider: SiriCurrencyOptions()) var currencyCode: String?
     @Parameter(title: "新しい日付") var newDate: Date?
     @Parameter(title: "変更後のカテゴリ", optionsProvider: SiriBatchCategoryQuery()) var category: ExpenseCategoryEntity?
+    @Parameter(title: "支払者・受取者", description: "選んだ全明細の新しい支払者または受取者。省略すると元の人を維持します。", optionsProvider: SiriBatchMemberQuery())
+    var payer: SiriSheetMemberEntity?
+    @Parameter(title: "割り勘", description: "選んだ支出の割り勘を解除するか、全員または指定のメンバーで均等に負担します。")
+    var split: SiriTransactionSplitChange?
+    @Parameter(title: "割り勘の対象", description: "選んだ支出を均等に負担するメンバー。支払者も負担するときは含めてください。", optionsProvider: SiriBatchMemberQuery())
+    var beneficiaries: [SiriSheetMemberEntity]?
 
     static var parameterSummary: some ParameterSummary {
         Summary("\(\.$sheet) の \(\.$transactions) をまとめて編集") {
@@ -90,12 +123,17 @@ struct SiriBatchEditTransactionsIntent: AppIntent {
             \.$currencyCode
             \.$newDate
             \.$category
+            \.$payer
+            \.$split
+            \.$beneficiaries
         }
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        if newTitle == nil, newAmount == nil, currencyCode == nil, newDate == nil, category == nil {
+        let members = beneficiaries ?? []
+        if newTitle == nil, newAmount == nil, currencyCode == nil, newDate == nil, category == nil,
+           payer == nil, split == nil, members.isEmpty {
             guard let editField else { throw $editField.needsValueError("どの項目を変更しますか？") }
             switch editField {
             case .name: throw $newTitle.needsValueError("新しい名前は何ですか？")
@@ -103,10 +141,16 @@ struct SiriBatchEditTransactionsIntent: AppIntent {
             case .currency: throw $currencyCode.needsValueError("どの通貨にしますか？")
             case .date: throw $newDate.needsValueError("日付をいつにしますか？")
             case .category: throw $category.needsValueError("どのカテゴリにしますか？")
+            case .payer: throw $payer.needsValueError("どのメンバーに変更しますか？")
+            case .split: throw $split.needsDisambiguationError(among: [.off, .all, .selected], dialog: "割り勘をどう変更しますか？")
             }
         }
+        if split == .selected, members.isEmpty {
+            throw $beneficiaries.needsValueError("割り勘の対象にするメンバーを選んでください。")
+        }
         let prepared = try Self.prepare(sheetID: sheet.id, transactions: transactions, title: newTitle, amount: newAmount,
-                                        currencyCode: currencyCode, date: newDate, category: category)
+                                        currencyCode: currencyCode, date: newDate, category: category,
+                                        payer: payer, split: split, beneficiaries: members)
         try await requestConfirmation(actionName: Self.confirmationAction,
                                       dialog: IntentDialog("次の\(prepared.count)件を変更しますか？\n\(prepared.summary)"))
         let count = try SiriBatchTransactionStore.commit(prepared).count
@@ -119,25 +163,43 @@ struct SiriBatchEditTransactionsIntent: AppIntent {
 
     @MainActor
     static func prepare(sheetID: String, transactions: [SiriEditableTransactionEntity], title: String?, amount inputAmount: Double?,
-                        currencyCode: String?, date: Date?, category: ExpenseCategoryEntity?) throws -> SiriBatchTransactionStore.Prepared {
+                        currencyCode: String?, date: Date?, category: ExpenseCategoryEntity?, payer: SiriSheetMemberEntity? = nil,
+                        split: SiriTransactionSplitChange? = nil, beneficiaries: [SiriSheetMemberEntity] = []) throws -> SiriBatchTransactionStore.Prepared {
         let amount = try inputAmount.map { value in
             guard let amount = CurrencyCatalog.transactionAmount(value) else { throw AppIntentError.invalidAmount }
             return amount
         }
-        let edits = transactions.map { SiriBatchTransactionStore.Edit(identifier: $0.id, title: title, amount: amount,
-                                                                        currencyCode: currencyCode, date: date, categoryID: category?.id) }
+        let splitChange = split ?? (beneficiaries.isEmpty ? .unchanged : .selected)
+        let edits = transactions.map {
+            SiriBatchTransactionStore.Edit(identifier: $0.id, title: title, amount: amount,
+                                          currencyCode: currencyCode, date: date, categoryID: category?.id,
+                                          payer: payer, split: splitChange, beneficiaries: beneficiaries)
+        }
         return try SiriBatchTransactionStore.prepareEdit(sheetID: sheetID, edits: edits)
     }
 
 }
 
 enum SiriBatchEditField: String, AppEnum {
-    case name, amount, currency, date, category
+    case name, amount, currency, date, category, payer, split
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "変更する項目"
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .name: "名前", .amount: "金額", .currency: "通貨", .date: "日付", .category: "カテゴリ"
+        .name: "名前", .amount: "金額", .currency: "通貨", .date: "日付", .category: "カテゴリ",
+        .payer: "支払者・受取者", .split: "割り勘"
     ]
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriBatchMemberQuery: SheetScopedMemberQuery {
+    typealias Entity = SiriSheetMemberEntity
+    typealias Result = [SiriSheetMemberEntity]
+    typealias DefaultValue = SiriSheetMemberEntity
+
+    @IntentParameterDependency<SiriBatchAddTransactionsIntent>(\.$sheet) var add
+    @IntentParameterDependency<SiriBatchEditTransactionsIntent>(\.$sheet) var edit
+
+    func selectedSheetID(access: IntentSheetAccess) throws -> String? { add?.sheet.id ?? edit?.sheet.id }
 }
 
 @available(iOS 27.3, macOS 27.3, *)

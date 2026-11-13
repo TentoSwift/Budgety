@@ -43,8 +43,9 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             )
             #if os(macOS)
             AppShortcut(
-                intent: SiriFindExpenseCardsIntent(),
-                phrases: ["\(.applicationName) で明細を検索", "\(.applicationName) で \(\.$period) の支出を調べて", "Search transactions in \(.applicationName)"],
+                intent: SiriListTransactionsIntent(),
+                phrases: ["\(.applicationName) で明細を検索", "\(.applicationName) の収支は", "\(.applicationName) で \(\.$period) の収支を調べて",
+                          "\(.applicationName) で \(\.$kind) を調べて", "Search transactions in \(.applicationName)"],
                 shortTitle: "明細を検索", systemImageName: "magnifyingglass"
             )
             AppShortcut(
@@ -77,6 +78,14 @@ struct ExpensoShortcuts: AppShortcutsProvider {
                 phrases: ["\(.applicationName) で送金を編集", "Edit a transfer in \(.applicationName)"],
                 shortTitle: "送金を編集", systemImageName: "pencil.circle"
             )
+            #if os(watchOS)
+            AppShortcut(
+                intent: WatchSheetActionShortcut(),
+                phrases: ["\(.applicationName) で \(\.$operation)", "\(.applicationName) でメンバーの収支を調べて",
+                          "Find a member’s income and expenses in \(.applicationName)", "\(\.$operation) in \(.applicationName)"],
+                shortTitle: "シートの操作", systemImageName: "person.2"
+            )
+            #else
             AppShortcut(
                 intent: SiriFindMemberTransactionsIntent(),
                 phrases: [
@@ -86,6 +95,7 @@ struct ExpensoShortcuts: AppShortcutsProvider {
                 shortTitle: "メンバーの収支",
                 systemImageName: "person.crop.circle"
             )
+            #endif
             AppShortcut(
                 intent: SiriRecordIncomeIntent(),
                 phrases: [

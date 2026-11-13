@@ -1,38 +1,45 @@
 import AppKit
+import Combine
 import CoreData
 import SwiftUI
 
 @MainActor
-final class MacSiriNavigation: NSObject, NSWindowDelegate {
+final class MacSiriNavigation: ObservableObject {
+    struct Selection: Hashable {
+        let identifier: String
+        let sheetID: NSManagedObjectID
+    }
+
     static let shared = MacSiriNavigation()
-    private var detailWindow: NSWindow?
+    @Published private(set) var selection: Selection?
 
     func requestOpenExpense(identifier: String) throws {
         let context = PersistenceController.shared.container.viewContext
         let target = try SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
-        let detail = MacSiriExpenseDetail(target: target).environment(\.managedObjectContext, context)
-        let controller = NSHostingController(rootView: detail)
-        let window = detailWindow ?? NSWindow(contentViewController: controller)
-        window.contentViewController = controller
-        window.title = String(localized: "明細")
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        if detailWindow == nil { window.center() }
-        detailWindow = window
-        window.makeKeyAndOrderFront(nil)
+        let sheetID: NSManagedObjectID
+        switch target {
+        case .stored(let expense):
+            guard let sheet = expense.sheet else { throw AppIntentError.expenseUnavailable }
+            sheetID = sheet.objectID
+        case .virtual(_, let sheet, _):
+            sheetID = sheet.objectID
+        }
+        selection = Selection(identifier: identifier, sheetID: sheetID)
         NSApp.activate()
     }
 
-    func windowWillClose(_ notification: Notification) {
-        detailWindow = nil
+    func takeSelection() -> Selection? {
+        defer { selection = nil }
+        return selection
     }
 }
 
-private struct MacSiriExpenseDetail: View {
-    let target: SiriVirtualExpenseLink.Target
+struct MacSiriExpenseDetail: View {
+    let identifier: String
+    @Environment(\.managedObjectContext) private var context
 
     var body: some View {
-        NavigationStack {
+        if let target = try? SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context)) {
             switch target {
             case .stored(let expense):
                 if let sheet = expense.sheet {
@@ -43,7 +50,8 @@ private struct MacSiriExpenseDetail: View {
                     ExpenseDetailView(expense: draft.expense, isVirtualDraft: true, lockRecord: sheet)
                 }
             }
+        } else {
+            ContentUnavailableView("この明細は現在表示できません。", systemImage: "doc.text.magnifyingglass")
         }
-        .frame(minWidth: 420, idealWidth: 560, minHeight: 340, idealHeight: 520)
     }
 }

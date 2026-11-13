@@ -1,6 +1,8 @@
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import CoreData
 import Foundation
 
+@available(iOS 27.3, macOS 27.3, *)
 @MainActor
 enum SiriBatchTransactionStore {
     struct Entry {
@@ -18,6 +20,16 @@ enum SiriBatchTransactionStore {
         var currencyCode: String? = nil
         var date: Date? = nil
         var categoryID: String? = nil
+        var payer: SiriSheetMemberEntity? = nil
+        var split: SiriTransactionSplitChange = .unchanged
+        var beneficiaries: [SiriSheetMemberEntity] = []
+
+        @MainActor
+        func memberChanges(for row: Expense, in sheet: ExpenseSheet, access: IntentSheetAccess,
+                           preparingToSave: Bool = false) throws -> SiriTransactionEditStore.MemberChanges {
+            try SiriTransactionEditStore.memberChanges(payer: payer, split: split, beneficiaries: beneficiaries,
+                for: row, sheet: sheet, access: access, preparingToSave: preparingToSave)
+        }
     }
 
     enum BatchError: Error, LocalizedError, CustomLocalizedStringResourceConvertible {
@@ -45,9 +57,41 @@ enum SiriBatchTransactionStore {
         }
     }
 
+    fileprivate typealias Identity = SiriTransactionEditStore.MemberIdentity
+
+    fileprivate struct NewMembers {
+        let payer: SiriSheetMemberEntity?
+        let beneficiaries: [SiriSheetMemberEntity]
+
+        var identities: [Identity] { ([payer].compactMap { $0 } + beneficiaries).map(Identity.init) }
+
+        func summary(for kind: TransactionKind) -> String {
+            guard let payer else { return "" }
+            let role = kind == .expense ? String(localized: "支払者") : String(localized: "受取者")
+            let split = beneficiaries.map(\.name).formatted(.list(type: .and))
+            return "\n\(role)：\(payer.name)" + (split.isEmpty ? "" : String(localized: "、割り勘：\(split)"))
+        }
+
+        @MainActor
+        init(payer: SiriSheetMemberEntity?, splitAll: Bool, beneficiaries: [SiriSheetMemberEntity],
+             sheet: ExpenseSheet, access: IntentSheetAccess) throws {
+            guard payer != nil || splitAll || !beneficiaries.isEmpty else {
+                self.payer = nil
+                self.beneficiaries = []
+                return
+            }
+            let roster = try SiriSheetMemberRoster(sheet: sheet, access: access)
+            guard let current = try payer.map(roster.resolve) ?? roster.members.first(where: \.isSelf)
+            else { throw AppIntentError.missingPayer }
+            self.payer = current
+            self.beneficiaries = (splitAll || !beneficiaries.isEmpty)
+                ? try AddExpenseIntent.splitMembers(in: roster, splitAll: splitAll, beneficiaries: beneficiaries) : []
+        }
+    }
+
     fileprivate enum Operation {
-        case add([Entry])
-        case edit([Edit], [Snapshot])
+        case add([Entry], NewMembers, splitAll: Bool)
+        case edit([Edit], [Snapshot], [[Identity]])
     }
 
     // A prepared operation can be submitted twice by UI actions. Both submissions share
@@ -71,9 +115,14 @@ enum SiriBatchTransactionStore {
         }
     }
 
-    static func prepareAdd(sheetID: String, entries: [Entry]) throws -> Prepared {
+    static func prepareAdd(sheetID: String, entries: [Entry], payer: SiriSheetMemberEntity? = nil,
+                           splitAll: Bool = false, beneficiaries: [SiriSheetMemberEntity] = []) throws -> Prepared {
         guard !entries.isEmpty else { throw BatchError.empty }
         let (access, sheet) = try writableSheet(sheetID)
+        if (splitAll || !beneficiaries.isEmpty), entries.contains(where: { $0.kind != .expense }) {
+            throw AppIntentError.incomeCannotSplit
+        }
+        let members = try NewMembers(payer: payer, splitAll: splitAll, beneficiaries: beneficiaries, sheet: sheet, access: access)
         let normalized = try entries.map { entry in
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { throw AppIntentError.emptyTitle }
@@ -81,8 +130,8 @@ enum SiriBatchTransactionStore {
             let currency = try currency(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)
             return Entry(title: title, amount: entry.amount, kind: entry.kind, currencyCode: currency, date: entry.date)
         }
-        let prepared = Prepared(sheet: sheet, operation: .add(normalized), lines: normalized.map { entry in
-            "\(entry.kind.label)　\(entry.title)　\(entry.amount) \(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)　\(entry.date.formatted(date: .abbreviated, time: .shortened))"
+        let prepared = Prepared(sheet: sheet, operation: .add(normalized, members, splitAll: splitAll), lines: normalized.map { entry in
+            "\(entry.kind.label)　\(entry.title)　\(entry.amount) \(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)　\(entry.date.formatted(date: .abbreviated, time: .shortened))" + members.summary(for: entry.kind)
         })
         withExtendedLifetime(access) {}
         return prepared
@@ -94,11 +143,14 @@ enum SiriBatchTransactionStore {
         let (access, sheet) = try writableSheet(sheetID)
         let rows = try edits.map { try target($0.identifier, in: sheet, access: access) }
         let snapshots = rows.map(Snapshot.init)
-        let lines = try zip(edits, rows).compactMap { try apply($0, to: $1, in: sheet, access: access) }
+        let members = try zip(edits, rows).map { try $0.memberChanges(for: $1, in: sheet, access: access) }
+        let lines = try edits.indices.compactMap { i in
+            try apply(edits[i], members: members[i], to: rows[i], in: sheet, access: access)
+        }
         guard !lines.isEmpty else { throw BatchError.unchanged }
         // The unparented context only contains the preview. Saving requires a fresh
         // access check, even if the caller immediately confirms.
-        return Prepared(sheet: sheet, operation: .edit(edits, snapshots), lines: lines)
+        return Prepared(sheet: sheet, operation: .edit(edits, snapshots, members.map(\.selectedMembers)), lines: lines)
     }
 
     @discardableResult
@@ -109,25 +161,40 @@ enum SiriBatchTransactionStore {
         else { throw BatchError.stale }
         var changed: [Expense] = []
         switch prepared.operation {
-        case .add(let entries):
+        case .add(let entries, let confirmed, let splitAll):
+            let members = try NewMembers(payer: confirmed.payer, splitAll: splitAll,
+                                         beneficiaries: splitAll ? [] : confirmed.beneficiaries, sheet: sheet, access: access)
+            guard members.identities == confirmed.identities else { throw BatchError.stale }
             for entry in entries {
                 let category = CategoryHistorySuggestor.suggest(title: entry.title, kind: entry.kind, in: sheet)
                 let row = try AddExpenseIntent.insertTransaction(in: sheet, access: access, kind: entry.kind,
                     title: entry.title, amount: entry.amount, currencyCode: entry.currencyCode ?? prepared.sheetCurrency,
-                    date: entry.date, category: category)
+                    date: entry.date, category: category, payer: members.payer,
+                    splitAll: splitAll, beneficiaries: members.beneficiaries)
                 changed.append(row)
             }
-        case .edit(let edits, let snapshots):
+        case .edit(let edits, let snapshots, let confirmedMembers):
+            let rows = try edits.map { try target($0.identifier, in: sheet, access: access) }
+            let members = try zip(edits, rows).map { try $0.memberChanges(for: $1, in: sheet, access: access) }
+            guard rows.map(Snapshot.init) == snapshots, members.map(\.selectedMembers) == confirmedMembers
+            else { throw BatchError.stale }
             var lines = [sheet.displayName]
-            for (edit, snapshot) in zip(edits, snapshots) {
-                let row = try target(edit.identifier, in: sheet, access: access)
-                guard Snapshot(row) == snapshot else { throw BatchError.stale }
-                if let line = try apply(edit, to: row, in: sheet, access: access) {
+            for i in edits.indices {
+                if let line = try apply(edits[i], members: members[i], to: rows[i], in: sheet, access: access) {
                     lines.append(line)
-                    changed.append(row)
+                    changed.append(rows[i])
                 }
             }
             guard lines.joined(separator: "\n") == prepared.summary else { throw BatchError.stale }
+            // Allocate a first-time self profile ID only after verifying the entire batch.
+            for i in edits.indices {
+                let plan = members[i]
+                if plan.selectedMembers.contains(where: { $0.profileID.isEmpty }) {
+                    try edits[i].memberChanges(for: rows[i], in: sheet, access: access, preparingToSave: true).apply(to: rows[i])
+                } else {
+                    plan.apply(to: rows[i])
+                }
+            }
         }
         try Task.checkCancellation()
         try access.context.save()
@@ -159,7 +226,8 @@ enum SiriBatchTransactionStore {
         return code
     }
 
-    private static func apply(_ edit: Edit, to row: Expense, in sheet: ExpenseSheet, access: IntentSheetAccess) throws -> String? {
+    private static func apply(_ edit: Edit, members: SiriTransactionEditStore.MemberChanges, to row: Expense,
+                              in sheet: ExpenseSheet, access: IntentSheetAccess) throws -> String? {
         let originalName = row.displayTitle.isEmpty ? row.categoryDisplayName : row.displayTitle
         let originalDate = row.date?.formatted(date: .abbreviated, time: .shortened) ?? ""
         let originalAmount = "\(row.amountDecimal) \(row.resolvedCurrencyCode)"
@@ -196,6 +264,7 @@ enum SiriBatchTransactionStore {
                 row.categoryRaw = chosen?.name
             }
         }
+        changes += members.changes.map { "\($0.label)：\($0.before) → \($0.after)" }
         guard !changes.isEmpty else { return nil }
         return "\(row.kind.label)　\(originalName)　\(originalAmount)　\(originalDate)\n" + changes.joined(separator: "、")
     }
@@ -213,3 +282,4 @@ enum SiriBatchTransactionStore {
         return cat
     }
 }
+#endif

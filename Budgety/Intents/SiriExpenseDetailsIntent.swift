@@ -36,11 +36,81 @@ struct SiriExpenseDetailsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 #if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
 @AppIntent(.tool)
+struct SiriListTransactionsIntent: AppIntent {
+    static let title: LocalizedStringResource = "シートの収支と明細を調べる"
+    static let description = IntentDescription("「収支は？」「今月の収支は？」「収入と支出を見せて」では収入・支出・差額を通貨ごとに答え、両方の明細をすべて新しい順で返します。「それなら先月は？」では対象期間を切り替えます。支出のみ、収入のみ、日付、店名、カテゴリ、メンバーを指定した検索にも使えます。", searchKeywords: ["収支", "収入と支出", "差額", "明細一覧", "全件", "取引一覧"])
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+    static let supportedModes: IntentModes = .background
+
+    @Parameter(title: "シート", description: "指定されたシート。省略時は指定したメンバーのシート、または最後に開いたシートを使います。")
+    var sheet: ExpenseSheetEntity?
+    @Parameter(title: "メンバー", description: "支払った人や受け取った人で絞る場合に指定します。", optionsProvider: SiriListMemberQuery())
+    var member: SiriSheetMemberEntity?
+    @Parameter(title: "支出名・収入名", description: "お店の名前や明細名の検索語。全件を一覧にするときは省略します。")
+    var expenseName: String?
+    @Parameter(title: "カテゴリ名") var categoryName: String?
+    @Parameter(title: "対象の収支", description: "「収支」や明細全般は両方です。「支出だけ」「収入だけ」の指定があれば対応する種別を選びます。")
+    var kind: SiriTransactionSelection?
+    @Parameter(title: "対象月") var month: Date?
+    @Parameter(title: "対象日") var day: Date?
+    @Parameter(title: "検索期間", description: "今日・昨日・今月・先月・全期間。")
+    var period: SiriExpensePeriod?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog {
+        let sheetID: String
+        if let member {
+            guard let separator = member.id.firstIndex(of: "#") else { throw AppIntentError.missingPayer }
+            sheetID = String(member.id[..<separator])
+            guard sheet == nil || sheet?.id == sheetID else { throw AppIntentError.sheetNotFound }
+        } else {
+            sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
+                try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を一覧にしますか？")
+            }
+        }
+        let filter = SiriExpenseSearchFilter(expenseName: expenseName, categoryName: categoryName, month: month, day: day, period: period)
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let selected = try access.resolve(sheetID)
+        let selection = filter.spokenKind ?? kind ?? .both
+        let payer = try member.map { person in
+            let roster = try SiriSheetMemberRoster(sheet: selected, access: access)
+            return SiriMemberTransactionLookup.Payer(member: try roster.resolve(person), roster: roster, sheet: selected)
+        }
+        let ledger = try SiriTransactionLedger.read(sheet: selected, access: access, interval: filter.scope.interval,
+                                                    includeExpenses: selection.includesExpenses, includeIncome: selection.includesIncome,
+                                                    expenseName: filter.name, categoryName: filter.categoryName, allRows: true,
+                                                    matchesPayer: { payer?.matches($0) ?? true })
+        let summary = ledger.summary(for: selection, sheetName: selected.displayName, period: filter.scope.label,
+                                     member: member?.name, category: filter.categoryName, name: filter.name)
+        return .result(value: try ledger.rows.map(SiriListedTransactionEntity.init(row:)), dialog: IntentDialog("\(summary)"))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriListMemberQuery: SheetScopedMemberQuery {
+    typealias Entity = SiriSheetMemberEntity
+    typealias Result = [SiriSheetMemberEntity]
+    typealias DefaultValue = SiriSheetMemberEntity
+    @IntentParameterDependency<SiriListTransactionsIntent>(\.$sheet) var list
+
+    @MainActor func selectedSheetID(access: IntentSheetAccess) throws -> String? { list?.sheet.id }
+
+    @MainActor func suggestedEntities() async throws -> [SiriSheetMemberEntity] {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        return try SiriSheetMemberRoster.searchCandidates(access: access, sheetID: selectedSheetID(access: access))
+    }
+}
 #endif
+
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriFindExpenseCardsIntent: AppIntent {
+    // Existing shortcuts keep the original output type. New spoken ledger queries use the entity list.
+    #if os(iOS) || os(macOS)
+    static let isDiscoverable = false
+    #endif
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
     static let description = IntentDescription("シート全体の支出、収入、または両方を日付・月・カテゴリ・店名で検索します。「今月の収支は？」「収入と支出を見せて」では両方を指定し、同じカードに表示します。「今日の支出」は今日1日、「今月の食費」は今月の食費です。", searchKeywords: ["収支", "支出", "収入", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication

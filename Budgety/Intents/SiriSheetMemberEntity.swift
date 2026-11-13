@@ -17,7 +17,7 @@ struct SiriSheetMemberEntity: AppEntity {
     let name: String
     let sheetName: String
     fileprivate let aliases: [String]
-    fileprivate let role: String
+    let role: String
 
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(title: "\(name)", subtitle: "\(sheetName) · \(role)",

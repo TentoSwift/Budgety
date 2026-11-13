@@ -16,8 +16,13 @@ import UIKit
 #endif
 
 struct WatchHomeView: View {
+    private enum Route: Hashable {
+        case sheet(NSManagedObjectID)
+        case expense(sheet: NSManagedObjectID, identifier: String)
+    }
     @Environment(\.managedObjectContext) private var ctx
     @StateObject private var lockManager = SheetLockManager.shared
+    @ObservedObject private var siriNavigation = WatchSiriNavigation.shared
 
     @FetchRequest(
         sortDescriptors: [
@@ -27,7 +32,7 @@ struct WatchHomeView: View {
     )
     private var sheets: FetchedResults<ExpenseSheet>
 
-    @State private var path: [NSManagedObjectID] = []
+    @State private var path: [Route] = []
     /// 前回開いていたシート (= 次回起動時にそこへ自動遷移)。
     @AppStorage("watchLastOpenedSheetURI") private var lastOpenedSheetURI: String = ""
     @State private var didRestorePath = false
@@ -48,14 +53,14 @@ struct WatchHomeView: View {
                     let archivedSheets = sheets.filter { $0.archived }
                     List {
                         ForEach(activeSheets, id: \.objectID) { sheet in
-                            NavigationLink(value: sheet.objectID) {
+                            NavigationLink(value: Route.sheet(sheet.objectID)) {
                                 sheetRow(sheet)
                             }
                         }
                         if !archivedSheets.isEmpty {
                             Section("アーカイブ済み") {
                                 ForEach(archivedSheets, id: \.objectID) { sheet in
-                                    NavigationLink(value: sheet.objectID) {
+                                    NavigationLink(value: Route.sheet(sheet.objectID)) {
                                         sheetRow(sheet)
                                     }
                                 }
@@ -70,10 +75,17 @@ struct WatchHomeView: View {
                     WatchProfileAvatar()
                 }
             }
-            .navigationDestination(for: NSManagedObjectID.self) { id in
-                if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
-                    WatchLockedSheetGate(sheet: sheet) {
-                        WatchSheetPage(sheet: sheet)
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .sheet(let id):
+                    if let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet {
+                        WatchLockedSheetGate(sheet: sheet) {
+                            WatchSheetPage(sheet: sheet)
+                        }
+                    }
+                case .expense(let sheetID, let identifier):
+                    if let sheet = try? ctx.existingObject(with: sheetID) as? ExpenseSheet {
+                        WatchSiriExpenseDetail(identifier: identifier, sheet: sheet)
                     }
                 }
             }
@@ -101,23 +113,35 @@ struct WatchHomeView: View {
             showShareToast(message)
         }
         .onAppear { restoreLastOpenedSheetIfNeeded() }
+        .onChange(of: siriNavigation.selection?.id, initial: true) { _, _ in openRequestedExpense() }
+        .onChange(of: siriNavigation.editingDraft) { _, _ in openRequestedExpense() }
         .onChange(of: sheets.count) { _, _ in restoreLastOpenedSheetIfNeeded() }
         .onChange(of: path) { oldPath, newPath in
             // 末尾のシート URI を覚えておき、次回起動時に復元する。
-            lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
+            if case .sheet(let id) = newPath.first { lastOpenedSheetURI = id.uriRepresentation().absoluteString }
+            else { lastOpenedSheetURI = "" }
             // 一覧に戻った (= path から外れた) シートを再ロックする。
             // pop アニメ完了後に行い、その間に開き直していたらスキップ
             // (表示中のシートを誤ってロックしないため)。
             let removed = Set(oldPath).subtracting(newPath)
-            for id in removed {
-                guard let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet,
+            for route in removed {
+                guard case .sheet(let id) = route,
+                      let sheet = try? ctx.existingObject(with: id) as? ExpenseSheet,
                       lockManager.hasPassword(for: sheet) else { continue }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    guard !path.contains(id) else { return }
+                    guard !path.contains(.sheet(id)) else { return }
                     lockManager.lock(sheet)
                 }
             }
         }
+    }
+
+    private func openRequestedExpense() {
+        guard !siriNavigation.editingDraft, let selection = siriNavigation.selection else { return }
+        let id = selection.sheet.objectID
+        didRestorePath = true
+        path = [.sheet(id), .expense(sheet: id, identifier: selection.id)]
+        siriNavigation.selection = nil
     }
 
     /// 前回開いていたシートへ起動時に 1 度だけ自動遷移する (iOS と同じ挙動)。
@@ -134,7 +158,7 @@ struct WatchHomeView: View {
             didRestorePath = true
             return
         }
-        path = [objectID]
+        path = [.sheet(objectID)]
         didRestorePath = true
     }
 
@@ -507,7 +531,10 @@ private struct WatchSheetPage: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAdd) {
+        .onChange(of: showingAdd) { _, presented in
+            if presented { WatchSiriNavigation.shared.editingDraft = true }
+        }
+        .sheet(isPresented: $showingAdd, onDismiss: { WatchSiriNavigation.shared.editingDraft = false }) {
             NavigationStack {
                 WatchAddExpenseView(sheet: sheet)
             }

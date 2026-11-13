@@ -19,13 +19,10 @@ enum WatchEditLedgerOperation: String, AppEnum {
 }
 
 private enum WatchLedgerInputError: Error, CustomLocalizedStringResourceConvertible {
-    case singleEntryParameters, singleEditParameters
+    case singleEntryParameters
 
     var localizedStringResource: LocalizedStringResource {
-        switch self {
-        case .singleEntryParameters: "まとめて追加では各行に名前と金額を指定してください。支払者や割り勘の指定は1件ずつ追加するときに使えます。"
-        case .singleEditParameters: "まとめて編集では名前、金額、通貨、日付、カテゴリを変更できます。支払者や割り勘の変更は1件ずつ指定してください。"
-        }
+        "まとめて追加では各行に名前と金額を指定してください。"
     }
 }
 
@@ -41,18 +38,18 @@ struct WatchRecordLedgerShortcut: AppIntent {
     @Parameter(title: "支出名") var expenseTitle: String?
     @Parameter(title: "日付") var date: Date?
     @Parameter(title: "通貨", optionsProvider: SiriCurrencyOptions()) var currencyCode: String?
-    @Parameter(title: "支払者", optionsProvider: WatchRecordingMemberQuery()) var payer: SiriSheetMemberEntity?
+    @Parameter(title: "支払者・受取者", optionsProvider: WatchRecordingMemberQuery()) var payer: SiriSheetMemberEntity?
     @Parameter(title: "全員で割り勘") var splitAll: Bool?
     @Parameter(title: "割り勘の対象", optionsProvider: WatchRecordingMemberQuery()) var beneficiaries: [SiriSheetMemberEntity]?
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
         if operation == .batch {
-            guard amount == nil, expenseTitle == nil, payer == nil, splitAll != true, beneficiaries?.isEmpty != false
-            else { throw WatchLedgerInputError.singleEntryParameters }
+            guard amount == nil, expenseTitle == nil else { throw WatchLedgerInputError.singleEntryParameters }
             guard let lines, !lines.isEmpty else { throw $lines.needsValueError("追加する明細の名前と金額を1件ずつ教えてください。") }
-            let entries = try SiriBatchAddTransactionsIntent.parse(lines: lines, defaultKind: .expense, currency: currencyCode, date: date ?? .now)
-            let prepared = try SiriBatchTransactionStore.prepareAdd(sheetID: sheet.id, entries: entries)
+            let prepared = try SiriBatchAddTransactionsIntent.prepare(sheetID: sheet.id, lines: lines, defaultKind: .expense,
+                                                                      currency: currencyCode, date: date ?? .now, payer: payer,
+                                                                      splitAll: splitAll ?? false, beneficiaries: beneficiaries ?? [])
             try await requestConfirmation(actionName: .add, dialog: IntentDialog("次の\(prepared.count)件を追加しますか？\n\(prepared.summary)"))
             let count = try SiriBatchTransactionStore.commit(prepared).count
             return .result(dialog: "\(count)件の明細を追加しました。", snippetIntent: EmptySnippetIntent())
@@ -105,11 +102,8 @@ struct WatchEditLedgerShortcut: AppIntent {
         }
         if newTitle == nil, newAmount == nil, newDate == nil, category == nil, currencyCode == nil, payer == nil,
            split == nil, beneficiaries?.isEmpty != false {
-            let fields = WatchTransactionEditField.allCases.filter { choice in
-                if choice == .split { return !isBatch && selected.first?.kindName == TransactionKind.expense.label }
-                if choice == .payer { return !isBatch }
-                return true
-            }
+            let allExpenses = selected.allSatisfy { $0.kindName == TransactionKind.expense.label }
+            let fields = WatchTransactionEditField.allCases.filter { $0 != .split || allExpenses }
             guard let field else {
                 throw $field.needsDisambiguationError(among: fields, dialog: "どの項目を変更しますか？")
             }
@@ -123,18 +117,16 @@ struct WatchEditLedgerShortcut: AppIntent {
             case .split: throw $split.needsDisambiguationError(among: [.off, .all, .selected], dialog: "割り勘をどう変更しますか？")
             }
         }
+        if split == .selected, beneficiaries?.isEmpty != false { throw $beneficiaries.needsValueError("割り勘の対象は誰ですか？") }
         if isBatch {
-            guard payer == nil, split == nil, beneficiaries?.isEmpty != false else {
-                throw WatchLedgerInputError.singleEditParameters
-            }
             let prepared = try SiriBatchEditTransactionsIntent.prepare(sheetID: sheet.id, transactions: selected, title: newTitle,
-                                                                       amount: newAmount, currencyCode: currencyCode, date: newDate, category: category)
+                                                                       amount: newAmount, currencyCode: currencyCode, date: newDate, category: category,
+                                                                       payer: payer, split: split, beneficiaries: beneficiaries ?? [])
             try await requestConfirmation(actionName: SiriBatchEditTransactionsIntent.confirmationAction,
                                           dialog: IntentDialog("次の\(prepared.count)件を変更しますか？\n\(prepared.summary)"))
             let count = try SiriBatchTransactionStore.commit(prepared).count
             return .result(dialog: "\(count)件の明細を変更しました。", snippetIntent: EmptySnippetIntent())
         }
-        if split == .selected, beneficiaries?.isEmpty != false { throw $beneficiaries.needsValueError("割り勘の対象は誰ですか？") }
         let edit = SiriEditTransactionIntent()
         edit.sheet = sheet
         edit.transaction = selected[0]
@@ -190,5 +182,113 @@ struct WatchSelectedCategoryQuery: EntityStringQuery {
     }
     @MainActor func entities(matching string: String) async throws -> [ExpenseCategoryEntity] {
         try await suggestedEntities().filter { $0.name.localizedStandardContains(string) }
+    }
+}
+
+enum WatchSheetAction: String, AppEnum {
+    case memberTransactions, members, categories, addCategory, pendingSettlements, cancelSettlement
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "シートの操作"
+    static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+        .memberTransactions: "メンバーの収支を確認",
+        .members: DisplayRepresentation(title: "メンバー一覧を表示", synonyms: ["メンバーを教えて"]),
+        .categories: DisplayRepresentation(title: "カテゴリ一覧を表示", synonyms: ["カテゴリを教えて"]),
+        .addCategory: "カテゴリを追加",
+        .pendingSettlements: DisplayRepresentation(title: "精算が必要なシートを確認", synonyms: ["精算が必要なシートは", "未精算のシートを表示"]),
+        .cancelSettlement: DisplayRepresentation(title: "精算を取り消す", synonyms: ["送金を取り消す"])
+    ]
+}
+
+struct WatchSheetActionShortcut: AppIntent {
+    static let title: LocalizedStringResource = "シートの操作"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "操作") var operation: WatchSheetAction?
+    @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
+    @Parameter(title: "メンバー", optionsProvider: WatchSheetActionMemberQuery()) var member: SiriSheetMemberEntity?
+    @Parameter(title: "対象の収支") var kind: SiriTransactionSelection?
+    @Parameter(title: "検索期間") var period: SiriExpensePeriod?
+    @Parameter(title: "対象月") var month: Date?
+    @Parameter(title: "対象日") var day: Date?
+    @Parameter(title: "表示するメンバー") var rosterFilter: SiriRosterFilter?
+    @Parameter(title: "カテゴリの種類") var categoryKind: TransactionKind?
+    @Parameter(title: "新しいカテゴリ名") var categoryName: String?
+    @Parameter(title: "取り消す精算", optionsProvider: WatchCancellationRecordQuery()) var settlement: SiriSettlementRecordEntity?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
+        switch operation ?? .memberTransactions {
+        case .memberTransactions:
+            guard let member else { throw $member.needsValueError("どのメンバーの収支を調べますか？") }
+            let query = SiriFindMemberTransactionsIntent()
+            query.sheet = sheet
+            query.member = member
+            query.kind = kind
+            query.period = period
+            query.month = month
+            query.day = day
+            let result = try query.search()
+            return .result(dialog: IntentDialog("\(result.lookup.summary)"), snippetIntent: result.snippet)
+        case .members, .categories:
+            let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
+                try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートを調べますか？")
+            }
+            let contents: SiriDirectoryContents
+            if operation == .members {
+                contents = (rosterFilter ?? .all).contents
+            } else {
+                switch categoryKind {
+                case .expense: contents = .expenseCategories
+                case .income: contents = .incomeCategories
+                case nil: contents = .categories
+                }
+            }
+            let result = try SiriSheetDirectoryResult.load(sheetID: sheetID, contents: contents)
+            return .result(dialog: IntentDialog("\(result.summary)"), snippetIntent: SiriSheetDirectorySnippetIntent(sheetID: sheetID, contents: contents))
+        case .addCategory:
+            guard let categoryName else { throw $categoryName.needsValueError("新しいカテゴリの名前は何ですか？") }
+            let intent = SiriAddCategoryIntent()
+            intent.sheet = sheet
+            intent.name = categoryName
+            intent.kind = categoryKind
+            _ = try await intent.perform()
+            return .result(dialog: "カテゴリを追加しました。", snippetIntent: EmptySnippetIntent())
+        case .pendingSettlements:
+            let result = try SiriSheetsNeedingSettlementResult.load()
+            return .result(dialog: IntentDialog("\(result.summary)"), snippetIntent: SiriSheetsNeedingSettlementSnippetIntent())
+        case .cancelSettlement:
+            guard let settlement else { throw $settlement.needsValueError("どの精算を取り消しますか？") }
+            let intent = SiriCancelSettlementIntent()
+            intent.sheet = sheet
+            intent.record = settlement
+            _ = try await intent.perform()
+            return .result(dialog: "精算を取り消しました。", snippetIntent: EmptySnippetIntent())
+        }
+    }
+}
+
+struct WatchSheetActionMemberQuery: SheetScopedMemberQuery {
+    typealias Entity = SiriSheetMemberEntity
+    typealias Result = [SiriSheetMemberEntity]
+    typealias DefaultValue = SiriSheetMemberEntity
+    @IntentParameterDependency<WatchSheetActionShortcut>(\.$sheet) var action
+
+    func selectedSheetID(access: IntentSheetAccess) throws -> String? { action?.sheet.id }
+
+    @MainActor func suggestedEntities() async throws -> [SiriSheetMemberEntity] {
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        return try SiriSheetMemberRoster.searchCandidates(access: access, sheetID: selectedSheetID(access: access))
+    }
+}
+
+struct WatchCancellationRecordQuery: EntityStringQuery {
+    @IntentParameterDependency<WatchSheetActionShortcut>(\.$sheet) var action
+
+    @MainActor func suggestedEntities() async throws -> [SiriSettlementRecordEntity] { try await entities(matching: "") }
+    @MainActor func entities(matching string: String) async throws -> [SiriSettlementRecordEntity] {
+        try SiriSettlementRecordQuery.search(string, sheetID: action?.sheet.id, forCancellation: true)
+    }
+    @MainActor func entities(for identifiers: [String]) async throws -> [SiriSettlementRecordEntity] {
+        try SiriSettlementRecordQuery.resolve(identifiers, sheetID: action?.sheet.id, forCancellation: true)
     }
 }

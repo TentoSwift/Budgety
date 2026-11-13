@@ -71,9 +71,25 @@ struct SettingsAvatarButton: View {
 
 }
 
+enum SheetNavigationDestination: Hashable {
+    case sheet(NSManagedObjectID)
+    #if os(iOS)
+    case expense(sheetID: NSManagedObjectID, identifier: String)
+    #endif
+
+    var sheetID: NSManagedObjectID {
+        switch self {
+        case .sheet(let id): id
+        #if os(iOS)
+        case .expense(let id, _): id
+        #endif
+        }
+    }
+}
+
 struct SheetListView: View {
     var showsQuickExpense = false
-    var sharedPath: Binding<[NSManagedObjectID]>? = nil
+    var sharedPath: Binding<[SheetNavigationDestination]>? = nil
     var usesDuoSidebar = false
     var showDuoSidebar: (() -> Void)? = nil
     @State private var quickExpenseSheet: ExpenseSheet?
@@ -89,12 +105,13 @@ struct SheetListView: View {
     @State private var showingSettings = false
     @State private var showingPaywall = false
     @State private var showNotSignedInAlert = false
-    @State private var localPath: [NSManagedObjectID] = []
-    private var navigationPath: Binding<[NSManagedObjectID]> { sharedPath ?? $localPath }
-    private var path: [NSManagedObjectID] {
+    @State private var localPath: [SheetNavigationDestination] = []
+    private var navigationPath: Binding<[SheetNavigationDestination]> { sharedPath ?? $localPath }
+    private var path: [SheetNavigationDestination] {
         get { navigationPath.wrappedValue }
         nonmutating set { navigationPath.wrappedValue = newValue }
     }
+    @Environment(\.scenePhase) private var scenePhase
     @State private var didRestorePath = false
     @State private var searchText: String = ""
     /// 検索バーがフォーカスされているか。未入力でもフォーカスで結果を出す。
@@ -207,17 +224,24 @@ struct SheetListView: View {
                 }
             }
             .navigationTitle("シート")
-            .navigationDestination(for: NSManagedObjectID.self) { id in
-                if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
-                    LockedSheetGate(record: sheet) {
-                        SheetDetailView(record: sheet)
-                    }
-                    .id(id)
-                    .navigationBarBackButtonHidden(usesDuoSidebar)
-                    .toolbar {
-                        if usesDuoSidebar, let showDuoSidebar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("サイドバーを表示", systemImage: "sidebar.left", action: showDuoSidebar)
+            .navigationDestination(for: SheetNavigationDestination.self) { destination in
+                switch destination {
+                #if os(iOS)
+                case .expense(_, let identifier):
+                    SiriExpenseDestination(identifier: identifier).id(identifier)
+                #endif
+                case .sheet(let id):
+                    if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
+                        LockedSheetGate(record: sheet) {
+                            SheetDetailView(record: sheet)
+                        }
+                        .id(id)
+                        .navigationBarBackButtonHidden(usesDuoSidebar)
+                        .toolbar {
+                            if usesDuoSidebar, let showDuoSidebar {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    Button("サイドバーを表示", systemImage: "sidebar.left", action: showDuoSidebar)
+                                }
                             }
                         }
                     }
@@ -329,16 +353,25 @@ struct SheetListView: View {
             openPendingSheetIfReady()
         }
         .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
-            if sharedPath == nil, let selected = path.last, !ids.contains(selected) { path = [] }
+            if sharedPath == nil, let selected = path.last?.sheetID, !ids.contains(selected) { path = [] }
             openPendingSheetIfReady()
+            #if os(iOS)
+            openPendingExpenseIfReady()
+            #endif
         }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: .expensoOpenExpense)) { _ in openPendingExpenseIfReady() }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active { openPendingExpenseIfReady() }
+        }
+        #endif
         .onChange(of: path) { oldPath, newPath in
             // 末尾のシート URI を覚えておき、次回起動時に復元する
-            lastOpenedSheetURI = newPath.last?.uriRepresentation().absoluteString ?? ""
+            lastOpenedSheetURI = newPath.last?.sheetID.uriRepresentation().absoluteString ?? ""
             // path から外れた (= 一覧に戻った) シートは次回入る時にパスワード再要求。
             // 精算/詳細などの子画面 push は label ベースで path を変えないため、
             // ここは「シートそのものを離脱した時」だけ発火する。
-            let removed = Set(oldPath).subtracting(newPath)
+            let removed = Set(oldPath.map(\.sheetID)).subtracting(newPath.map(\.sheetID))
             for id in removed {
                 guard let sheet = try? viewContext.existingObject(with: id) as? ExpenseSheet,
                       lockManager.hasPassword(for: sheet) else { continue }
@@ -348,7 +381,7 @@ struct SheetListView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     // 0.5s 以内に同じシートを開き直していた (= path に戻っている) 場合は、
                     // 表示中のシートを誤ってロックしないようにスキップする。
-                    guard !path.contains(id) else { return }
+                    guard !path.contains(where: { $0.sheetID == id }) else { return }
                     lockManager.lock(sheet)
                 }
             }
@@ -542,7 +575,7 @@ struct SheetListView: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { openSheet(sheet) }
         #else
-        NavigationLink(value: sheet.objectID) {
+        NavigationLink(value: SheetNavigationDestination.sheet(sheet.objectID)) {
             SheetRowView(record: sheet)
         }
         .contextMenu {
@@ -555,8 +588,30 @@ struct SheetListView: View {
     /// 既に遷移済み（path が非空）なら二重 push しない（遷移直前の誤タップ対策）。
     private func openSheet(_ sheet: ExpenseSheet) {
         guard path.isEmpty else { return }
-        path.append(sheet.objectID)
+        path.append(.sheet(sheet.objectID))
     }
+
+    #if os(iOS)
+    private func openPendingExpenseIfReady() {
+        let router = DeepLinkRouter.shared
+        guard scenePhase == .active, !sheets.isEmpty, let identifier = router.pendingExpenseIdentifier else { return }
+        router.pendingExpenseIdentifier = nil
+        guard let access = try? IntentSheetAccess(checking: viewContext),
+              let target = try? SiriVirtualExpenseLink.resolve(identifier, access: access) else { return }
+        let sheetID: NSManagedObjectID
+        switch target {
+        case .stored(let expense):
+            guard let sheet = expense.sheet else { return }
+            sheetID = sheet.objectID
+        case .virtual(_, let sheet, _):
+            sheetID = sheet.objectID
+        }
+        didRestorePath = true
+        searchText = ""
+        searchFocused = false
+        path = [.sheet(sheetID), .expense(sheetID: sheetID, identifier: identifier)]
+    }
+    #endif
 
     private func openPendingSheetIfReady() {
         guard !sheets.isEmpty, let id = DeepLinkRouter.shared.consumePendingSheetIdentifier(),
@@ -565,7 +620,7 @@ struct SheetListView: View {
         searchText = ""
         searchFocused = false
         lastOpenedSheetURI = id
-        if path != [oid] { path = [oid] }
+        if path != [.sheet(oid)] { path = [.sheet(oid)] }
     }
 
     #if canImport(UIKit) && !os(watchOS)
@@ -664,7 +719,7 @@ struct SheetListView: View {
             List {
                 Section("シート") {
                     ForEach(matched, id: \.objectID) { sheet in
-                        NavigationLink(value: sheet.objectID) {
+                        NavigationLink(value: SheetNavigationDestination.sheet(sheet.objectID)) {
                             SheetRowView(record: sheet)
                         }
                     }
@@ -820,7 +875,7 @@ struct SheetListView: View {
             didRestorePath = true
             return
         }
-        path = [objectID]
+        path = [.sheet(objectID)]
         didRestorePath = true
     }
 
@@ -840,11 +895,11 @@ struct SheetListView: View {
             showingAddSheet = true
         case "detail", "addExpense", "share", "editGroup", "editExpense", "calendar", "templates", "stats", "chat":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                if let first = sheets.first { path = [first.objectID] }
+                if let first = sheets.first { path = [.sheet(first.objectID)] }
             }
         case "detailGreen":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                if sheets.count > 1 { path = [sheets[1].objectID] }
+                if sheets.count > 1 { path = [.sheet(sheets[1].objectID)] }
             }
         default:
             break

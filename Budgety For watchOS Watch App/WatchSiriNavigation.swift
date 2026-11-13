@@ -11,6 +11,7 @@ final class WatchSiriNavigation: ObservableObject {
 
     static let shared = WatchSiriNavigation()
     @Published var selection: Selection?
+    @Published var editingDraft = false
 
     func requestOpenExpense(identifier: String) throws {
         let context = PersistenceController.shared.container.viewContext
@@ -31,7 +32,7 @@ struct WatchSiriExpenseDetail: View {
     @Environment(\.managedObjectContext) private var context
 
     var body: some View {
-        NavigationStack {
+        Group {
             if !sheet.isDeleted, let target = try? SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context)) {
                 switch target {
                 case .stored(let expense):

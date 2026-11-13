@@ -11,6 +11,10 @@ struct SiriEditableTransactionEntity: AppEntity {
 
     let id: String
     #if os(iOS) || os(macOS)
+    @Property(title: "カテゴリのシンボル", visibility: .internal) var categorySymbol: String?
+    @Property(title: "カテゴリの画像", visibility: .internal) var categoryIcon: IntentFile?
+    #endif
+    #if os(iOS) || os(macOS)
     @Property(title: "シートの識別子", visibility: .internal)
     #endif
     var sheetID: String
@@ -34,11 +38,20 @@ struct SiriEditableTransactionEntity: AppEntity {
         amount = currency == expense.sheet?.resolvedDefaultCurrencyCode ? expense.formattedSignedAmount
             : "\(expense.formattedSignedAmount) \(currency)"
         kindName = expense.kind.label
+        #if os(iOS) || os(macOS)
+        categorySymbol = expense.categorySymbol
+        categoryIcon = SiriTransactionCategoryIcon.file(symbol: expense.categorySymbol, colorHex: expense.resolvedCategory?.displayColorHex ?? "")
+        #endif
     }
 
     var displayRepresentation: DisplayRepresentation {
         let when = date?.formatted(date: .abbreviated, time: .shortened) ?? String(localized: "日付不明")
-        return DisplayRepresentation(title: "\(title)", subtitle: "\(when) · \(amount) · \(sheetName)")
+        #if os(iOS) || os(macOS)
+        let image = SiriTransactionCategoryIcon.image(categoryIcon, symbol: categorySymbol ?? "tag.slash")
+        #else
+        let image: DisplayRepresentation.Image? = nil
+        #endif
+        return DisplayRepresentation(title: "\(title)", subtitle: "\(when) · \(amount) · \(sheetName)", image: image)
     }
 }
 
