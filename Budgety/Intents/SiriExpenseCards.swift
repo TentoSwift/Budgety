@@ -33,6 +33,16 @@ enum SiriTransactionCategoryIcon {
         if let data = file?.data { return .init(data: data, isTemplate: false, displayStyle: .circular) }
         return .init(systemName: symbol.isEmpty ? "tag.slash" : symbol)
     }
+
+    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+    static func deferredImage(symbol: String, colorHex: String) -> DisplayRepresentation.Image {
+        guard let data = file(symbol: symbol, colorHex: colorHex)?.data, !data.isEmpty else {
+            return image(nil, symbol: symbol)
+        }
+        SiriCompactExperimentDiagnostics.record(.thumbnailResolved)
+        return .init(data: data, isTemplate: false, displayStyle: .circular)
+    }
+    #endif
 }
 
 @available(iOS 27.3, macOS 27.3, *)
@@ -83,13 +93,35 @@ struct SiriListedTransactionEntity: AppEntity {
     }
 
     var displayRepresentation: DisplayRepresentation {
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.representationRequested)
+        // Capture only lightweight values. Rasterize only when the system
+        // materializes this representation's image component.
+        let symbol = categorySymbol
+        let color = categoryColorHex
+        return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)", image: {
+            await SiriTransactionCategoryIcon.deferredImage(symbol: symbol, colorHex: color)
+        })
+        #else
         DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)",
                               image: SiriTransactionCategoryIcon.image(categoryIcon, symbol: categorySymbol))
+        #endif
     }
 }
 
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriListedTransactionQuery: EntityQuery {
+    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+    @MainActor
+    func displayRepresentations(for identifiers: [String]) async throws -> [String: DisplayRepresentation] {
+        SiriCompactExperimentDiagnostics.record(.displayQueryRequested)
+        let resolved = try await entities(for: identifiers)
+        return resolved.reduce(into: [:]) { representations, entity in
+            representations[entity.id] = entity.displayRepresentation
+        }
+    }
+    #endif
+
     @MainActor
     func entities(for identifiers: [String]) async throws -> [SiriListedTransactionEntity] {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
@@ -383,6 +415,9 @@ nonisolated enum SiriCompactExperimentDiagnostics {
         case searchStarted
         case searchFinished
         case snippetRequested
+        case displayQueryRequested
+        case representationRequested
+        case thumbnailResolved
         case legacyTextResult
         case singleCardResult
         case compactRowBodyEvaluated
@@ -392,7 +427,7 @@ nonisolated enum SiriCompactExperimentDiagnostics {
     nonisolated static func record(_ event: Event) {
         let manager = FileManager.default
         guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
-        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v2", isDirectory: true)
+        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v3", isDirectory: true)
         let file = directory.appendingPathComponent(event.rawValue + ".json")
         guard !manager.fileExists(atPath: file.path) else { return }
         do {
