@@ -52,7 +52,7 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
                                                            includeIncome: selection.includesIncome)
         return .result(value: result.card, dialog: IntentDialog("\(result.summary)"),
                        snippetIntent: SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id,
-                                                                    kind: selection, scope: scope))
+                                                                    kind: selection, scope: scope, search: result.card.expandedSearch))
     }
 }
 
@@ -65,12 +65,14 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
     @Parameter(title: "メンバーの識別子") var memberID: String
     @Parameter(title: "対象の収支") var kind: SiriTransactionSelection
     @Parameter(title: "対象期間") var periodLabel: String
+    @Parameter(title: "検索結果の表示条件") var search: String?
     @Parameter(title: "期間の開始") var start: Date?
     @Parameter(title: "期間の終了") var end: Date?
 
     init() {}
 
-    init(sheetID: String, memberID: String, kind: SiriTransactionSelection, scope: SiriExpenseScope) {
+    init(sheetID: String, memberID: String, kind: SiriTransactionSelection, scope: SiriExpenseScope, search: String? = nil) {
+        self.search = search
         self.sheetID = sheetID
         self.memberID = memberID
         self.kind = kind
@@ -81,6 +83,7 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
+        if let search { return .result(view: try SiriExpandedSearch.currentView(search: search)) }
         let interval: DateInterval?
         switch (start, end) {
         case let (start?, end?) where start.compare(end) != .orderedDescending:
@@ -90,11 +93,9 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let scope = SiriExpenseScope(interval: interval, label: periodLabel, isDay: false)
-        let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: memberID,
-                                                           scope: scope, includeExpenses: kind.includesExpenses,
-                                                           includeIncome: kind.includesIncome)
-        return .result(view: SiriExpenseCardView(member: result.card))
+        let legacySearch = try SiriExpandedSearch(sheetID: sheetID, memberID: memberID, name: nil, category: nil,
+                                                  kind: kind, interval: interval, period: periodLabel, presentationID: nil).encoded()
+        return .result(view: try SiriExpandedSearch.currentView(search: legacySearch))
     }
 }
 

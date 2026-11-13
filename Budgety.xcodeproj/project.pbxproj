@@ -135,7 +135,6 @@
 				Intents/SiriBatchTransactionStore.swift,
 				Intents/SiriExpandedTransactions.swift,
 				Views/BatchTransactionView.swift,
-				Views/SiriResultPresentation.swift,
 			);
 			target = 2D18B4C12FB31605006F2C29 /* Budgety For watchOS Watch App */;
 		};
@@ -385,7 +384,6 @@
 				Support/SiriVirtualExpenseLink.swift,
 				Support/VirtualRowBacking.swift,
 				Views/BatchTransactionView.swift,
-				Views/SiriResultPresentation.swift,
 			);
 			target = 4D18B4C12FB31605006F2C30 /* Budgety For macOS */;
 		};

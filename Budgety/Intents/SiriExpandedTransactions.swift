@@ -1,11 +1,12 @@
 #if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
-import Combine
 import CoreData
+import CryptoKit
+import Foundation
 import SwiftUI
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-struct SiriExpandedSearch: Codable, Identifiable, Hashable {
+struct SiriExpandedSearch: Codable, Hashable {
     let sheetID: String
     let memberID: String?
     let name: String?
@@ -13,15 +14,20 @@ struct SiriExpandedSearch: Codable, Identifiable, Hashable {
     let kind: SiriTransactionSelection
     let interval: DateInterval?
     let period: String
-
-    var id: Self { self }
+    var presentationID: UUID? = UUID()
 
     func encoded() throws -> String {
-        String(decoding: try JSONEncoder().encode(self), as: UTF8.self)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return String(decoding: try encoder.encode(self), as: UTF8.self)
+    }
+
+    static func decode(_ search: String) throws -> Self {
+        try JSONDecoder().decode(Self.self, from: Data(search.utf8))
     }
 
     @MainActor
-    func load() throws -> (title: String, ledger: SiriTransactionLedger) {
+    func load(pageOffset: Int, pageSize: Int) throws -> (title: String, ledger: SiriTransactionLedger) {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let sheet = try access.resolve(sheetID)
         if let memberID {
@@ -30,200 +36,153 @@ struct SiriExpandedSearch: Codable, Identifiable, Hashable {
             return (member.name + " · " + sheet.displayName,
                     try SiriMemberTransactionLookup.ledger(in: sheet, access: access, member: member, roster: roster,
                                                           interval: interval, includeExpenses: kind.includesExpenses,
-                                                          includeIncome: kind.includesIncome, previewOnly: false))
+                                                          includeIncome: kind.includesIncome, previewOnly: false,
+                                                          pageOffset: pageOffset, pageSize: pageSize))
         }
         let title = [sheet.displayName, category, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return (title, try SiriTransactionLedger.read(sheet: sheet, access: access, interval: interval,
                                                       includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome,
-                                                      expenseName: name, categoryName: category, previewOnly: false))
+                                                      expenseName: name, categoryName: category, previewOnly: false,
+                                                      pageOffset: pageOffset, pageSize: pageSize))
+    }
+
+    @MainActor
+    static func currentView(search: String) throws -> SiriExpenseCardView {
+        if let position = SiriSnippetCursor.read(search), position != SiriSnippetCursor.compact {
+            return SiriExpenseCardView(page: try SiriTransactionPage.load(search: search, offset: position))
+        }
+        return try decode(search).compactView(search: search)
+    }
+
+    @MainActor
+    func compactView(search: String) throws -> SiriExpenseCardView {
+        if let memberID {
+            let scope = SiriExpenseScope(interval: interval, label: period, isDay: false)
+            var card = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: memberID, scope: scope,
+                                                              includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome).card
+            card.expandedSearch = search
+            return SiriExpenseCardView(member: card, resumePage: false)
+        }
+        var card = try SiriExpenseLookup.search(sheetID: sheetID, expenseName: name, categoryName: category,
+                                                interval: interval, periodLabel: period, kind: kind).card
+        card.expandedSearch = search
+        return SiriExpenseCardView(result: card, resumePage: false)
+    }
+}
+
+// Siri can render the same answer in another process, or from its transcript later.
+// Store only an opaque card key and its cursor. Fetch every amount again with current sheet access.
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+@MainActor
+enum SiriSnippetCursor {
+    private static let key = "SiriTransactionSnippetCursors.v1"
+    static let compact = -1
+
+    private static func cardKey(_ search: String) -> String {
+        let request = try? SiriExpandedSearch.decode(search)
+        if let id = request?.presentationID { return id.uuidString }
+        // Older cards have no ID. Their JSON keys may have been written in a different order.
+        let canonical = (try? request?.encoded()) ?? search
+        return Data(SHA256.hash(data: Data(canonical.utf8))).base64EncodedString()
+    }
+
+    static func read(_ search: String) -> Int? {
+        let entries = UserDefaults.standard.array(forKey: key) as? [[String: Int]]
+        let id = cardKey(search)
+        return entries?.lazy.compactMap { $0[id] }.first
+    }
+
+    static func set(_ offset: Int, for search: String) {
+        let id = cardKey(search)
+        var entries = UserDefaults.standard.array(forKey: key) as? [[String: Int]] ?? []
+        entries.removeAll { $0[id] != nil }
+        UserDefaults.standard.set(Array(([[id: offset]] + entries).prefix(64)), forKey: key)
     }
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 @MainActor
-final class SiriExpandedNavigation: ObservableObject {
-    static let shared = SiriExpandedNavigation()
-    @Published var request: SiriExpandedSearch?
+struct SiriTransactionPage {
+    let search: String
+    let title: String
+    let period: String
+    let rows: [SiriExpenseCardRow]
+    let start: Int
+    let totalCount: Int
+
+    #if os(watchOS)
+    static let pageSize = 1
+    #else
+    static let pageSize = 3
+    #endif
+
+    static func load(search: String, offset: Int) throws -> Self {
+        let request = try SiriExpandedSearch.decode(search)
+        let (title, ledger) = try request.load(pageOffset: offset, pageSize: pageSize)
+        return Self(search: search, title: title, period: request.period, rows: ledger.rows,
+                    start: SiriTransactionLedger.clampedStart(offset: offset, count: ledger.count, pageSize: pageSize),
+                    totalCount: ledger.count)
+    }
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriShowAllTransactionsIntent: AppIntent {
     static let title: LocalizedStringResource = "明細をすべて表示"
     static let isDiscoverable = false
-    static let supportedModes: IntentModes = .foreground(.immediate)
+    static let supportedModes: IntentModes = .background
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "検索条件") var search: String
+    @Parameter(title: "表示開始位置") var offset: Int?
 
     init() {}
-    init(search: String) { self.search = search }
+    init(search: String, offset: Int = 0) {
+        self.search = search
+        self.offset = offset
+    }
 
     @MainActor
-    func perform() async throws -> some IntentResult {
-        let request = try JSONDecoder().decode(SiriExpandedSearch.self, from: Data(search.utf8))
-        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
-        _ = try access.resolve(request.sheetID)
-        SiriExpandedNavigation.shared.request = request
-        return .result()
+    func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
+        let requested = offset ?? 0
+        let page = try SiriTransactionPage.load(search: search, offset: requested)
+        let position = requested == SiriSnippetCursor.compact ? requested : page.start
+        SiriSnippetCursor.set(position, for: search)
+        let snippet = SiriTransactionPageSnippetIntent(search: search, offset: position)
+        let dialog: IntentDialog
+        if position == SiriSnippetCursor.compact {
+            dialog = "検索結果に戻りました。"
+        } else if page.rows.isEmpty {
+            dialog = "該当する明細はありません。"
+        } else {
+            let lines = page.rows.map { "\($0.date)　\($0.title)　\($0.signedAmount ?? $0.amount)" }.joined(separator: "、")
+            dialog = IntentDialog(full: "\(lines)", supporting: "明細を表示しました。")
+        }
+        return .result(dialog: dialog, snippetIntent: snippet)
     }
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-struct SiriExpandedTransactionsView: View {
-    let request: SiriExpandedSearch
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
+struct SiriTransactionPageSnippetIntent: SnippetIntent {
+    static let title: LocalizedStringResource = "検索した明細の続きを表示"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
-    private struct Day: Identifiable {
-        let id: String
-        var rows: [SiriExpenseCardRow]
-    }
-    @State private var days: [Day] = []
-    @State private var heading = ""
-    @State private var total = ""
-    @State private var loaded = false
-    @State private var unavailable = false
-    @State private var path: [String] = []
+    @Parameter(title: "検索条件") var search: String
+    @Parameter(title: "表示開始位置") var offset: Int
 
-    var body: some View {
-        NavigationStack(path: $path) {
-            Group {
-                if unavailable {
-                    ContentUnavailableView("この検索結果は現在表示できません。", systemImage: "lock")
-                } else if loaded {
-                    List {
-                        Section {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(verbatim: heading).font(.headline)
-                                Text(verbatim: request.period).font(.subheadline)
-                                Text(verbatim: total).font(.body.bold().monospacedDigit())
-                            }
-                        }
-                        if days.isEmpty {
-                            Text("該当する明細はありません")
-                        }
-                        ForEach(days) { day in
-                            Section {
-                                ForEach(day.rows, id: \.expenseIdentifier) { row in
-                                    if let identifier = row.expenseIdentifier {
-                                        NavigationLink(value: identifier) { rowContent(row) }
-                                    } else {
-                                        rowContent(row)
-                                    }
-                                }
-                            } header: { Text(verbatim: day.id) }
-                        }
-                    }
-                } else {
-                    ProgressView()
-                }
-            }
-            .privacySensitive()
-            .navigationDestination(for: String.self) { identifier in
-                if !unavailable, let access = try? IntentSheetAccess(checking: PersistenceController.shared.container.viewContext),
-                   let target = try? SiriVirtualExpenseLink.resolve(identifier, access: access) {
-                    switch target {
-                    case .stored(let expense):
-                        if let sheet = expense.sheet {
-                            #if os(watchOS)
-                            WatchExpenseDetailView(expense: expense, sheet: sheet)
-                            #else
-                            ExpenseDetailView(expense: expense, lockRecord: sheet)
-                            #endif
-                        }
-                    case .virtual(let occurrence, _, _):
-                        List {
-                            Label("繰り返し", systemImage: "repeat")
-                            Text(verbatim: CurrencyCatalog.format(occurrence.amount, code: occurrence.currencyCode))
-                                .font(.title2.bold().monospacedDigit())
-                            Text(verbatim: occurrence.title.isEmpty ? occurrence.categoryDisplayName : occurrence.title)
-                            Text(occurrence.date, format: .dateTime.year().month().day())
-                            if !occurrence.note.isEmpty { Text(verbatim: occurrence.note) }
-                        }
-                        .navigationTitle("詳細")
-                    }
-                } else {
-                    ContentUnavailableView("この明細は現在表示できません。", systemImage: "lock")
-                }
-            }
-            .navigationTitle("明細")
-            #if !os(watchOS)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") { dismiss() }
-                }
-            }
-            #endif
-        }
-        .task(id: request) { reload() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { reload() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave).receive(on: RunLoop.main)) { _ in reload() }
-        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: RunLoop.main)) { _ in reload() }
-        #if os(macOS)
-        .frame(minWidth: 340, idealWidth: 460, minHeight: 320, idealHeight: 520)
-        #endif
-    }
-
-    private func rowContent(_ row: SiriExpenseCardRow) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                labels(row)
-                Spacer(minLength: 12)
-                amount(row)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            VStack(alignment: .leading, spacing: 3) {
-                labels(row)
-                amount(row)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func labels(_ row: SiriExpenseCardRow) -> some View {
-        let subtitle = [row.category == row.title ? nil : row.category, row.payerName]
-            .compactMap { $0 }.joined(separator: " · ")
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: row.title).font(.body)
-            if !subtitle.isEmpty { Text(verbatim: subtitle).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-
-    private func amount(_ row: SiriExpenseCardRow) -> some View {
-        Text(verbatim: [row.signedAmount ?? row.amount, row.foreignCurrencyCode].compactMap { $0 }.joined(separator: " "))
-            .font(.body.monospacedDigit())
+    init() {}
+    init(search: String, offset: Int) {
+        self.search = search
+        self.offset = offset
     }
 
     @MainActor
-    private func reload() {
-        do {
-            let (title, ledger) = try request.load()
-            heading = title
-            switch request.kind {
-            case .expense: total = String(localized: "支出 \(ledger.expenseTotal)")
-            case .income: total = String(localized: "収入 \(ledger.incomeTotal)")
-            case .both: total = String(localized: "収支 \(ledger.netTotal)")
-            }
-            var grouped: [Day] = []
-            for row in ledger.rows {
-                if let last = grouped.indices.last, grouped[last].id == row.date {
-                    grouped[last].rows.append(row)
-                } else {
-                    grouped.append(Day(id: row.date, rows: [row]))
-                }
-            }
-            days = grouped
-            unavailable = false
-        } catch {
-            path = []
-            days = []
-            heading = ""
-            total = ""
-            unavailable = true
+    func perform() async throws -> some IntentResult & ShowsSnippetView {
+        let position = SiriSnippetCursor.read(search) ?? offset
+        if position == SiriSnippetCursor.compact {
+            let view = try SiriExpandedSearch.decode(search).compactView(search: search)
+            return .result(view: view)
         }
-        loaded = true
+        return .result(view: SiriExpenseCardView(page: try SiriTransactionPage.load(search: search, offset: position)))
     }
 }
 #endif

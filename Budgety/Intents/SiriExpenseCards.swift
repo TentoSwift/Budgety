@@ -257,12 +257,33 @@ struct SiriExpenseCardView: View {
         case search(SiriExpenseCardResult)
         case recorded(SiriRecordedTransaction)
         case member(SiriMemberCardResult)
+        case page(SiriTransactionPage)
+        case unavailable
     }
     private let content: Content
     private var allowsOpening = true
 
-    init(result: SiriExpenseCardResult) { content = .search(result) }
-    init(member: SiriMemberCardResult) { content = .member(member) }
+    init(result: SiriExpenseCardResult, resumePage: Bool = true) {
+        content = Self.content(for: .search(result), search: result.expandedSearch, resumePage: resumePage)
+    }
+    init(member: SiriMemberCardResult, resumePage: Bool = true) {
+        content = Self.content(for: .member(member), search: member.expandedSearch, resumePage: resumePage)
+    }
+    init(page: SiriTransactionPage) { content = .page(page) }
+
+    // Siri rebuilds an entity card's archive after running a button, even when it
+    // elects to keep that card instead of presenting the button's returned snippet.
+    private static func content(for preview: Content, search: String?, resumePage: Bool) -> Content {
+        guard resumePage, let search, let offset = SiriSnippetCursor.read(search) else { return preview }
+        do {
+            if offset == SiriSnippetCursor.compact {
+                return try SiriExpandedSearch.decode(search).compactView(search: search).content
+            }
+            return .page(try SiriTransactionPage.load(search: search, offset: offset))
+        } catch {
+            return .unavailable
+        }
+    }
     init(recorded: SiriRecordedTransaction, allowsOpening: Bool = true) {
         content = .recorded(recorded)
         self.allowsOpening = allowsOpening
@@ -293,7 +314,7 @@ struct SiriExpenseCardView: View {
             recorded.row.expenseIdentifier
         case .search(let result):
             result.count == 1 && result.rows.count == 1 ? result.rows.first?.expenseIdentifier : nil
-        case .member:
+        case .member, .page, .unavailable:
             nil
         }
     }
@@ -302,7 +323,7 @@ struct SiriExpenseCardView: View {
         switch content {
         case .search(let result): result.expandedSearch
         case .member(let result): result.expandedSearch
-        case .recorded: nil
+        case .recorded, .page, .unavailable: nil
         }
     }
 
@@ -329,6 +350,10 @@ struct SiriExpenseCardView: View {
                 searchContent(result)
             case .member(let member):
                 memberContent(member)
+            case .page(let page):
+                pageContent(page)
+            case .unavailable:
+                Label("この検索結果は現在表示できません。", systemImage: "lock")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -453,6 +478,62 @@ struct SiriExpenseCardView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func pageContent(_ page: SiriTransactionPage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(verbatim: page.title).font(.headline).lineLimit(1)
+            Text(verbatim: page.period).font(.caption).foregroundStyle(secondaryInk)
+            if page.rows.isEmpty {
+                Text("該当する明細はありません")
+                pageControls(page, visible: 0)
+            } else {
+                ViewThatFits(in: .vertical) {
+                    ForEach((1...page.rows.count).reversed(), id: \.self) { visible in
+                        VStack(alignment: .leading, spacing: 6) {
+                            list(page.rows, count: visible, limit: visible, omittingDate: page.period)
+                            pageControls(page, visible: visible)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("siriTransactionPage")
+    }
+
+    private func pageControls(_ page: SiriTransactionPage, visible: Int) -> some View {
+        HStack {
+            if page.start > 0 {
+                pageButton("前へ", icon: "chevron.left", search: page.search,
+                           offset: max(0, page.start - max(1, visible)), identifier: "siriPreviousPage")
+            }
+            Spacer(minLength: 4)
+            pageButton("閉じる", icon: "xmark", search: page.search,
+                       offset: SiriSnippetCursor.compact, identifier: "siriClosePage")
+            Spacer(minLength: 4)
+            if page.start + visible < page.totalCount {
+                pageButton("次へ", icon: "chevron.right", search: page.search,
+                           offset: page.start + visible, identifier: "siriNextPage")
+            }
+        }
+    }
+
+    private func pageButton(_ title: LocalizedStringKey, icon: String, search: String, offset: Int, identifier: String) -> some View {
+        Button(intent: SiriShowAllTransactionsIntent(search: search, offset: offset)) {
+            Label(title, systemImage: icon)
+                #if os(watchOS)
+                .labelStyle(.iconOnly)
+                #endif
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(primaryInk)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(primaryInk.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
     private func fittingRows(_ rows: [SiriExpenseCardRow], count: Int, period: String) -> some View {
         ViewThatFits(in: .vertical) {
             #if os(watchOS)
@@ -507,7 +588,7 @@ struct SiriExpenseCardView: View {
             let hiddenCount = count - limit
             if hiddenCount > 0 {
                 if let expandedSearch {
-                    Button(intent: SiriShowAllTransactionsIntent(search: expandedSearch)) {
+                    Button(intent: SiriShowAllTransactionsIntent(search: expandedSearch, offset: limit)) {
                         HStack(spacing: 5) {
                             Image("BudgetySnippetIcon")
                                 .renderingMode(.original)

@@ -41,7 +41,6 @@ struct BudgetyMacApp: App {
     var body: some Scene {
         WindowGroup(id: "main") {
             BudgetyMacContentView()
-                .siriResultPresentation()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .frame(minWidth: 900, minHeight: 600)
                 // 強制 / 任意アップデート判定 (version.json)。minimumVersion 未満なら

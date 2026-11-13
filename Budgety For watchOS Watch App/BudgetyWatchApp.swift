@@ -21,7 +21,6 @@ struct BudgetyWatchApp: App {
     var body: some Scene {
         WindowGroup {
             WatchHomeView()
-                .siriResultPresentation()
                 .sheet(item: $siriNavigation.selection) { selection in
                     WatchSiriExpenseDetail(identifier: selection.id, sheet: selection.sheet)
                 }

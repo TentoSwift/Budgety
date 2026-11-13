@@ -28,7 +28,7 @@ struct SiriTransactionLedger {
 
     static func read(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                      includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
-                     previewOnly: Bool = true,
+                     previewOnly: Bool = true, pageOffset: Int? = nil, pageSize: Int = 3,
                      matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
@@ -44,6 +44,7 @@ struct SiriTransactionLedger {
         var income: [String: Decimal] = [:]
         var count = 0
         var newest: [LedgerItem] = []
+        let limitToPreview = previewOnly && pageOffset == nil
         func collect(_ item: LedgerItem) {
             guard (item.kind == .expense ? includeExpenses : includeIncome), matchesPayer(item) else { return }
             switch item {
@@ -58,7 +59,7 @@ struct SiriTransactionLedger {
             if item.kind == .expense { expenses[code, default: 0] += item.amountDecimal }
             else { income[code, default: 0] += item.amountDecimal }
             count += 1
-            guard previewOnly else { newest.append(item); return }
+            guard limitToPreview else { newest.append(item); return }
             let index = newest.firstIndex { isNewer(item, than: $0) } ?? newest.count
             if index < 5 {
                 newest.insert(item, at: index)
@@ -73,10 +74,18 @@ struct SiriTransactionLedger {
             if let interval, occurrence.date >= interval.end { continue }
             collect(.occurrence(occurrence))
         }
-        if !previewOnly { newest.sort { isNewer($0, than: $1) } }
+        if !limitToPreview { newest.sort { isNewer($0, than: $1) } }
+        let visible: ArraySlice<LedgerItem>
+        if let pageOffset {
+            let start = clampedStart(offset: pageOffset, count: count, pageSize: pageSize)
+            let length = min(count - start, max(pageSize, 1))
+            visible = newest[start..<(start + length)]
+        } else {
+            visible = newest[...]
+        }
         let backing = VirtualRowBacking()
         lazy var isSolo = !record.hasAcceptedOtherMembers()
-        let rows: [SiriExpenseCardRow] = newest.map { item in
+        let rows: [SiriExpenseCardRow] = visible.map { item in
             switch item {
             case .expense(let row):
                 return .from(row, in: record, isSoloSheet: isSolo)
@@ -87,6 +96,12 @@ struct SiriTransactionLedger {
         }
         return Self(count: count, rows: rows, expenseTotals: expenses, incomeTotals: income,
                     currency: record.resolvedDefaultCurrencyCode)
+    }
+
+    static func clampedStart(offset: Int, count: Int, pageSize: Int) -> Int {
+        guard count > 0 else { return 0 }
+        if offset >= count { return max(count - max(pageSize, 1), 0) }
+        return max(offset, 0)
     }
 
     private static func isNewer(_ item: LedgerItem, than other: LedgerItem) -> Bool {

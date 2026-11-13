@@ -79,7 +79,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
         }
         let supporting: LocalizedStringResource = result.card.count == 0
             ? "該当する明細はありません" : "明細が見つかりました。"
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection, search: result.card.expandedSearch)
         return .result(value: result.card, dialog: IntentDialog(full: "\(result.summary)", supporting: supporting),
                        snippetIntent: snippet)
     }
@@ -99,10 +99,12 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     @Parameter(title: "期間の開始") var intervalStart: Date?
     @Parameter(title: "期間の終了") var intervalEnd: Date?
     @Parameter(title: "対象期間") var periodLabel: String?
+    @Parameter(title: "検索結果の表示条件") var search: String?
 
     init() {}
 
-    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense) {
+    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense, search: String? = nil) {
+        self.search = search
         self.kind = kind
         self.sheetIdentifier = sheetIdentifier
         self.expenseName = filter.name
@@ -114,6 +116,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
+        if let search { return .result(view: try SiriExpandedSearch.currentView(search: search)) }
         let interval: DateInterval?
         let label: String
         switch (intervalStart, intervalEnd, periodLabel) {
@@ -130,8 +133,9 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label, kind: kind ?? .expense)
-        return .result(view: SiriExpenseCardView(result: result.card))
+        let legacySearch = try SiriExpandedSearch(sheetID: sheetIdentifier, memberID: nil, name: expenseName, category: categoryName,
+                                                  kind: kind ?? .expense, interval: interval, period: label, presentationID: nil).encoded()
+        return .result(view: try SiriExpandedSearch.currentView(search: legacySearch))
     }
 }
 
