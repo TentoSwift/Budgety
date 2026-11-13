@@ -37,6 +37,7 @@ struct BudgetyApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .siriResultPresentation()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .appUpdateGate()
                 #if os(iOS)

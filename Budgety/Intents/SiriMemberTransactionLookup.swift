@@ -1,14 +1,23 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CloudKit
 import CoreData
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 @MainActor
 enum SiriMemberTransactionLookup {
     struct Result {
         let card: SiriMemberCardResult
         let summary: String
+    }
+
+    static func ledger(in sheet: ExpenseSheet, access: IntentSheetAccess, member: SiriSheetMemberEntity,
+                       roster: SiriSheetMemberRoster, interval: DateInterval?,
+                       includeExpenses: Bool, includeIncome: Bool, previewOnly: Bool) throws -> SiriTransactionLedger {
+        let payer = Payer(member: member, roster: roster, sheet: sheet)
+        return try SiriTransactionLedger.read(sheet: sheet, access: access, interval: interval,
+                                              includeExpenses: includeExpenses, includeIncome: includeIncome,
+                                              previewOnly: previewOnly, matchesPayer: payer.matches)
     }
 
     static func search(sheetID: String, memberIdentifier: String, scope: SiriExpenseScope,
@@ -17,10 +26,8 @@ enum SiriMemberTransactionLookup {
         let sheet = try access.resolve(sheetID)
         let roster = try SiriSheetMemberRoster(sheet: sheet, access: access)
         guard let member = roster.members.first(where: { $0.id == memberIdentifier }) else { throw AppIntentError.missingPayer }
-        let payer = Payer(member: member, roster: roster, sheet: sheet)
-        let ledger = try SiriTransactionLedger.read(sheet: sheet, access: access, interval: scope.interval,
-                                                    includeExpenses: includeExpenses, includeIncome: includeIncome,
-                                                    matchesPayer: payer.matches)
+        let ledger = try ledger(in: sheet, access: access, member: member, roster: roster, interval: scope.interval,
+                                includeExpenses: includeExpenses, includeIncome: includeIncome, previewOnly: true)
         let color: String
         let photo: Data?
         if member.isSelf {
@@ -34,12 +41,17 @@ enum SiriMemberTransactionLookup {
         let isVirtual = UserProfileStore.isVirtualRecordName(member.profileID)
         let expenseTotal = includeExpenses ? ledger.expenseTotal : nil
         let incomeTotal = includeIncome ? ledger.incomeTotal : nil
-        let card = SiriMemberCardResult(memberName: member.name, memberColorHex: color,
+        var card = SiriMemberCardResult(memberName: member.name, memberColorHex: color,
                                         memberPhoto: SiriExpensePayer.thumbnail(from: photo), memberIsVirtual: isVirtual,
                                         sheetName: sheet.displayName, sheetSymbol: sheet.displaySymbol, sheetColorHex: sheet.displayColorHex,
                                         period: scope.label, expenseTotal: expenseTotal, incomeTotal: incomeTotal,
                                         count: ledger.count, rows: ledger.rows)
-        let totals = [expenseTotal.map { String(localized: "支出") + " " + $0 },
+        let kind: SiriTransactionSelection = includeExpenses ? (includeIncome ? .both : .expense) : .income
+        card.expandedSearch = try SiriExpandedSearch(sheetID: sheetID, memberID: memberIdentifier, name: nil, category: nil,
+                                                     kind: kind, interval: scope.interval, period: scope.label).encoded()
+        card.netTotal = kind == .both ? ledger.netTotal : nil
+        let totals = [card.netTotal.map { String(localized: "収支") + " " + $0 },
+                      expenseTotal.map { String(localized: "支出") + " " + $0 },
                       incomeTotal.map { String(localized: "収入") + " " + $0 }].compactMap { $0 }
         return Result(card: card, summary: ([sheet.displayName, member.name, scope.label] + totals).joined(separator: " · "))
     }

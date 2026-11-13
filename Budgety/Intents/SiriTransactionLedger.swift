@@ -1,10 +1,10 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
 /// A read-only ledger for Siri. Keep amounts in the original currency of each transaction.
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 @MainActor
 struct SiriTransactionLedger {
     let count: Int
@@ -15,6 +15,9 @@ struct SiriTransactionLedger {
 
     var expenseTotal: String { formatted(expenseTotals) }
     var incomeTotal: String { formatted(incomeTotals) }
+    var netTotal: String {
+        formatted(incomeTotals.merging(expenseTotals.mapValues { -$0 }, uniquingKeysWith: +))
+    }
 
     private func formatted(_ totals: [String: Decimal]) -> String {
         let values = totals.isEmpty ? [currency: Decimal.zero] : totals
@@ -25,6 +28,7 @@ struct SiriTransactionLedger {
 
     static func read(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                      includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
+                     previewOnly: Bool = true,
                      matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         let request = NSFetchRequest<Expense>(entityName: "Expense")
@@ -54,6 +58,7 @@ struct SiriTransactionLedger {
             if item.kind == .expense { expenses[code, default: 0] += item.amountDecimal }
             else { income[code, default: 0] += item.amountDecimal }
             count += 1
+            guard previewOnly else { newest.append(item); return }
             let index = newest.firstIndex { isNewer(item, than: $0) } ?? newest.count
             if index < 5 {
                 newest.insert(item, at: index)
@@ -68,6 +73,7 @@ struct SiriTransactionLedger {
             if let interval, occurrence.date >= interval.end { continue }
             collect(.occurrence(occurrence))
         }
+        if !previewOnly { newest.sort { isNewer($0, than: $1) } }
         let backing = VirtualRowBacking()
         lazy var isSolo = !record.hasAcceptedOtherMembers()
         let rows: [SiriExpenseCardRow] = newest.map { item in

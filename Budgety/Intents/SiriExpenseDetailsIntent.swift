@@ -1,10 +1,10 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseDetailsIntent: AppIntent {
     static let title: LocalizedStringResource = "支出名で明細を確認"
     static let description = IntentDescription("指定したシートの支出を支出名、カテゴリ名、日付、月で探し、件数、通貨別の合計と最新5件までの明細をテキストで返します。")
@@ -36,8 +36,8 @@ struct SiriExpenseDetailsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriFindExpenseCardsIntent: AppIntent {
@@ -85,7 +85,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "支出明細のカードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -135,7 +135,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriOpenExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "明細を開く"
     static let isDiscoverable = false
@@ -154,6 +154,8 @@ struct SiriOpenExpenseIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         #if os(watchOS)
         try WatchSiriNavigation.shared.requestOpenExpense(identifier: expenseIdentifier)
+        #elseif os(macOS)
+        try MacSiriNavigation.shared.requestOpenExpense(identifier: expenseIdentifier)
         #else
         try DeepLinkRouter.shared.requestOpenExpense(identifier: expenseIdentifier)
         #endif
@@ -161,7 +163,7 @@ struct SiriOpenExpenseIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 enum SiriExpenseLookup {
     struct Result {
         let sheetID: String
@@ -217,7 +219,7 @@ enum SiriExpenseLookup {
         case .income, .both:
             let title = kind == .income ? String(localized: "収入") : String(localized: "収支")
             scope = [record.displayName, periodScope, title, name].filter { !$0.isEmpty }.joined(separator: " · ")
-            amounts = kind == .income ? ledger.incomeTotal : String(localized: "収入 \(ledger.incomeTotal) ／ 支出 \(ledger.expenseTotal)")
+            amounts = kind == .income ? ledger.incomeTotal : String(localized: "収支 \(ledger.netTotal)")
         }
         let summary: String
         var report: String
@@ -235,9 +237,15 @@ enum SiriExpenseLookup {
             let label = row.title == row.category ? row.title : String(localized: "\(row.title)（\(row.category)）")
             report += "\n" + String(localized: "\(row.date)　\(label)　\(row.amount)")
         }
-        let card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name.isEmpty ? category : name,
+        var card = SiriExpenseCardResult(sheetName: record.displayName, period: period, expenseName: name.isEmpty ? category : name,
                                          count: count, total: amounts, rows: rows,
                                          sheetSymbol: record.displaySymbol, sheetColorHex: record.displayColorHex)
+        card.expandedSearch = try SiriExpandedSearch(sheetID: sheetID, memberID: nil, name: name, category: category,
+                                                     kind: kind, interval: interval, period: period).encoded()
+        if kind == .both {
+            card.incomeTotal = ledger.incomeTotal
+            card.expenseTotal = ledger.expenseTotal
+        }
         return Result(sheetID: sheetID, report: report, summary: summary, card: card)
     }
 

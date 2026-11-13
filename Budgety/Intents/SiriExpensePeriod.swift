@@ -1,8 +1,8 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 enum SiriExpensePeriod: String, AppEnum {
     case today, yesterday, thisMonth, lastMonth, allTime
 
@@ -14,7 +14,7 @@ enum SiriExpensePeriod: String, AppEnum {
     fileprivate var isDay: Bool { self == .today || self == .yesterday }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseScope {
     // Treat the interval as half-open. Keep the bounds and label when Siri redraws the snippet.
     let interval: DateInterval?
@@ -22,7 +22,7 @@ struct SiriExpenseScope {
     let isDay: Bool
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 extension SiriExpenseScope {
     fileprivate init(containing date: Date, isDay: Bool, calendar: Calendar) {
         // Never widen a specific day or month into an all-time search if the date is unrepresentable.
@@ -46,7 +46,7 @@ extension SiriExpenseScope {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseSearchFilter {
     let name: String?
     let categoryName: String?

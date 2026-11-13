@@ -1,9 +1,9 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 enum SiriTransactionSplitChange: String, AppEnum {
     case unchanged, off, all, selected
 
@@ -13,7 +13,7 @@ enum SiriTransactionSplitChange: String, AppEnum {
     ]
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 @MainActor
 enum SiriTransactionEditStore {
     struct Change: Equatable {

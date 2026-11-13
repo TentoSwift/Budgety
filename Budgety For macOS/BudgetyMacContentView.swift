@@ -95,7 +95,8 @@ struct BudgetyMacContentView: View {
         .onAppear {
             if selectedSheet == nil { selectedSheet = sheets.first }
         }
-        .onChange(of: selectedSheet) { old, _ in
+        .onChange(of: selectedSheet) { old, new in
+            UserDefaults.standard.set(new?.objectID.uriRepresentation().absoluteString, forKey: "lastOpenedSheetURI")
             // 別シートへ移動したら、離れたシートを再ロックする。
             if let old, lockManager.hasPassword(for: old) {
                 lockManager.lock(old)

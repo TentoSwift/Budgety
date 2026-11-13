@@ -13,8 +13,8 @@ struct ExpensoShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         #if os(watchOS)
         AppShortcut(
-            intent: SiriRecordExpenseIntent(),
-            phrases: ["\(.applicationName) で支出を追加", "Add an expense to \(.applicationName)"],
+            intent: WatchRecordLedgerShortcut(),
+            phrases: ["\(.applicationName) で \(\.$operation)", "\(.applicationName) で支出を追加", "Add an expense to \(.applicationName)"],
             shortTitle: "支出を追加", systemImageName: "plus.circle.fill"
         )
         #else
@@ -28,6 +28,32 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             shortTitle: "支出を追加",
             systemImageName: "plus.circle.fill"
         )
+        #endif
+        #if (os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2)
+        if #available(iOS 27.3, macOS 27.3, *) {
+            AppShortcut(
+                intent: SiriBatchAddTransactionsIntent(),
+                phrases: ["\(.applicationName) でまとめて追加", "Add multiple transactions to \(.applicationName)"],
+                shortTitle: "まとめて追加", systemImageName: "plus.rectangle.on.rectangle"
+            )
+            AppShortcut(
+                intent: SiriBatchEditTransactionsIntent(),
+                phrases: ["\(.applicationName) でまとめて編集", "Edit multiple transactions in \(.applicationName)"],
+                shortTitle: "まとめて編集", systemImageName: "pencil.and.list.clipboard"
+            )
+            #if os(macOS)
+            AppShortcut(
+                intent: SiriFindExpenseCardsIntent(),
+                phrases: ["\(.applicationName) で明細を検索", "\(.applicationName) で \(\.$period) の支出を調べて", "Search transactions in \(.applicationName)"],
+                shortTitle: "明細を検索", systemImageName: "magnifyingglass"
+            )
+            AppShortcut(
+                intent: SiriSettlementStatusIntent(),
+                phrases: ["\(.applicationName) で精算を確認", "Check settlements in \(.applicationName)"],
+                shortTitle: "精算を確認", systemImageName: "arrow.left.arrow.right.circle"
+            )
+            #endif
+        }
         #endif
         #if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
         if #available(iOS 27.3, watchOS 26.2, *) {
@@ -82,8 +108,8 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             shortTitle: "明細を検索", systemImageName: "magnifyingglass"
         )
         AppShortcut(
-            intent: SiriEditTransactionIntent(),
-            phrases: ["\(.applicationName) で明細を編集", "Edit a transaction in \(.applicationName)"],
+            intent: WatchEditLedgerShortcut(),
+            phrases: ["\(.applicationName) で \(\.$operation)", "\(.applicationName) で明細を編集", "Edit a transaction in \(.applicationName)"],
             shortTitle: "明細を編集", systemImageName: "pencil"
         )
         AppShortcut(

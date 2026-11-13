@@ -19,8 +19,8 @@ import AppKit
 import SwiftUI
 
 struct ExpenseCategoryEntity: AppEntity {
-    #if (os(iOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
-    @available(iOS 27.3, watchOS 27.3, *)
+    #if (os(iOS) || os(macOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, macOS 27.3, watchOS 27.3, *)
     static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
     #endif
 

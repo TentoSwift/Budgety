@@ -1,16 +1,16 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriEditableTransactionEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "編集対象の明細"
     static let defaultQuery = SiriEditableTransactionQuery()
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
     @Property(title: "シートの識別子", visibility: .internal)
     #endif
     var sheetID: String
@@ -42,7 +42,7 @@ struct SiriEditableTransactionEntity: AppEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriEditableTransactionQuery: EntityStringQuery {
     @IntentParameterDependency<SiriEditTransactionIntent>(\.$sheet) var edit
 

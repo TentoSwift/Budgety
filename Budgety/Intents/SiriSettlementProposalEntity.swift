@@ -1,16 +1,16 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementProposalEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "送金の提案"
     static let defaultQuery = SiriSettlementProposalQuery()
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
     @Property(title: "シートの識別子", visibility: .internal)
     #endif
     var sheetID: String
@@ -33,7 +33,7 @@ struct SiriSettlementProposalEntity: AppEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementProposalQuery: EntityStringQuery {
     @IntentParameterDependency<SiriSettleSuggestedTransferIntent>(\.$sheet) var selection
 
@@ -91,7 +91,7 @@ struct SiriSettlementProposalQuery: EntityStringQuery {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementWritableSheetQuery: EntityStringQuery {
     @MainActor func suggestedEntities() async throws -> [ExpenseSheetEntity] { try SiriSettlementStore.writableSheets() }
 
@@ -108,13 +108,13 @@ struct SiriSettlementWritableSheetQuery: EntityStringQuery {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 protocol SettlementMemberOptions: SheetScopedMemberQuery {
     var requestedSheetID: String? { get }
     var senderID: String? { get }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 extension SettlementMemberOptions {
     @MainActor func selectedSheetID(access: IntentSheetAccess) throws -> String? {
         requestedSheetID ?? senderID.flatMap(SiriSettlementProposalQuery.sheetIdentifier(of:))
@@ -137,7 +137,7 @@ extension SettlementMemberOptions {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementSenderQuery: SettlementMemberOptions {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]
@@ -147,7 +147,7 @@ struct SiriSettlementSenderQuery: SettlementMemberOptions {
     var senderID: String? { nil }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementRecipientQuery: SettlementMemberOptions {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]

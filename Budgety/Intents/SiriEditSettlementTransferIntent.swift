@@ -1,16 +1,16 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import SwiftUI
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementRecordEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "送金記録"
     static let defaultQuery = SiriSettlementRecordQuery()
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     let id: String
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
     @Property(title: "シートの識別子", visibility: .internal)
     #endif
     var sheetID: String
@@ -35,7 +35,7 @@ struct SiriSettlementRecordEntity: AppEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementRecordQuery: EntityStringQuery {
     @IntentParameterDependency<SiriEditSettlementTransferIntent>(\.$sheet) var edit
 
@@ -87,8 +87,8 @@ struct SiriSettlementRecordQuery: EntityStringQuery {
     }
 }
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriEditSettlementTransferIntent: AppIntent {
@@ -160,7 +160,7 @@ enum SettlementEditField: String, AppEnum {
 }
 #endif
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementEditMemberQuery: SettlementMemberOptions {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]

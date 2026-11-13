@@ -1,10 +1,10 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriSettlementStatusIntent: AppIntent {
@@ -29,7 +29,7 @@ struct SiriSettlementStatusIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementStatusSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "精算状況のカードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -48,7 +48,7 @@ struct SiriSettlementStatusSnippetIntent: SnippetIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementProfile: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "メンバー"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -81,7 +81,7 @@ struct SiriSettlementProfile: TransientAppEntity {
     var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementCardRow: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "送金の提案"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -108,7 +108,7 @@ struct SiriSettlementCardRow: TransientAppEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "精算状況"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -160,8 +160,8 @@ struct SiriSettlementCardResult: TransientAppEntity {
     }
 }
 
-#if os(iOS)
-@available(iOS 27.3, *)
+#if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriSettlementCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in

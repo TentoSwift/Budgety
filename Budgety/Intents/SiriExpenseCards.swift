@@ -1,9 +1,9 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import SwiftUI
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardRow: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -86,7 +86,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "明細の検索結果"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -96,12 +96,16 @@ struct SiriExpenseCardResult: TransientAppEntity {
     @Property(title: "検索した明細名") var expenseName: String
     @Property(title: "該当件数") var count: Int
     @Property(title: "通貨別の合計") var total: String
+    @Property(title: "収入") var incomeTotal: String?
+    @Property(title: "支出") var expenseTotal: String?
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
 
     #if os(watchOS)
+    var expandedSearch: String?
     var sheetSymbol: String?
     var sheetColorHex: String?
     #else
+    @Property(title: "検索条件", visibility: .internal) var expandedSearch: String?
     @Property(title: "シートのアイコン", visibility: .internal) var sheetSymbol: String?
     @Property(title: "シートの色", visibility: .internal) var sheetColorHex: String?
     #endif
@@ -126,7 +130,7 @@ struct SiriExpenseCardResult: TransientAppEntity {
 
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriMemberCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "メンバーの収支"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -136,16 +140,19 @@ struct SiriMemberCardResult: TransientAppEntity {
     @Property(title: "対象期間") var period: String
     @Property(title: "支出") var expenseTotal: String?
     @Property(title: "収入") var incomeTotal: String?
+    @Property(title: "収支") var netTotal: String?
     @Property(title: "該当件数") var count: Int
     @Property(title: "新しい順の明細") var rows: [SiriExpenseCardRow]
 
     #if os(watchOS)
+    var expandedSearch: String?
     var memberColorHex = ""
     var memberPhoto: IntentFile?
     var memberIsVirtual = false
     var sheetSymbol: String?
     var sheetColorHex: String?
     #else
+    @Property(title: "検索条件", visibility: .internal) var expandedSearch: String?
     @Property(title: "メンバーの色", visibility: .internal) var memberColorHex: String
     @Property(title: "メンバーの写真", visibility: .internal) var memberPhoto: IntentFile?
     @Property(title: "バーチャルメンバー", visibility: .internal) var memberIsVirtual: Bool
@@ -178,7 +185,7 @@ struct SiriMemberCardResult: TransientAppEntity {
 
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriRecordedTransaction: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "登録した明細"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -215,8 +222,8 @@ struct SiriRecordedTransaction: TransientAppEntity {
 
 }
 
-#if os(iOS)
-@available(iOS 27.3, *)
+#if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriExpenseCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
@@ -225,7 +232,7 @@ extension SiriExpenseCardResult: SnippetRepresentableEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriMemberCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
@@ -234,7 +241,7 @@ extension SiriMemberCardResult: SnippetRepresentableEntity {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriRecordedTransaction: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { recorded, _ in
@@ -244,7 +251,7 @@ extension SiriRecordedTransaction: SnippetRepresentableEntity {
 }
 #endif
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseCardView: View {
     private enum Content {
         case search(SiriExpenseCardResult)
@@ -288,6 +295,14 @@ struct SiriExpenseCardView: View {
             result.count == 1 && result.rows.count == 1 ? result.rows.first?.expenseIdentifier : nil
         case .member:
             nil
+        }
+    }
+
+    private var expandedSearch: String? {
+        switch content {
+        case .search(let result): result.expandedSearch
+        case .member(let result): result.expandedSearch
+        case .recorded: nil
         }
     }
 
@@ -345,6 +360,9 @@ struct SiriExpenseCardView: View {
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
+            if let income = result.incomeTotal, let expense = result.expenseTotal {
+                Text("収入 \(income) ／ 支出 \(expense)").font(.caption).foregroundStyle(secondaryInk)
+            }
             fittingRows(result.rows, count: result.count, period: result.period)
         }
     }
@@ -365,6 +383,7 @@ struct SiriExpenseCardView: View {
         if result.count == 0 {
             Text("該当する明細はありません").font(.caption)
         } else {
+            if let net = result.netTotal { Text("収支 \(net)").font(.caption.bold()) }
             if let expense = result.expenseTotal { Text("支出 \(expense)").font(.caption.bold()) }
             if let income = result.incomeTotal { Text("収入 \(income)").font(.caption.bold()) }
             fittingRows(result.rows, count: result.count, period: result.period)
@@ -417,6 +436,7 @@ struct SiriExpenseCardView: View {
 
     @ViewBuilder
     private func memberTotals(_ result: SiriMemberCardResult) -> some View {
+        if let value = result.netTotal { memberAmount("収支", value: value) }
         if let value = result.expenseTotal { memberAmount("支出", value: value) }
         if let value = result.incomeTotal { memberAmount("収入", value: value) }
     }
@@ -486,9 +506,19 @@ struct SiriExpenseCardView: View {
             }
             let hiddenCount = count - limit
             if hiddenCount > 0 {
-                Text("+\(hiddenCount)件")
-                    .font(.caption)
-                    .foregroundStyle(secondaryInk)
+                if let expandedSearch {
+                    Button(intent: SiriShowAllTransactionsIntent(search: expandedSearch)) {
+                        ViewThatFits(in: .horizontal) {
+                            Text("表示を増やす（+\(hiddenCount)件）")
+                            Text("表示を増やす")
+                        }
+                        .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("siriShowAllTransactions")
+                } else {
+                    Text("+\(hiddenCount)件").font(.caption).foregroundStyle(secondaryInk)
+                }
             }
         }
         .fixedSize(horizontal: false, vertical: true)

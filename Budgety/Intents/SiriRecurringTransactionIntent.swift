@@ -1,15 +1,15 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 nonisolated extension TransactionKind: AppEnum {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "種別"
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [.expense: "支出", .income: "収入"]
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 nonisolated extension RecurrenceFrequency: AppEnum {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "頻度"
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
@@ -17,8 +17,8 @@ nonisolated extension RecurrenceFrequency: AppEnum {
     ]
 }
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriRecurringTransactionIntent: AppIntent {

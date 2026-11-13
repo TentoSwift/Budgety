@@ -1,11 +1,11 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, watchOS 26.2, *)
-enum SiriTransactionSelection: String, AppEnum {
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+enum SiriTransactionSelection: String, AppEnum, Codable {
     case expense, income, both
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "対象の収支"
@@ -18,8 +18,8 @@ enum SiriTransactionSelection: String, AppEnum {
     var includesIncome: Bool { self != .expense }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriFindMemberTransactionsIntent: AppIntent {
@@ -56,7 +56,7 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriMemberResultsSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "メンバーの収支カードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -98,7 +98,7 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
     }
 }
 
-@available(iOS 27.3, watchOS 26.2, *)
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriMemberSearchQuery: SheetScopedMemberQuery {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]

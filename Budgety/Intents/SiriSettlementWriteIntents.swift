@@ -1,10 +1,10 @@
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriSettleSuggestedTransferIntent: AppIntent {
@@ -41,8 +41,8 @@ struct SiriSettleSuggestedTransferIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriLogSettlementTransferIntent: AppIntent {
@@ -78,7 +78,7 @@ struct SiriLogSettlementTransferIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 private extension AppIntent {
     @MainActor
     func confirmAndRecord(_ prepared: SiriSettlementStore.Prepared, sheetID: String) async throws
@@ -100,7 +100,7 @@ private extension AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementReceiptSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "送金の記録カードを表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication

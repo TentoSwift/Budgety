@@ -1,12 +1,12 @@
 // The Siri AI tool trait was introduced in the iOS 27.3 App Intents SDK.
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
 import AppIntents
 import CoreData
 import Foundation
 import SwiftUI
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriRecordExpenseIntent: AppIntent {
@@ -58,8 +58,8 @@ struct SiriRecordExpenseIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriRecordIncomeIntent: AppIntent {
@@ -98,7 +98,7 @@ struct SiriRecordIncomeIntent: AppIntent {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 private enum SiriTransactionRecording {
     @MainActor
     static func record(_ kind: TransactionKind, sheet: ExpenseSheetEntity, amount: Double, title: String?,
@@ -115,7 +115,7 @@ private enum SiriTransactionRecording {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriRecordedTransaction {
     @MainActor
     init(transaction: Expense, sheet: ExpenseSheet) {
@@ -129,7 +129,7 @@ extension SiriRecordedTransaction {
     }
 }
 
-@available(iOS 27.3, *)
+@available(iOS 27.3, macOS 27.3, *)
 struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
     static let title: LocalizedStringResource = "追加した明細を表示"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
@@ -154,8 +154,8 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
     }
 }
 
-@available(iOS 27.3, *)
-#if os(iOS)
+@available(iOS 27.3, macOS 27.3, *)
+#if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriMonthlySpendingIntent: AppIntent {

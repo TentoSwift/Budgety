@@ -1,4 +1,4 @@
-#if os(iOS) || os(watchOS)
+#if os(iOS) || os(watchOS) || os(macOS)
 import CoreData
 import Foundation
 

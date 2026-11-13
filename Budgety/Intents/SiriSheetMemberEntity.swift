@@ -5,8 +5,8 @@ import CoreData
 struct SiriSheetMemberEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "シートのメンバー"
     static let defaultQuery = SiriSheetMemberQuery()
-    #if (os(iOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
-    @available(iOS 27.3, watchOS 27.3, *)
+    #if (os(iOS) || os(macOS) || os(watchOS)) && canImport(AppIntents, _version: 301.2.7.2)
+    @available(iOS 27.3, macOS 27.3, watchOS 27.3, *)
     static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
     #endif
 
@@ -234,8 +234,8 @@ struct SiriSheetMemberQuery: SheetScopedMemberQuery {
     }
 }
 
-#if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
-@available(iOS 27.3, watchOS 26.2, *)
+#if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriRecordingMemberQuery: SheetScopedMemberQuery {
     typealias Entity = SiriSheetMemberEntity
     typealias Result = [SiriSheetMemberEntity]

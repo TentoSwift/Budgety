@@ -95,11 +95,11 @@ struct AddExpenseIntent: AppIntent {
         }
     }
 
-    #if os(watchOS) || (os(iOS) && canImport(AppIntents, _version: 301.2.7.2))
+    #if os(watchOS) || ((os(iOS) || os(macOS)) && canImport(AppIntents, _version: 301.2.7.2))
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetIntent {
         let saved = try await recordSelectedExpense()
-        if #available(iOS 27.3, watchOS 26.0, *) {
+        if #available(iOS 27.3, macOS 27.3, watchOS 26.0, *) {
             let snippet = SiriRecordedTransactionSnippetIntent(identifier: saved.transaction.objectID.uriRepresentation().absoluteString)
             return .result(dialog: saved.dialog, snippetIntent: snippet)
         }
@@ -176,39 +176,10 @@ struct AddExpenseIntent: AppIntent {
         guard PersistenceController.shared.container.canUpdateRecord(forManagedObjectWith: coreSheet.objectID) else {
             throw AppIntentError.sheetNotFound
         }
-        let expense = Expense(context: ctx)
-        let sheetStore = coreSheet.objectID.persistentStore
-        if let store = sheetStore {
-            ctx.assign(expense, to: store)
-        }
-
-        expense.title = trimmedTitle.isEmpty ? nil : trimmedTitle
-        expense.amount = NSDecimalNumber(decimal: value)
-        expense.kindRaw = kind.rawValue
         let recordedCurrency = currency ?? coreSheet.resolvedDefaultCurrencyCode
-        expense.currencyCode = recordedCurrency
-        expense.date = date
-        expense.note = note
-        expense.createdAt = .now
-
-        // カテゴリ解決: 選択値 (AI 提案 / 未分類 / 実カテゴリ) をシート内へマップ
-        if let cat = resolvedCategory {
-            expense.categoryRaw = cat.name
-            if cat.objectID.persistentStore == sheetStore {
-                expense.category = cat
-            }
-        }
-
-        let profile = UserProfileStore.shared
-        try assignParticipants(to: expense, sheet: coreSheet, access: transaction, payer: payer,
-                               splitAll: splitAll, beneficiaries: beneficiaries)
-        expense.sheet = coreSheet
-        // FX スナップショット (Shortcut 経由でも current FX で凍結)
-        expense.captureFXSnapshot()
-
-        // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
-        if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx, saveChanges: false) }
-
+        let expense = try insertTransaction(in: coreSheet, access: transaction, kind: kind, title: trimmedTitle,
+                                            amount: value, currencyCode: recordedCurrency, date: date, note: note,
+                                            category: resolvedCategory, payer: payer, splitAll: splitAll, beneficiaries: beneficiaries)
         try ctx.save()
 
         let amountDisplay = CurrencyCatalog.format(
@@ -228,6 +199,48 @@ struct AddExpenseIntent: AppIntent {
             dialog = IntentDialog(full: "「\(coreSheet.displayName)」に \(body) を収入として追加しました", supporting: "収入を追加しました")
         }
         return RecordedTransaction(transaction: expense, sheet: coreSheet, dialog: dialog, context: ctx)
+    }
+
+    @MainActor
+    static func insertTransaction(in coreSheet: ExpenseSheet, access transaction: IntentSheetAccess,
+                                  kind: TransactionKind, title: String, amount: Decimal, currencyCode: String,
+                                  date: Date, note: String = "", category: ExpenseCategory? = nil,
+                                  payer: SiriSheetMemberEntity? = nil, splitAll: Bool = false,
+                                  beneficiaries: [SiriSheetMemberEntity] = []) throws -> Expense {
+        let ctx = transaction.context
+        let expense = Expense(context: ctx)
+        let sheetStore = coreSheet.objectID.persistentStore
+        if let store = sheetStore {
+            ctx.assign(expense, to: store)
+        }
+
+        expense.title = title.isEmpty ? nil : title
+        expense.amount = NSDecimalNumber(decimal: amount)
+        expense.kindRaw = kind.rawValue
+        expense.currencyCode = currencyCode
+        expense.date = date
+        expense.note = note
+        expense.createdAt = .now
+
+        // カテゴリ解決: 選択値 (AI 提案 / 未分類 / 実カテゴリ) をシート内へマップ
+        if let cat = category {
+            expense.categoryRaw = cat.name
+            if cat.objectID.persistentStore == sheetStore {
+                expense.category = cat
+            }
+        }
+
+        let profile = UserProfileStore.shared
+        try assignParticipants(to: expense, sheet: coreSheet, access: transaction, payer: payer,
+                               splitAll: splitAll, beneficiaries: beneficiaries)
+        expense.sheet = coreSheet
+        // FX スナップショット (Shortcut 経由でも current FX で凍結)
+        expense.captureFXSnapshot()
+
+        // 自分の ParticipantProfile をシートに ensure (まだ無ければ作成)
+        if BuildInfo.profileFeatureEnabled { profile.ensureProfile(in: coreSheet, ctx: ctx, saveChanges: false) }
+
+        return expense
     }
 
     @MainActor
