@@ -47,6 +47,31 @@ extension SiriExpenseScope {
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+struct SiriTransactionReplyRequest {
+    let search: String?
+    let requestsAll: Bool
+
+    init(_ search: String?) {
+        let question = (search ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
+        let quantityAtEnd = #/(?:(.+)を)?(?:すべて|全て|全部|全件)(?:を?(?:見せて|表示して|教えて)(?:ください)?)?/#
+        if let match = question.wholeMatch(of: quantityAtEnd) {
+            self.search = match.output.1.map(String.init)
+            requestsAll = true
+            return
+        }
+        let quantityBeforeSubject = #/((?:今日|きょう|本日|昨日|きのう|今月|先月|全期間)の)?(?:すべて|全て|全部|全件)の(明細|取引一覧|取引|支出|収入|収支)(?:を(?:見せて|表示して|教えて)(?:ください)?)?/#
+        if let match = question.wholeMatch(of: quantityBeforeSubject) {
+            self.search = (match.output.1.map(String.init) ?? "") + match.output.2
+            requestsAll = true
+            return
+        }
+        self.search = ["何がある", "何があるの", "どんな明細がある", "一覧にして", "一覧を見せて"].contains(question) ? nil : search
+        requestsAll = false
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseSearchFilter {
     let name: String?
     let categoryName: String?
@@ -95,6 +120,7 @@ struct SiriExpenseSearchFilter {
             guard rest.hasPrefix("の") else { continue }
             let subject = rest.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
             if let kind = transactionKind(in: subject) { return (period, nil, kind) }
+            if isLedgerList(subject) { return (period, nil, nil) }
             // Preserve the literal merchant name and spaces within it unless a question was asked.
             for suffix in ["はいくらですか", "はいくら", "を教えて", "を見せて", "は"] where subject.hasSuffix(suffix) {
                 let term = subject.dropLast(suffix.count).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -102,12 +128,19 @@ struct SiriExpenseSearchFilter {
             }
             if isSpokenQuery, !subject.isEmpty { return (period, subject, nil) }
         }
+        if isLedgerList(question) { return (nil, nil, nil) }
         return transactionKind(in: question).map { (nil, nil, $0) }
+    }
+
+    private static func isLedgerList(_ subject: String) -> Bool {
+        ["明細", "明細一覧", "取引", "取引一覧", "一覧"].contains(where: { name in
+            ["", "は", "を見せて", "を教えて", "を一覧にして", "にして"].contains(where: { subject == name + $0 })
+        })
     }
 
     private static func transactionKind(in subject: String) -> SiriTransactionSelection? {
         var text = subject.filter { !$0.isWhitespace }
-        for suffix in ["はいくらですか", "はいくら", "を教えてください", "を教えて", "を見せて", "は"] where text.hasSuffix(suffix) {
+        for suffix in ["はいくらですか", "はいくら", "を教えてください", "を教えて", "を見せて", "を一覧にして", "は"] where text.hasSuffix(suffix) {
             text.removeLast(suffix.count)
             break
         }

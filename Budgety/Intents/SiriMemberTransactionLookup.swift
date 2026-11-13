@@ -12,14 +12,14 @@ enum SiriMemberTransactionLookup {
     }
 
     static func search(sheetID: String, memberIdentifier: String, scope: SiriExpenseScope,
-                       includeExpenses: Bool, includeIncome: Bool) throws -> Result {
+                       kind: SiriTransactionSelection, showAll: Bool = false) throws -> Result {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
         let sheet = try access.resolve(sheetID)
         let roster = try SiriSheetMemberRoster(sheet: sheet, access: access)
         guard let member = roster.members.first(where: { $0.id == memberIdentifier }) else { throw AppIntentError.missingPayer }
         let payer = Payer(member: member, roster: roster, sheet: sheet)
         let ledger = try SiriTransactionLedger.read(sheet: sheet, access: access, interval: scope.interval,
-                                                    includeExpenses: includeExpenses, includeIncome: includeIncome,
+                                                    includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome, allRows: showAll,
                                                     matchesPayer: payer.matches)
         let color: String
         let photo: Data?
@@ -32,18 +32,17 @@ enum SiriMemberTransactionLookup {
             photo = info.photoData
         }
         let isVirtual = UserProfileStore.isVirtualRecordName(member.profileID)
-        let expenseTotal = includeExpenses ? ledger.expenseTotal : nil
-        let incomeTotal = includeIncome ? ledger.incomeTotal : nil
+        let expenseTotal = kind.includesExpenses ? ledger.expenseTotal : nil
+        let incomeTotal = kind.includesIncome ? ledger.incomeTotal : nil
         var card = SiriMemberCardResult(memberName: member.name, memberColorHex: color,
                                         memberPhoto: SiriExpensePayer.thumbnail(from: photo), memberIsVirtual: isVirtual,
                                         sheetName: sheet.displayName, sheetSymbol: sheet.displaySymbol, sheetColorHex: sheet.displayColorHex,
                                         period: scope.label, expenseTotal: expenseTotal, incomeTotal: incomeTotal,
                                         count: ledger.count, rows: ledger.rows)
-        card.netTotal = includeExpenses && includeIncome ? ledger.netTotal : nil
-        let totals = [card.netTotal.map { String(localized: "収支") + " " + $0 },
-                      expenseTotal.map { String(localized: "支出") + " " + $0 },
-                      incomeTotal.map { String(localized: "収入") + " " + $0 }].compactMap { $0 }
-        return Result(card: card, summary: ([sheet.displayName, member.name, scope.label] + totals).joined(separator: " · "))
+        card.netTotal = kind == .both ? ledger.netTotal : nil
+        let reply = ledger.reply(for: kind, sheetName: sheet.displayName, period: scope.label, member: member.name,
+                                 category: nil, name: nil, showAll: showAll)
+        return Result(card: card, summary: reply)
     }
 
     @MainActor

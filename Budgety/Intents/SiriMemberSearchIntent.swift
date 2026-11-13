@@ -39,6 +39,8 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
     var month: Date?
     @Parameter(title: "対象日", description: "特定の1日を指定したときの日付。")
     var day: Date?
+    @Parameter(title: "本文に全件を表示", description: "すべての明細を求めた場合だけオン。通常は直近3件と残り件数を伝えます。")
+    var showAllInReply: Bool?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriMemberCardResult> & ProvidesDialog & ShowsSnippetIntent {
@@ -54,8 +56,7 @@ struct SiriFindMemberTransactionsIntent: AppIntent {
         let sheetID = String(member.id[..<separator])
         guard sheet == nil || sheet?.id == sheetID else { throw AppIntentError.sheetNotFound }
         let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: member.id,
-                                                           scope: scope, includeExpenses: selection.includesExpenses,
-                                                           includeIncome: selection.includesIncome)
+                                                           scope: scope, kind: selection, showAll: showAllInReply == true)
         return (result, SiriMemberResultsSnippetIntent(sheetID: sheetID, memberID: member.id, kind: selection, scope: scope))
     }
 }
@@ -96,8 +97,7 @@ struct SiriMemberResultsSnippetIntent: SnippetIntent {
         }
         let scope = SiriExpenseScope(interval: interval, label: periodLabel, isDay: false)
         let result = try SiriMemberTransactionLookup.search(sheetID: sheetID, memberIdentifier: memberID,
-                                                           scope: scope, includeExpenses: kind.includesExpenses,
-                                                           includeIncome: kind.includesIncome)
+                                                           scope: scope, kind: kind)
         return .result(view: SiriExpenseCardView(member: result.card))
     }
 }

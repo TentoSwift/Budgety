@@ -30,6 +30,22 @@ struct SiriTransactionLedger {
         }
     }
 
+    func reply(for kind: SiriTransactionSelection, sheetName: String, period: String, member: String?,
+               category: String?, name: String?, showAll: Bool) -> String {
+        let totals = summary(for: kind, sheetName: sheetName, period: period, member: member, category: category, name: name)
+        let visible = showAll ? rows[...] : rows.prefix(3)
+        var lines = [totals]
+        for row in visible {
+            let sign = row.transactionKind == .income ? "+" : "−"
+            lines.append("\(row.date)　\(row.title)　\(sign)\(row.amount)")
+        }
+        let remaining = count - visible.count
+        if remaining > 0 {
+            lines.append(String(localized: "ほかに\(remaining)件あります。"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private func formatted(_ totals: [String: Decimal]) -> String {
         let values = totals.isEmpty ? [currency: Decimal.zero] : totals
         return values.sorted { $0.key < $1.key }.map { code, amount in

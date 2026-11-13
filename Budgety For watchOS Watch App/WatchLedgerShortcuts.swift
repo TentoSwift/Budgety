@@ -206,6 +206,7 @@ struct WatchSheetActionShortcut: AppIntent {
     @Parameter(title: "操作") var operation: WatchSheetAction?
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
     @Parameter(title: "メンバー", optionsProvider: WatchSheetActionMemberQuery()) var member: SiriSheetMemberEntity?
+    @Parameter(title: "本文に全件を表示") var showAllInReply: Bool?
     @Parameter(title: "対象の収支") var kind: SiriTransactionSelection?
     @Parameter(title: "検索期間") var period: SiriExpensePeriod?
     @Parameter(title: "対象月") var month: Date?
@@ -223,6 +224,7 @@ struct WatchSheetActionShortcut: AppIntent {
             let query = SiriFindMemberTransactionsIntent()
             query.sheet = sheet
             query.member = member
+            query.showAllInReply = showAllInReply
             query.kind = kind
             query.period = period
             query.month = month

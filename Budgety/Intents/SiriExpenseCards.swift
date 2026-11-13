@@ -341,6 +341,39 @@ struct SiriRecordedTransaction: TransientAppEntity {
 
 #if os(iOS) || os(macOS)
 @available(iOS 27.3, macOS 27.3, *)
+extension SiriListedTransactionEntity: SnippetRepresentableEntity {
+    static var snippet: some EntitySnippetContent<Self> {
+        CardSnippet(supportedFamilies: [.standard]) { transaction, _ in
+            SiriListedTransactionCard(transaction: transaction)
+        }
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+struct SiriListedTransactionCard: View {
+    let transaction: SiriListedTransactionEntity
+
+    var body: some View {
+        HStack(spacing: 12) {
+            CategoryIconView(symbol: transaction.categorySymbol.isEmpty ? "tag.slash" : transaction.categorySymbol,
+                             tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: 38)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: transaction.title)
+                    .font(.body.weight(.semibold))
+                Text(verbatim: "\(transaction.date) · \(transaction.amount)")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.primary.opacity(0.78))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(10)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
 extension SiriExpenseCardResult: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
         CardSnippet(supportedFamilies: [.standard]) { result, _ in
