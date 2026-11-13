@@ -358,35 +358,57 @@ struct SiriRecordedTransaction: TransientAppEntity {
 }
 
 #if os(iOS) || os(macOS)
+#if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+// Opt-in Duo development build. The 27.3 beta exports this family but omits it
+// from the public Swift interface. Keep its symbol out of distribution builds.
+@available(iOS 27.3, *)
+private extension CardSnippetFamily {
+    static var budgetyCompact: Self {
+        @_silgen_name("$s19_AppIntents_SwiftUI17CardSnippetFamilyV7compactACvgZ")
+        get
+    }
+}
+#endif
+
 @available(iOS 27.3, macOS 27.3, *)
 extension SiriListedTransactionEntity: SnippetRepresentableEntity {
     static var snippet: some EntitySnippetContent<Self> {
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        CardSnippet(supportedFamilies: [.budgetyCompact, .standard]) { transaction, context in
+            SiriListedTransactionCard(transaction: transaction, isCompact: context.family == .budgetyCompact)
+        }
+        #else
         CardSnippet(supportedFamilies: [.standard]) { transaction, _ in
             SiriListedTransactionCard(transaction: transaction)
         }
+        #endif
     }
 }
 
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriListedTransactionCard: View {
     let transaction: SiriListedTransactionEntity
+    var isCompact = false
 
     var body: some View {
         HStack(spacing: 12) {
             CategoryIconView(symbol: transaction.categorySymbol.isEmpty ? "tag.slash" : transaction.categorySymbol,
-                             tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: 38)
+                             tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: isCompact ? 30 : 38)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: transaction.title)
                     .font(.body.weight(.semibold))
+                    .lineLimit(isCompact ? 2 : nil)
                 Text(verbatim: "\(transaction.date) · \(transaction.amount)")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.primary.opacity(0.78))
             }
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        .padding(10)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .padding(isCompact ? 6 : 10)
+        .background {
+            if !isCompact { RoundedRectangle(cornerRadius: 12).fill(.background) }
+        }
         .accessibilityElement(children: .combine)
     }
 }

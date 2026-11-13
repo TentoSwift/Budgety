@@ -45,8 +45,13 @@ struct SiriExpenseDetailsIntent: AppIntent {
 @available(iOS 27.3, macOS 27.3, *)
 @AppIntent(.tool)
 struct SiriListTransactionsIntent: AppIntent {
+    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+    static let title: LocalizedStringResource = "シートの収支と明細を調べる"
+    static let description = IntentDescription("「家計シートの支出を調べて」「今月の支出には何がある？」「収支は？」など、シートの明細を検索する質問に使います。期間・店名・カテゴリ・メンバーで絞った全件を新しい順の一覧にします。本文は直近3件と残り件数、すべてと指定された場合は全件を伝えます。", searchKeywords: ["支出", "収入", "収支", "明細一覧", "全件"])
+    #else
     static let title: LocalizedStringResource = "すべての明細を一覧で表示"
     static let description = IntentDescription("「全件を一覧で表示」「すべての明細を見せて」のように、全件の一覧を明示したときの検索です。各明細を新しい順で返します。通常の支出・収入・収支の質問には「シートの収入・支出を検索して表示」を使います。", searchKeywords: ["全件一覧", "すべての明細"])
+    #endif
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     static let supportedModes: IntentModes = .background
 
@@ -66,8 +71,25 @@ struct SiriListTransactionsIntent: AppIntent {
     @Parameter(title: "本文に全件を表示", description: "すべての明細を読み上げるよう明示された場合だけオン。「全期間」は期間の指定で、「一覧」「何がある？」も通常はオフです。")
     var showAllInReply: Bool?
 
+    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog {
+        let result = try await search()
+        return .result(value: result.entities, dialog: result.dialog)
+    }
+    #else
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog & ShowsSnippetIntent {
+        let result = try await search()
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: result.filter,
+                                                     kind: result.selection, memberIdentifier: member?.id)
+        return .result(value: result.entities, dialog: result.dialog, snippetIntent: snippet)
+    }
+    #endif
+
+    @MainActor
+    private func search() async throws -> (entities: [SiriListedTransactionEntity], dialog: IntentDialog, sheetID: String,
+                                           filter: SiriExpenseSearchFilter, selection: SiriTransactionSelection) {
         let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet, member: member) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を一覧にしますか？")
         }
@@ -88,9 +110,7 @@ struct SiriListTransactionsIntent: AppIntent {
                                  member: member?.name, category: filter.categoryName, name: filter.name,
                                  showAll: showAllInReply ?? request.requestsAll)
         let entities = try ledger.rows.map(SiriListedTransactionEntity.init(row:))
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, filter: filter, kind: selection,
-                                                     memberIdentifier: member?.id)
-        return .result(value: entities, dialog: IntentDialog("\(reply)"), snippetIntent: snippet)
+        return (entities, IntentDialog("\(reply)"), sheetID, filter, selection)
     }
 }
 
@@ -111,10 +131,13 @@ struct SiriListMemberQuery: SheetScopedMemberQuery {
 #endif
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
-#if os(iOS) || os(macOS)
+#if os(macOS) || (os(iOS) && !(DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT))
 @AppIntent(.tool)
 #endif
 struct SiriFindExpenseCardsIntent: AppIntent {
+    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+    static let isDiscoverable = false
+    #endif
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
     static let description = IntentDescription("「家計シートの支出を調べて」「今月の支出には何がある？」「収支は？」など、シートの収入・支出・差額や明細を質問されたらこのカードを表示します。期間、店名、カテゴリ、メンバーで絞れます。本文には直近3件と残り件数を使い、全件を明示した場合だけすべて伝えます。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
