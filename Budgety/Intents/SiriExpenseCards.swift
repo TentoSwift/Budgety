@@ -508,14 +508,31 @@ struct SiriExpenseCardView: View {
             if hiddenCount > 0 {
                 if let expandedSearch {
                     Button(intent: SiriShowAllTransactionsIntent(search: expandedSearch)) {
-                        ViewThatFits(in: .horizontal) {
-                            Text("表示を増やす（+\(hiddenCount)件）")
-                            Text("表示を増やす")
+                        HStack(spacing: 5) {
+                            Image("BudgetySnippetIcon")
+                                .renderingMode(.original)
+                                .resizable()
+                                .frame(width: 17, height: 17)
+                                .accessibilityHidden(true)
+                            ViewThatFits(in: .horizontal) {
+                                Text("表示を増やす（+\(hiddenCount)件）")
+                                    .fixedSize(horizontal: true, vertical: false)
+                                VStack(spacing: 1) {
+                                    Text("表示を増やす")
+                                    Text("+\(hiddenCount)件")
+                                }
+                            }
                         }
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(primaryInk)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(primaryInk.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("siriShowAllTransactions")
+                    .frame(maxWidth: .infinity, alignment: .center)
                 } else {
                     Text("+\(hiddenCount)件").font(.caption).foregroundStyle(secondaryInk)
                 }
