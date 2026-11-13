@@ -94,7 +94,11 @@ private struct SiriLedgerQuestion: Codable {
     @MainActor
     func report() throws -> SiriAnalysisReport {
         let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
-        let sheet = try access.resolve(sheetID)
+        return try report(in: access.resolve(sheetID), access: access)
+    }
+
+    @MainActor
+    func report(in sheet: ExpenseSheet, access: IntentSheetAccess) throws -> SiriAnalysisReport {
         guard let mode = SiriAnalysisMode(rawValue: mode), let kind = SiriTransactionSelection(rawValue: kind)
         else { throw QuestionError.invalid }
         var request = SiriAnalysisRequest(mode: mode)
@@ -222,11 +226,16 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             }
         }
         let inherited = saved.flatMap { $0.sheetID == sheetID ? $0 : nil }
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let record = try access.resolve(sheetID)
+        func monthlyClauses(_ text: String?) -> [SiriSpokenMonthlyRanking] {
+            SiriSpokenMonthlyRanking.clauses(in: text, sheetName: record.displayName)
+        }
         let spoken = SiriSpokenRankingRequest(name)
         let clauses = [monthlyQuestion, name, category].compactMap { $0 }.lazy
-            .map { SiriSpokenMonthlyRanking.clauses(in: $0) }.first(where: { !$0.isEmpty }) ?? []
+            .map { monthlyClauses($0) }.first(where: { !$0.isEmpty }) ?? []
         let first = clauses.first
-        let categoryIsQuestion = first != nil && !SiriSpokenMonthlyRanking.clauses(in: category).isEmpty
+        let categoryIsQuestion = first != nil && !monthlyClauses(category).isEmpty
         let secondSpecified = additionalPeriod != nil || additionalSort != nil || additionalRank != nil || additionalLimit != nil
         if monthlyQuestion != nil && first == nil && mode != .month && !secondSpecified { throw QuestionError.invalid }
         let resolvedMode: SiriAnalysisMode? = first != nil || secondSpecified ? .month : mode
@@ -247,6 +256,9 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
         if ranksMonths, searchPeriod == .thisYear, day == nil {
             scope = Self.monthlyScope(.thisYear, now: now, calendar: calendar)
         }
+        if let months = first?.recentMonths, period == nil, day == nil, month == nil {
+            scope = SiriExpenseScope(recentMonths: months, now: now, calendar: calendar)
+        }
         var q = inherited ?? SiriLedgerQuestion(sheetID: sheetID, interval: scope.interval, period: scope.label)
         if startDate != nil || endDate != nil {
             let cal = Calendar.current
@@ -255,7 +267,7 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             let start = cal.startOfDay(for: startDate)
             q.interval = DateInterval(start: start, end: end)
             q.period = start.formatted(date: .abbreviated, time: .omitted) + "〜" + endDate.formatted(date: .abbreviated, time: .omitted)
-        } else if day != nil || month != nil || searchPeriod != nil {
+        } else if day != nil || month != nil || searchPeriod != nil || first?.recentMonths != nil {
             q.interval = scope.interval
             q.period = scope.label
         }
@@ -264,7 +276,7 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
         q.category = (categoryIsQuestion ? nil : category) ?? first?.category ?? (first?.kind == nil ? q.category : nil)
         if !spoken.isRanking, (first == nil || monthlyQuestion != nil), let name, name != monthlyQuestion {
             // Siri sometimes copies the category (or the entire question) into the merchant field as well.
-            if ranksMonths, name == q.category || !SiriSpokenMonthlyRanking.clauses(in: name).isEmpty { q.name = nil }
+            if ranksMonths, name == q.category || !monthlyClauses(name).isEmpty { q.name = nil }
             else { q.name = name }
         }
         q.memberID = member?.id ?? q.memberID
@@ -334,6 +346,7 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
                 let clause = index + 1 < clauses.count ? clauses[index + 1] : nil
                 let relative = (index == 0 ? additionalPeriod : nil) ?? clause?.period
                 let periodScope = relative.map { Self.monthlyScope($0, now: now, calendar: calendar) }
+                    ?? clause?.recentMonths.map { SiriExpenseScope(recentMonths: $0, now: now, calendar: calendar) }
                     ?? SiriExpenseScope(interval: q.interval, label: q.period, isDay: false)
                 let explicitCount = index == 0 ? additionalLimit : nil
                 let count = explicitCount ?? clause?.limit
@@ -381,14 +394,13 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             q.comparisonLabel = earlier.start.formatted(date: .abbreviated, time: .omitted) + "〜" +
                 earlier.end.addingTimeInterval(-1).formatted(date: .abbreviated, time: .omitted)
         }
-        let report = try q.report()
+        let report = try q.report(in: record, access: access)
         q.singleID = report.singleTransactionID
         var result = try SiriLedgerQuestionContext(query: q, label: report.scope + "・" + report.title)
         if !report.sections.isEmpty {
             result.monthlyAnswer = report.dialog
         }
         if let id = q.singleID {
-            let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
             result.editableTransaction = try SiriEditableTransactionQuery.resolve([id], in: sheetID, access: access).first
         }
         return (report, result)

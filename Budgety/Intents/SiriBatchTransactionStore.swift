@@ -39,7 +39,7 @@ enum SiriBatchTransactionStore {
             switch self {
             case .empty: "明細を選ぶか、追加する明細を入力してください。"
             case .duplicate: "同じ明細が複数回指定されています。"
-            case .invalidRow: "「ランチ 1,200円」のように、明細ごとに名前と金額を入力してください。"
+            case .invalidRow: "「ランチ 1,200円」のように、明細ごとに金額を入力してください。名前は省略できます。"
             case .invalidCategory: "対象のシートと収支の種類に合うカテゴリを選んでください。"
             case .unchanged: "変更する項目がありません。"
             case .stale: "確認した内容が変わりました。明細を確認し直してください。"
@@ -125,13 +125,12 @@ enum SiriBatchTransactionStore {
         let members = try NewMembers(payer: payer, splitAll: splitAll, beneficiaries: beneficiaries, sheet: sheet, access: access)
         let normalized = try entries.map { entry in
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !title.isEmpty else { throw AppIntentError.emptyTitle }
             guard entry.amount > 0, !entry.amount.isNaN else { throw AppIntentError.invalidAmount }
             let currency = try currency(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)
             return Entry(title: title, amount: entry.amount, kind: entry.kind, currencyCode: currency, date: entry.date)
         }
         let prepared = Prepared(sheet: sheet, operation: .add(normalized, members, splitAll: splitAll), lines: normalized.map { entry in
-            "\(entry.kind.label)　\(entry.title)　\(entry.amount) \(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)　\(entry.date.formatted(date: .abbreviated, time: .shortened))" + members.summary(for: entry.kind)
+            "\(entry.kind.label)　\(entry.title.isEmpty ? String(localized: "未設定") : entry.title)　\(entry.amount) \(entry.currencyCode ?? sheet.resolvedDefaultCurrencyCode)　\(entry.date.formatted(date: .abbreviated, time: .shortened))" + members.summary(for: entry.kind)
         })
         withExtendedLifetime(access) {}
         return prepared

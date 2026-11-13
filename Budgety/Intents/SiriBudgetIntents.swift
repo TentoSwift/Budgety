@@ -11,7 +11,7 @@ import SwiftUI
 #endif
 struct SiriRecordExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "シートに支出を記録"
-    static let description = IntentDescription("シートに支出を記録して明細を表示します。共有メンバーやバーチャルメンバーがいるときは、支払った人と、全員または指定した人での均等割りを設定できます。")
+    static let description = IntentDescription("1件の支出・出費をシートに記録して明細を表示します。「10ドルの出費を追加して」は金額10、支払通貨USD、支出名なしで記録します。名前がない場合も追加でき、名前の確認は不要です。共有メンバーやバーチャルメンバーがいるときは、支払った人と、全員または指定した人での均等割りを設定できます。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "この支出を記録する家計簿または旅行などのシート。")
@@ -20,11 +20,11 @@ struct SiriRecordExpenseIntent: AppIntent {
     @Parameter(title: "金額", description: "実際に支払った正の金額。シートの通貨には換算しません。発話に円などの単位が付いていれば支払通貨も設定します。")
     var amount: Double
 
-    @Parameter(title: "支払通貨", description: "金額に付いた通貨を指定します。ドル建てシートでも「1,200円」はJPY、「15ユーロ」はEUR。通貨が言われなかった場合だけ省略します。",
+    @Parameter(title: "支払通貨", description: "金額に付いた通貨を指定します。ドル建てシートでも「1,200円」はJPY、「15ユーロ」はEUR、「10ドル」はUSD。通貨が言われなかった場合だけ省略します。",
                optionsProvider: SiriCurrencyOptions())
     var currencyCode: String?
 
-    @Parameter(title: "支出名", description: "「ランチ代」「駅までのバス代」など、利用者が話した支出の名前。指定された名前のまま記録します。")
+    @Parameter(title: "支出名", description: "「ランチ代」「駅までのバス代」など、利用者が話した支出の名前。指定された名前のまま記録します。名前が言われなければ省略し、支出・出費という一般名は名前として補いません。")
     var expenseTitle: String?
 
     @Parameter(title: "支払日", description: "支出の日付。省略すると今日になります。")

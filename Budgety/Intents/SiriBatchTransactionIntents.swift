@@ -9,11 +9,11 @@ import Foundation
 #endif
 struct SiriBatchAddTransactionsIntent: AppIntent {
     static let title: LocalizedStringResource = "複数の明細を追加"
-    static let description = IntentDescription("複数の支出や収入を1度に追加します。各明細を「支出 ランチ 1,200円」「収入 給与 100 USD」のように別々の行で指定してください。全件に共通の支払者・受取者を選べます。支出だけを追加するときは割り勘も指定できます。保存前に全件を確認します。")
+    static let description = IntentDescription("複数の支出や収入を1度に追加します。1件だけなら「シートに支出を記録」または「収入を追加」を使います。名前は省略できます。各明細を「支出 ランチ 1,200円」「収入 給与 100 USD」のように別々の行で指定してください。全件に共通の支払者・受取者を選べます。支出だけを追加するときは割り勘も指定できます。保存前に全件を確認します。")
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity
-    @Parameter(title: "明細", description: "名前と金額を1件ずつ指定します。例：ランチ 850円、電車 300円。各行の冒頭に「収入」を付けると収入になります。")
+    @Parameter(title: "明細", description: "金額を1件ずつ指定します。名前は任意です。「10ドルの出費を追加して」や「10 USD」も指定できます。例：ランチ 850円、電車 300円。各行の冒頭に「収入」を付けると収入になります。")
     var lines: [String]
     @Parameter(title: "種別", description: "行ごとの種別を指定しないときに使用します。省略すると支出です。")
     var kind: TransactionKind?
@@ -64,6 +64,7 @@ struct SiriBatchAddTransactionsIntent: AppIntent {
         let rows = lines.flatMap { $0.components(separatedBy: CharacterSet.newlines.union(CharacterSet(charactersIn: "、;；"))) }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         return try rows.map { line in
+            if let entry = try unnamedEntry(line, defaultKind: defaultKind, currency: currency, date: date) { return entry }
             var value = line
             // Normalize the numeric suffix for full-width dictation without rewriting the name.
             if let boundary = line.range(of: #"\s+[０-９0-9]"#, options: .regularExpression, range: nil, locale: nil) {
@@ -87,6 +88,54 @@ struct SiriBatchAddTransactionsIntent: AppIntent {
             return SiriBatchTransactionStore.Entry(title: name, amount: amount, kind: rowKind,
                                                    currencyCode: capture(4) ?? currency, date: date)
         }
+    }
+
+    // Siri can route a single amount-only request to the batch tool. Accept only a
+    // complete amount expression here; malformed named rows must still fail above.
+    private static func unnamedEntry(_ line: String, defaultKind: TransactionKind, currency: String?, date: Date) throws -> SiriBatchTransactionStore.Entry? {
+        var text = line.precomposedStringWithCompatibilityMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = text.replacingOccurrences(of: #"(?:を?(?:追加して|記録して|追加|記録)(?:ください)?)$"#, with: "", options: .regularExpression)
+        var rowKind = defaultKind
+        if let suffix = text.range(of: #"の(出費|支出|収入)$"#, options: .regularExpression) {
+            rowKind = text[suffix].contains("収入") ? .income : .expense
+            text.removeSubrange(suffix)
+        }
+        if let prefix = text.range(of: #"^(支出|出費|収入|expense|income)\s+"#, options: [.regularExpression, .caseInsensitive]) {
+            let kind = text[prefix].trimmingCharacters(in: .whitespaces).lowercased()
+            rowKind = ["収入", "income"].contains(kind) ? .income : .expense
+            text.removeSubrange(prefix)
+        }
+        var prefixCurrency: String?
+        if let prefix = text.range(of: #"^(?:[A-Za-z]{3}|[$€¥])\s*(?=[0-9])"#, options: .regularExpression) {
+            let token = text[prefix].trimmingCharacters(in: .whitespaces)
+            if token == "$" || token == "¥" {
+                // A symbol alone can represent more than one currency. Honor Siri's explicit currency.
+                if let code = currency.flatMap(CurrencyCatalog.transactionCurrencyCode(for:)),
+                   CurrencyCatalog.option(for: code).symbol.hasSuffix(token) {
+                    prefixCurrency = code
+                } else {
+                    prefixCurrency = token == "$" ? "USD" : "JPY"
+                }
+            } else {
+                prefixCurrency = CurrencyCatalog.transactionCurrencyCode(for: token)
+            }
+            guard prefixCurrency != nil else { return nil }
+            text.removeSubrange(prefix)
+        }
+        let pattern = #"^((?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?)\s*([^0-9,.\s].*?)?$"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        guard let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let numberRange = Range(match.range(at: 1), in: text),
+              let amount = Decimal(string: String(text[numberRange]).replacingOccurrences(of: ",", with: ""), locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        let code: String?
+        if let currencyRange = Range(match.range(at: 2), in: text) {
+            let token = String(text[currencyRange])
+            let explicit = ["dollar", "dollars"].contains(token.lowercased()) ? "USD" : CurrencyCatalog.transactionCurrencyCode(for: token)
+            guard let explicit else { return nil }
+            guard prefixCurrency == nil || prefixCurrency == explicit else { throw AppIntentError.unsupportedCurrency }
+            code = explicit
+        } else { code = prefixCurrency ?? currency }
+        return SiriBatchTransactionStore.Entry(title: "", amount: amount, kind: rowKind, currencyCode: code, date: date)
     }
 }
 

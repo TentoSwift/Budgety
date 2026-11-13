@@ -24,6 +24,14 @@ struct SiriExpenseScope {
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 extension SiriExpenseScope {
+    init(recentMonths count: Int, now: Date, calendar: Calendar) {
+        let monthStart = calendar.dateInterval(of: .month, for: now)?.start
+        let start = monthStart.flatMap { calendar.date(byAdding: .month, value: 1 - count, to: $0) }
+        let end = calendar.dateInterval(of: .day, for: now)?.end
+        let label = count == 6 ? String(localized: "直近半年（今月を含む6か月）") : String(localized: "直近\(count)か月")
+        self.init(interval: DateInterval(start: start ?? now, end: end ?? now), label: label, isDay: false)
+    }
+
     fileprivate init(containing date: Date, isDay: Bool, calendar: Calendar) {
         // Never widen a specific day or month into an all-time search if the date is unrepresentable.
         let interval = calendar.dateInterval(of: isDay ? .day : .month, for: date) ?? DateInterval(start: date, duration: 0)
@@ -37,11 +45,7 @@ extension SiriExpenseScope {
         case .allTime:
             self.init(interval: nil, label: String(localized: "全期間"), isDay: false)
         case .lastSixMonths:
-            let monthStart = calendar.dateInterval(of: .month, for: now)?.start
-            let start = monthStart.flatMap { calendar.date(byAdding: .month, value: -5, to: $0) }
-            let end = calendar.dateInterval(of: .day, for: now)?.end
-            let interval = DateInterval(start: start ?? now, end: end ?? now)
-            self.init(interval: interval, label: String(localized: "直近半年（今月を含む6か月）"), isDay: false)
+            self.init(recentMonths: 6, now: now, calendar: calendar)
         case .thisYear, .lastYear:
             let anchor = period == .lastYear ? calendar.date(byAdding: .year, value: -1, to: now) ?? now : now
             let interval = calendar.dateInterval(of: .year, for: anchor) ?? DateInterval(start: anchor, duration: 0)
@@ -283,31 +287,45 @@ struct SiriSpokenRankingRequest {
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriSpokenMonthlyRanking {
     var period: SiriExpensePeriod?
+    var recentMonths: Int?
     var category: String?
     var kind: SiriTransactionSelection?
     let sort: SiriAnalysisSort
     let rank: Int?
     let limit: Int?
 
-    static func clauses(in text: String?) -> [Self] {
+    static func clauses(in text: String?, sheetName: String? = nil) -> [Self] {
         guard let text, !text.isEmpty else { return [] }
         let phrase = text.precomposedStringWithCompatibilityMapping
             .replacing(#/[「」『』]/#, with: "")
             .replacing(#/(何月|どの月|教えて)\s*(?=今年|昨年|去年|直近|過去|全期間)/#) { String($0.1) + "\n" }
             .replacing(#/[?。!\n]+|(?:それから|それと|そして|あわせて|合わせて|あと)[、,]?|(?:と[、,]?|[、,])(?=(?:今年|昨年|去年|直近|過去|全期間))/#, with: "\n")
         let clauses = phrase.split(separator: "\n").map { $0.filter { !$0.isWhitespace } }.filter { !$0.isEmpty }
-        let parsed = clauses.compactMap { Self(clause: $0) }
+        let sheet = sheetName?.precomposedStringWithCompatibilityMapping.filter { !$0.isWhitespace }
+        let parsed = clauses.compactMap { Self(clause: $0, sheetName: sheet) }
         return parsed.count == clauses.count ? parsed : []
     }
 
-    private init?(clause: String) {
+    private init?(clause: String, sheetName: String?) {
         var phrase = clause.replacing(#/^(?:[、,]|(?:(?i:Budgety)|バジェッティ|バジェティ)[での])+/#, with: "")
-        if let periodMatch = phrase.prefixMatch(of: #/(今年|昨年|去年|全期間|(?:直近|過去)(?:の)?(?:半年|[6六][かカヶケ箇]月))(?:間)?(?:の中で|のうち|では|の|で|は)?[、,]?/#) {
+        if let sheetName, !sheetName.isEmpty, phrase.hasPrefix(sheetName) {
+            let rest = phrase.dropFirst(sheetName.count)
+            if let qualifier = rest.prefixMatch(of: #/^(?:の?シート)?(?:では|で|の)[、,]?/#) {
+                phrase = String(rest[qualifier.range.upperBound...])
+            }
+        }
+        if let periodMatch = phrase.prefixMatch(of: #/(今年|昨年|去年|全期間|(?:直近|過去)の?(?:半年|([0-9一二三四五六七八九十百千]+)[かカヶケヵ箇]月))(?:間)?(?:の中で|のうち|では|の|で|は)?[、,]?/#) {
             switch periodMatch.1 {
             case "今年": period = .thisYear
             case "昨年", "去年": period = .lastYear
             case "全期間": period = .allTime
-            default: period = .lastSixMonths
+            default:
+                if let numeral = periodMatch.2 {
+                    guard let count = SiriSpokenRankingRequest.positiveInteger(String(numeral)) else { return nil }
+                    if count == 6 { period = .lastSixMonths } else { recentMonths = count }
+                } else {
+                    period = .lastSixMonths
+                }
             }
             phrase.removeSubrange(periodMatch.range)
         }
@@ -325,10 +343,13 @@ struct SiriSpokenMonthlyRanking {
         }
         sort = ["高かった", "高い", "多かった", "多い"].contains(match.2) ? .highest : .lowest
         let tail = String(phrase[match.range.upperBound...])
-            .replacing(#/(?:を?(?:教えて|見せて|表示して|挙げて)(?:ください)?|ですか|でしたか)$/#, with: "")
-        if let count = tail.wholeMatch(of: #/(月(?:を|は)?|順(?:に|で)?)([0-9一二三四五六七八九十百千]+)(つ|[かカヶケ箇]月|月|件)/#) {
-            guard count.1.hasPrefix("月") || count.3.hasSuffix("月") else { return nil }
-            guard match.1 == nil, let number = SiriSpokenRankingRequest.positiveInteger(String(count.2)) else { return nil }
+            .replacing(#/(?:を?(?:教えて|見せて|表示して|挙げて)(?:ください)?|ですか|でしたか|を)$/#, with: "")
+        // A month may be counted directly (安かった3か月) or named first (安かった月を3つ).
+        let monthCount = tail.wholeMatch(of: #/([0-9一二三四五六七八九十百千]+)[かカヶケヵ箇]月/#)?.1
+            ?? tail.wholeMatch(of: #/順(?:に|で)?([0-9一二三四五六七八九十百千]+)[かカヶケヵ箇]?月/#)?.1
+            ?? tail.wholeMatch(of: #/月(?:を|は)?([0-9一二三四五六七八九十百千]+)(?:つ|[かカヶケヵ箇]?月|件)/#)?.1
+        if let monthCount {
+            guard match.1 == nil, let number = SiriSpokenRankingRequest.positiveInteger(String(monthCount)) else { return nil }
             limit = number
             rank = nil
         } else {
