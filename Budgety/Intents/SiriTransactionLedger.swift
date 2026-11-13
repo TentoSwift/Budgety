@@ -11,45 +11,78 @@ struct SiriTransactionLedger {
     let rows: [SiriExpenseCardRow]
     let expenseTotals: [String: Decimal]
     let incomeTotals: [String: Decimal]
+    private let items: [LedgerItem]
     private let currency: String
 
     var expenseTotal: String { formatted(expenseTotals) }
     var incomeTotal: String { formatted(incomeTotals) }
-    var netTotal: String {
-        formatted(incomeTotals.merging(expenseTotals.mapValues { -$0 }, uniquingKeysWith: +))
-    }
-
-    func summary(for kind: SiriTransactionSelection, sheetName: String, period: String, member: String?,
-                 category: String?, name: String?) -> String {
-        let scope = [sheetName, period, member, category, name].compactMap { $0 }.joined(separator: "・")
-        guard count > 0 else { return String(localized: "「\(scope)」に該当する明細はありません。") }
-        switch kind {
-        case .expense: return String(localized: "「\(scope)」の支出は\(expenseTotal)です。")
-        case .income: return String(localized: "「\(scope)」の収入は\(incomeTotal)です。")
-        case .both: return String(localized: "「\(scope)」の収入は\(incomeTotal)、支出は\(expenseTotal)、収支は\(netTotal)です。")
-        }
-    }
+    var netTotal: String { formatted(netAmounts) }
 
     func reply(for kind: SiriTransactionSelection, sheetName: String, period: String, member: String?,
                category: String?, name: String?, showAll: Bool) -> String {
-        let totals = summary(for: kind, sheetName: sheetName, period: period, member: member, category: category, name: name)
+        let scope = [sheetName, period, member, category, name].compactMap { $0 }.joined(separator: "・")
+        guard count > 0 else { return String(localized: "「\(scope)」に該当する明細はありません。") }
+
+        let locale = Locale.current
+        let currencyStyle: CurrencyFormatStyleConfiguration.Presentation =
+            locale.language.languageCode == .japanese ? .fullName : .isoCode
+        let calendar = Calendar.current
+        let now = Date.now
+        let monthDay = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+            .month(.abbreviated).day()
+        let singleDetail = count == 1 && (kind != .both || name != nil)
         let visible = showAll ? rows[...] : rows.prefix(3)
-        var lines = [totals]
-        for row in visible {
-            let sign = row.transactionKind == .income ? "+" : "−"
-            lines.append("\(row.date)　\(row.title)　\(sign)\(row.amount)")
+        let details = zip(visible, items).map { row, item in
+            let date: String
+            if case .expense(let expense) = item, expense.date == nil {
+                date = String(localized: "日付不明")
+            } else {
+                let sameYear = calendar.isDate(item.date, equalTo: now, toGranularity: .year)
+                date = item.date.formatted(sameYear ? monthDay : monthDay.year())
+            }
+            let amount = item.amountDecimal.formatted(.currency(code: item.currencyCode).presentation(currencyStyle))
+            if singleDetail {
+                return String(localized: "\(date)の「\(row.title)」は\(amount)の\(item.kind.label)です。")
+            }
+            let sign = kind == .both ? (item.kind == .expense ? "−" : "+") : ""
+            return String(localized: "• \(date)　\(row.title)（\(sign)\(amount)）")
         }
+
+        if singleDetail, let detail = details.first {
+            // The sentence already names the transaction.
+            let context = [sheetName, period, member, category].compactMap { $0 }.joined(separator: "・")
+            return String(localized: "\(detail)（\(context)）")
+        }
+
+        let summary: String
+        switch kind {
+        case .expense:
+            summary = String(localized: "「\(scope)」の支出は\(formatted(expenseTotals, presentation: currencyStyle))です。")
+        case .income:
+            summary = String(localized: "「\(scope)」の収入は\(formatted(incomeTotals, presentation: currencyStyle))です。")
+        case .both:
+            let net = formatted(netAmounts, presentation: currencyStyle)
+            let income = formatted(incomeTotals, presentation: currencyStyle)
+            let expense = formatted(expenseTotals, presentation: currencyStyle)
+            summary = String(localized: "「\(scope)」の収支は\(net)です。\n収入は\(income)、支出は\(expense)です。")
+        }
+
+        var paragraphs = [summary, details.joined(separator: "\n")]
         let remaining = count - visible.count
         if remaining > 0 {
-            lines.append(String(localized: "ほかに\(remaining)件あります。"))
+            paragraphs.append(String(localized: "ほかに\(remaining)件あります。"))
         }
-        return lines.joined(separator: "\n")
+        return paragraphs.joined(separator: "\n\n")
     }
 
-    private func formatted(_ totals: [String: Decimal]) -> String {
+    private var netAmounts: [String: Decimal] {
+        incomeTotals.merging(expenseTotals.mapValues { -$0 }, uniquingKeysWith: +)
+    }
+
+    private func formatted(_ totals: [String: Decimal], presentation: CurrencyFormatStyleConfiguration.Presentation = .isoCode) -> String {
         let values = totals.isEmpty ? [currency: Decimal.zero] : totals
         return values.sorted { $0.key < $1.key }.map { code, amount in
-            amount.formatted(.currency(code: code).presentation(.isoCode))
+            amount.formatted(.currency(code: code).presentation(presentation))
         }.formatted(.list(type: .and))
     }
 
@@ -116,7 +149,7 @@ struct SiriTransactionLedger {
             }
         }
         return Self(count: count, rows: rows, expenseTotals: expenses, incomeTotals: income,
-                    currency: record.resolvedDefaultCurrencyCode)
+                    items: newest, currency: record.resolvedDefaultCurrencyCode)
     }
 
     private static func isNewer(_ item: LedgerItem, than other: LedgerItem) -> Bool {
