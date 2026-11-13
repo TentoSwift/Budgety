@@ -36,7 +36,7 @@ struct SiriExpandedSearch: Codable, Hashable {
             return (member.name + " · " + sheet.displayName,
                     try SiriMemberTransactionLookup.ledger(in: sheet, access: access, member: member, roster: roster,
                                                           interval: interval, includeExpenses: kind.includesExpenses,
-                                                          includeIncome: kind.includesIncome, previewOnly: false,
+                                                          includeIncome: kind.includesIncome, expenseName: name, categoryName: category, previewOnly: false,
                                                           pageOffset: pageOffset, pageSize: pageSize, payerPhotoLimit: payerPhotoLimit))
         }
         let title = [sheet.displayName, category, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
