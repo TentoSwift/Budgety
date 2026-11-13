@@ -41,6 +41,24 @@ struct SiriExpenseDetailsIntent: AppIntent, SiriLedgerCurrencyParameters {
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetIntent {
         // Existing personal shortcuts consume this action's text output.
         let currency = try currencyOptions()
+        if SiriSpokenSpendingRequest.recognizes(name: expenseName, category: categoryName) {
+            let analysis = SiriAnalyzeLedgerIntent()
+            analysis.sheet = sheet
+            analysis.name = expenseName
+            analysis.category = categoryName
+            analysis.period = period
+            analysis.month = month
+            analysis.day = day
+            analysis.kind = .expense
+            analysis.targetCurrency = targetCurrency
+            analysis.sourceCurrency = sourceCurrency
+            analysis.foreignOnly = foreignOnly
+            analysis.groupByOriginal = groupByOriginal
+            analysis.showAll = showAllInReply
+            let (report, context) = try await analysis.analyze()
+            return .result(value: report.dialog, dialog: IntentDialog("\(report.dialog)"),
+                           snippetIntent: SiriLedgerAnalysisSnippet(criteria: context.criteria))
+        }
         let request = SiriTransactionReplyRequest(expenseName)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day, period: period, unnamedPeriod: .allTime, isSpokenQuery: request.requestsAll)
         let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, showAll: showAllInReply ?? request.requestsAll, currency: currency) {
@@ -136,7 +154,7 @@ struct SiriListMemberQuery: SheetScopedMemberQuery {
 #endif
 struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
-    static let description = IntentDescription("「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
+    static let description = IntentDescription("「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。「寿司系で何円使った？」のような金額の質問は、発言を支出名・カテゴリ名に渡すと、合計と該当明細が返ります。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
@@ -185,7 +203,8 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
         let monthlyQuestion = [search, categoryName].compactMap { $0 }.first {
             !SiriSpokenMonthlyRanking.clauses(in: $0).isEmpty
         }
-        if SiriSpokenRankingRequest(search).isRanking || monthlyQuestion != nil {
+        if SiriSpokenRankingRequest(search).isRanking || monthlyQuestion != nil
+            || SiriSpokenSpendingRequest.recognizes(name: search, category: categoryName) {
             let analysis = SiriAnalyzeLedgerIntent()
             analysis.sheet = sheet
             analysis.member = member
@@ -200,6 +219,7 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
             analysis.sourceCurrency = sourceCurrency
             analysis.foreignOnly = foreignOnly
             analysis.groupByOriginal = groupByOriginal
+            analysis.showAll = showAllInReply
             let (report, context) = try await analysis.analyze()
             let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
             let backing = VirtualRowBacking()

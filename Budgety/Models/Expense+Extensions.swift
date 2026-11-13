@@ -348,14 +348,57 @@ extension Expense {
 /// The same typed or spoken term matches titles and the category currently shown on a transaction.
 struct TransactionSearchTerm {
     private let key: String
+    private var alternativeKeys: [String] = []
     var isEmpty: Bool { key.isEmpty }
 
     init(_ text: String) {
         key = Self.normalized(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    /// A spoken group searches titles and categories. Ordinary names and exact category filters keep their literal meaning.
+    static func ledgerName(_ text: String) -> Self {
+        var term = Self(text)
+        if sushiSubject(text) == "寿司系" {
+            term.alternativeKeys = ["寿司", "スシ", "鮨", "鮓", "ハマズシ", "カッパズシ", "クラズシ", "魚ベイ", "ウオベイ"]
+        } else if let selection = sushiMerchantList(text) {
+            term.alternativeKeys = selection.names.flatMap { sushiMerchants[$0] ?? [] }
+        }
+        return term
+    }
+
+    private static let sushiMerchants = [
+        "はま寿司": ["ハマ寿司", "ハマズシ", "ハマスシ"],
+        "かっぱ寿司": ["カッパ寿司", "カッパズシ", "カッパスシ"],
+        "くら寿司": ["クラ寿司", "クラズシ", "クラスシ"],
+        "スシロー": ["スシロー"], "魚べい": ["魚ベイ", "ウオベイ"]
+    ]
+
+    static func sushiMerchantList(_ text: String) -> (names: [String], examples: Bool)? {
+        var subject = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let examples = subject.hasSuffix("など")
+        if examples { subject.removeLast(2) }
+        let parts = subject.replacing(#/\s*(?:[とや・、,])\s*[、,]?\s*/#, with: "\n")
+            .split(separator: "\n").map { normalized(String($0).trimmingCharacters(in: .whitespaces)) }
+        guard !parts.isEmpty, examples || parts.count > 1 else { return nil }
+        let names = parts.compactMap { part in sushiMerchants.first { $0.value.contains(part) }?.key }
+        return names.count == parts.count ? (names, examples) : nil
+    }
+
+    static func sushiSubject(_ text: String?) -> String? {
+        guard let text else { return nil }
+        if let list = sushiMerchantList(text) {
+            return list.examples ? "寿司系" : list.names.joined(separator: "・")
+        }
+        switch normalized(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+        case "寿司系", "スシ系", "鮨系", "鮓系": return "寿司系"
+        case "寿司", "スシ", "鮨", "鮓": return "寿司"
+        default: return nil
+        }
+    }
+
     func matches(_ value: String) -> Bool {
-        Self.normalized(value).contains(key)
+        let candidate = Self.normalized(value)
+        return candidate.contains(key) || alternativeKeys.contains(where: candidate.contains)
     }
 
     func matchesCategory(_ name: String) -> Bool {

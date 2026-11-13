@@ -221,7 +221,7 @@ struct SiriTransactionLedger {
         }
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         request.fetchBatchSize = 64
-        let term = TransactionSearchTerm(expenseName ?? "")
+        let term = TransactionSearchTerm.ledgerName(expenseName ?? "")
         let category = TransactionSearchTerm(categoryName ?? "")
         func collect(_ item: LedgerItem) {
             guard (item.kind == .expense ? includeExpenses : includeIncome), matchesPayer(item) else { return }

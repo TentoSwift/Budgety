@@ -10,7 +10,7 @@ enum SiriAnalysisMode: String, AppEnum {
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "集計方法"
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .total: "合計だけ", .category: "カテゴリ別", .merchant: "店・明細名別", .member: "支払者・受取者別",
+        .total: "合計", .category: "カテゴリ別", .merchant: "店・明細名別", .member: "支払者・受取者別",
         .day: "日別", .month: "月別", .comparison: "期間を比較", .categoryIncrease: "増えたカテゴリ",
         .dailyAverage: "1日平均", .transactions: "明細一覧", .currency: "元の通貨別",
         .originalAmounts: "明細の元の金額と換算額", .exchangeRates: "換算レート", .unconverted: "換算できない明細"
@@ -68,6 +68,13 @@ struct SiriAnalysisRequest {
     /// One-based position in the ordered results; unlike limit, returns only that position.
     var rank: Int?
     var sort: SiriAnalysisSort?
+    var totalOnly = false
+
+    fileprivate var filteredTotalSubject: String? {
+        guard mode == .total, !totalOnly, !groupByOriginal else { return nil }
+        return [name, category].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
 
     fileprivate var ranksMonthsByAmount: Bool {
         mode == .month && (sort == .highest || sort == .lowest || (sort == nil && rank != nil))
@@ -120,8 +127,12 @@ struct SiriAnalysisReport {
     }
     var note: String?
     var singleTransactionID: String?
+    var filteredTotalDialog: String?
 
     var dialog: String {
+        if let filteredTotalDialog {
+            return [filteredTotalDialog, note].compactMap { $0 }.joined(separator: "\n")
+        }
         if !sections.isEmpty {
             let answers = sections.map { [$0.summary, $0.note].compactMap { $0 }.joined(separator: " ") }
             return (answers + [scope, note].compactMap { $0 }).joined(separator: "\n")
@@ -329,17 +340,26 @@ enum SiriTransactionAnalysis {
             return result
         }
 
-        let filters = [stored.displayName, request.ranksMonthsByAmount ? nil : scope.label, member?.name,
-                       request.ranksMonthsByAmount ? nil : request.category, request.name, currency.sourceCurrency,
+        // The filtered total has its own subject heading. Keep any additional filters in the scope.
+        let subject = request.filteredTotalSubject
+        let categoryFilter = request.category?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nameFilter = request.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filters = [member?.name, request.ranksMonthsByAmount || categoryFilter == subject ? nil : categoryFilter,
+                       nameFilter == subject ? nil : nameFilter, currency.sourceCurrency.map { String(localized: "\($0)で記録") },
                        request.foreignOnly ? String(localized: "外貨のみ") : nil,
                        request.excludedName.map { String(localized: "「\($0)」以外") },
                        request.excludedCategory.map { String(localized: "「\($0)」以外") },
-                       omittedID == nil ? nil : String(localized: "指定の明細を除く")]
+                       omittedID == nil ? nil : String(localized: "指定の明細を除く"),
+                       selectedID == nil ? nil : String(localized: "指定の明細のみ")].compactMap { $0 }.filter { !$0.isEmpty }
+        let context = [stored.displayName] + (request.ranksMonthsByAmount ? [] : [scope.label]) + filters
         let current = try entries(in: scope.interval)
         let previous = try compares ? entries(in: comparison?.interval) : []
         var report = summarize(current: current, previous: previous, target: target,
-                               context: filters.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "・"),
+                               context: context.filter { !$0.isEmpty }.joined(separator: "・"),
                                scope: scope, comparison: comparison, request: request)
+        if let answer = report.filteredTotalDialog, !filters.isEmpty {
+            report.filteredTotalDialog = answer + String(localized: "（\(filters.joined(separator: "・"))）")
+        }
         if !report.sections.isEmpty, let name = request.category {
             let term = TransactionSearchTerm(name)
             let matching = categories.filter { category in
@@ -387,26 +407,31 @@ enum SiriTransactionAnalysis {
             }
         }
 
+        func amountText(_ kind: SiriTransactionSelection, code: String, days: Int = 1,
+                        presentation: CurrencyFormatStyleConfiguration.Presentation = .isoCode) -> String {
+            let known = (kind.includesExpenses ? knownExpenses : 0) + (kind.includesIncome ? knownIncome : 0)
+            let unknown = (kind.includesExpenses ? missingExpenses : 0) + (kind.includesIncome ? missingIncome : 0)
+            guard unknown == 0 || known > 0 else { return String(localized: "換算できません") }
+            let text = money(measure(kind) / Decimal(days), code, presentation: presentation)
+            return unknown == 0 ? text : String(localized: "換算できた分 \(text)")
+        }
+
         func formatted(_ kind: SiriTransactionSelection, code: String, days: Int = 1) -> String {
-            func amount(_ value: Decimal, known: Int, missing: Int) -> String {
-                guard missing == 0 || known > 0 else { return String(localized: "換算できません") }
-                let text = money(value / Decimal(days), code)
-                return missing == 0 ? text : String(localized: "換算できた分 \(text)")
-            }
-            let spending = amount(expense, known: knownExpenses, missing: missingExpenses)
-            let earnings = amount(income, known: knownIncome, missing: missingIncome)
             switch kind {
-            case .expense: return String(localized: "支出 \(spending)")
-            case .income: return String(localized: "収入 \(earnings)")
+            case .expense: return String(localized: "支出 \(amountText(.expense, code: code, days: days))")
+            case .income: return String(localized: "収入 \(amountText(.income, code: code, days: days))")
             case .both:
-                let net = amount(income - expense, known: knownExpenses + knownIncome, missing: missing)
+                let spending = amountText(.expense, code: code, days: days)
+                let earnings = amountText(.income, code: code, days: days)
+                let net = amountText(.both, code: code, days: days)
                 return String(localized: "収支 \(net)（収入 \(earnings)、支出 \(spending)）")
             }
         }
     }
 
-    nonisolated private static func money(_ amount: Decimal, _ code: String) -> String {
-        amount.formatted(.currency(code: code).presentation(.isoCode))
+    nonisolated private static func money(_ amount: Decimal, _ code: String,
+                                          presentation: CurrencyFormatStyleConfiguration.Presentation = .isoCode) -> String {
+        amount.formatted(.currency(code: code).presentation(presentation))
     }
 
     private static func totals(_ entries: [Entry], original: Bool) -> Totals {
@@ -472,10 +497,59 @@ enum SiriTransactionAnalysis {
                 totals(groups[code] ?? [], original: original).formatted(request.kind, code: code, days: days)
             }.joined(separator: " ／ ")
         }
-        report.summary = totalText(entries)
+        if request.filteredTotalSubject == nil { report.summary = totalText(entries) }
         switch request.mode {
         case .total:
-            break
+            if let subject = request.filteredTotalSubject {
+                let kind: String
+                switch request.kind {
+                case .expense: kind = String(localized: "支出")
+                case .income: kind = String(localized: "収入")
+                case .both: kind = String(localized: "収支差額")
+                }
+                report.title = String(localized: "\(subject)の\(kind)")
+                report.matchingRowCount = entries.count
+                guard !entries.isEmpty else {
+                    report.summary = String(localized: "該当する明細はありません。")
+                    report.filteredTotalDialog = String(localized: "\(scope.label)、\(report.title)に該当する明細はありません。")
+                    break
+                }
+                let sum = totals(entries, original: false)
+                let amount = sum.amountText(request.kind, code: target, presentation: .fullName)
+                report.summary = sum.amountText(request.kind, code: target, presentation: .standard)
+                if request.kind == .both {
+                    let income = sum.amountText(.income, code: target, presentation: .standard)
+                    let expense = sum.amountText(.expense, code: target, presentation: .standard)
+                    notes.append(String(localized: "収入 \(income)、支出 \(expense)"))
+                }
+                let latest = entries.sorted { lhs, rhs in
+                    if lhs.date != rhs.date { return (lhs.date ?? .distantPast) > (rhs.date ?? .distantPast) }
+                    return lhs.identifier < rhs.identifier
+                }.prefix(min(3, request.limit ?? 3))
+                report.rows = latest.map {
+                    transactionRow($0, mode: .total, target: target, original: false)
+                }
+                var answer: String
+                if sum.knownIncome + sum.knownExpenses == 0 {
+                    answer = String(localized: "\(scope.label)、\(report.title)は\(entries.count)件あり、金額を換算できませんでした。")
+                } else if sum.missing > 0 {
+                    answer = String(localized: "\(scope.label)、\(report.title)は\(entries.count)件で、\(amount)です。")
+                } else {
+                    answer = String(localized: "\(scope.label)、\(report.title)は\(entries.count)件で合計\(amount)でした。")
+                }
+                let names = latest.compactMap { entry -> String? in
+                    let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return title.isEmpty || title == subject ? nil : title
+                }
+                var named = Set<String>()
+                let examples = names.filter { named.insert($0).inserted }.prefix(2).map { String(localized: "「\($0)」") }
+                if !examples.isEmpty {
+                    let names = examples.formatted(.list(type: .and))
+                    answer += examples.count == entries.count ? String(localized: "明細は\(names)です。")
+                        : String(localized: "最近の明細には\(names)があります。")
+                }
+                report.filteredTotalDialog = answer
+            }
         case .dailyAverage:
             let first = scope.interval?.start ?? entries.compactMap(\.date).min()
             let end = min(scope.interval?.end ?? tomorrow, tomorrow)
@@ -514,29 +588,8 @@ enum SiriTransactionAnalysis {
             } else {
                 shown = Array(ordered.prefix(request.limit ?? ordered.count))
             }
-            report.rows = shown.map { entry in
-                let value = entry.value
-                let date = entry.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明")
-                let converted = value.converted.map { money($0, target) } ?? String(localized: "換算できません")
-                var detail = [date, entry.kind.label, entry.category]
-                let amount: String
-                switch request.mode {
-                case .exchangeRates:
-                    amount = value.rate.map { "1 \(value.source) = \($0.formatted(.number.precision(.significantDigits(1...12)))) \(target)" }
-                        ?? String(localized: "レートなし")
-                    detail.append(money(value.original, value.source))
-                    if value.source != target { detail.append(converted) }
-                case .originalAmounts, .unconverted:
-                    amount = money(value.original, value.source)
-                    if value.source != target { detail.append(converted) }
-                default:
-                    amount = value.converted == nil || original ? money(value.original, value.source) : converted
-                    if value.source != target {
-                        detail.append(original || value.converted == nil ? converted : money(value.original, value.source))
-                    }
-                }
-                return .init(title: entry.title.isEmpty ? entry.category : entry.title, value: amount,
-                             detail: detail.joined(separator: "・"), transactionID: entry.identifier, artwork: entry.categoryArtwork)
+            report.rows = shown.map {
+                transactionRow($0, mode: request.mode, target: target, original: original)
             }
             report.matchingRowCount = ordered.count
             report.summary = ordered.isEmpty ? String(localized: "該当する明細はありません。")
@@ -578,6 +631,32 @@ enum SiriTransactionAnalysis {
             report.singleTransactionID = entries[0].identifier
         }
         return report
+    }
+
+    private static func transactionRow(_ entry: Entry, mode: SiriAnalysisMode, target: String, original: Bool) -> SiriAnalysisReport.Row {
+        let value = entry.value
+        let presentation: CurrencyFormatStyleConfiguration.Presentation = mode == .total ? .standard : .isoCode
+        let recorded = money(value.original, value.source, presentation: presentation)
+        let converted = value.converted.map { money($0, target, presentation: presentation) } ?? String(localized: "換算できません")
+        let date = entry.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明")
+        var detail = [date, entry.kind.label, entry.category]
+        let amount: String
+        switch mode {
+        case .exchangeRates:
+            amount = value.rate.map { "1 \(value.source) = \($0.formatted(.number.precision(.significantDigits(1...12)))) \(target)" }
+                ?? String(localized: "レートなし")
+            detail.append(recorded)
+            if value.source != target { detail.append(converted) }
+        case .originalAmounts, .unconverted:
+            amount = recorded
+            if value.source != target { detail.append(converted) }
+        default:
+            let showsOriginal = value.converted == nil || original
+            amount = showsOriginal ? recorded : converted
+            if value.source != target { detail.append(showsOriginal ? converted : recorded) }
+        }
+        return .init(title: entry.title.isEmpty ? entry.category : entry.title, value: amount,
+                     detail: detail.joined(separator: "・"), transactionID: entry.identifier, artwork: entry.categoryArtwork)
     }
 
     /// Rank the same converted month totals the ledger uses, keeping unknown and absent months out of both extremes.

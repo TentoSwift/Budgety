@@ -86,6 +86,54 @@ struct SiriTransactionReplyRequest {
     }
 }
 
+/// Siri can supply the whole spending question as a merchant or category. Only consume a complete amount question.
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+struct SiriSpokenSpendingRequest {
+    let subject: String
+    let period: SiriExpensePeriod?
+    let targetCurrency: String?
+    let totalOnly: Bool
+
+    static func recognizes(name: String?, category: String?) -> Bool {
+        [name, category].compactMap { $0 }.contains {
+            if Self($0) != nil { return true }
+            guard let subject = TransactionSearchTerm.sushiSubject($0) else { return false }
+            return subject != "寿司"
+        }
+    }
+
+    init?(_ text: String?) {
+        guard let text else { return nil }
+        var phrase = text.precomposedStringWithCompatibilityMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacing(#/^(?:(?i:Budgety)|バジェッティ|バジェティ)\s*で\s*/#, with: "")
+        let only = #/(?:合計(?:額)?|金額)(?:だけ|のみ)(?:を?(?:教えて|見せて|表示して)(?:ください)?)?/#
+        totalOnly = phrase.contains(only)
+        if let suffix = phrase.firstMatch(of: only), suffix.range.upperBound == phrase.endIndex
+            || phrase[suffix.range.upperBound...].allSatisfy({ " 。?!、,".contains($0) }) {
+            phrase.removeSubrange(suffix.range)
+        }
+        phrase = phrase.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "?。!、,")))
+        guard let match = phrase.wholeMatch(of: #/(.+?)(?:で(?:は)?|に(?:は)?)\s*(?:合計\s*)?(何円|いくら)\s*(?:使った|使いました|つかった|払った|支払った)(?:の|んです|んでした|でしょう)?(?:か|ですか)?/#) else { return nil }
+        var term = String(match.1).trimmingCharacters(in: .whitespacesAndNewlines)
+        var relative: SiriExpensePeriod?
+        let periods: [(String, SiriExpensePeriod)] = [
+            ("今日", .today), ("きょう", .today), ("本日", .today), ("昨日", .yesterday), ("きのう", .yesterday),
+            ("今月", .thisMonth), ("先月", .lastMonth), ("今年", .thisYear), ("去年", .lastYear), ("昨年", .lastYear),
+            ("直近半年", .lastSixMonths), ("全期間", .allTime)
+        ]
+        for (word, value) in periods where term.hasPrefix(word) {
+            relative = value
+            term.removeFirst(word.count)
+            term = term.replacing(#/^\s*(?:の|は)?[、,]?\s*/#, with: "")
+            break
+        }
+        guard !term.isEmpty else { return nil }
+        subject = term
+        period = relative
+        targetCurrency = match.2 == "何円" ? "JPY" : nil
+    }
+}
+
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriExpenseSearchFilter {
     let name: String?

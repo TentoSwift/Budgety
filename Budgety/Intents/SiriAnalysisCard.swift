@@ -28,7 +28,9 @@ struct SiriAnalysisCard: View {
     @ViewBuilder private var standardContent: some View {
         Text(verbatim: report.title).font(.headline).accessibilityAddTraits(.isHeader)
         Text(verbatim: report.scope).font(.caption).foregroundStyle(secondaryInk)
-        Text(verbatim: report.summary).font(.subheadline.bold()).monospacedDigit()
+        Text(verbatim: report.summary)
+            .font(report.filteredTotalDialog == nil ? .subheadline.bold() : .title3.bold())
+            .monospacedDigit()
         if let note = report.note {
             Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
         }
@@ -40,6 +42,7 @@ struct SiriAnalysisCard: View {
                 #else
                 list(limit: 5)
                 list(limit: 3)
+                list(limit: 2)
                 #endif
                 list(limit: 1)
             }
@@ -107,7 +110,11 @@ struct SiriAnalysisCard: View {
             }
             let remaining = report.omittedRowCount(displayedCount: min(limit, report.rows.count))
             if remaining > 0 {
-                Text("ほか\(remaining)件").font(.caption).foregroundStyle(secondaryInk)
+                Group {
+                    if report.filteredTotalDialog != nil { Text("+\(remaining)件") }
+                    else { Text("ほか\(remaining)件") }
+                }
+                .font(.caption).foregroundStyle(secondaryInk)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -125,17 +132,40 @@ struct SiriAnalysisCard: View {
                         .accessibilityHidden(true)
                 }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: row.title).font(.subheadline.weight(.semibold))
-                Text(verbatim: row.value).font(.subheadline.monospacedDigit())
-                if let detail = row.detail {
-                    Text(verbatim: detail).font(.caption).foregroundStyle(secondaryInk)
+            if report.filteredTotalDialog != nil {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        transactionLabel(row).fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 4)
+                        Text(verbatim: row.value).font(.subheadline.monospacedDigit()).fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        transactionLabel(row)
+                        Text(verbatim: row.value).font(.subheadline.monospacedDigit())
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: row.title).font(.subheadline.weight(.semibold))
+                    Text(verbatim: row.value).font(.subheadline.monospacedDigit())
+                    if let detail = row.detail {
+                        Text(verbatim: detail).font(.caption).foregroundStyle(secondaryInk)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private func transactionLabel(_ row: SiriAnalysisReport.Row) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: row.title).font(.subheadline.weight(.semibold))
+            if let detail = row.detail {
+                Text(verbatim: detail).font(.caption).foregroundStyle(secondaryInk)
+            }
+        }
     }
 }
 #endif
