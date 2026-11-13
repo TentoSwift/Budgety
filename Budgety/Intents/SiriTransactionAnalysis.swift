@@ -68,6 +68,20 @@ struct SiriAnalysisRequest {
     /// One-based position in the ordered results; unlike limit, returns only that position.
     var rank: Int?
     var sort: SiriAnalysisSort?
+
+    fileprivate var ranksMonthsByAmount: Bool {
+        mode == .month && (sort == .highest || sort == .lowest || (sort == nil && rank != nil))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+struct SiriMonthlyRanking {
+    let scope: SiriExpenseScope
+    let sort: SiriAnalysisSort
+    var rank: Int?
+    var limit: Int?
+    var category: String?
+    var kind: SiriTransactionSelection?
 }
 
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
@@ -85,10 +99,19 @@ struct SiriAnalysisReport {
         var artwork: Artwork?
     }
 
+    struct Section {
+        let title: String
+        let summary: String
+        let rows: [Row]
+        let note: String?
+        var artwork: Artwork?
+    }
+
     var title: String
     var scope: String
     var summary: String
     var rows: [Row] = []
+    var sections: [Section] = []
     var matchingRowCount = 0
     var requestedRank: Int?
 
@@ -99,6 +122,10 @@ struct SiriAnalysisReport {
     var singleTransactionID: String?
 
     var dialog: String {
+        if !sections.isEmpty {
+            let answers = sections.map { [$0.summary, $0.note].compactMap { $0 }.joined(separator: " ") }
+            return (answers + [scope, note].compactMap { $0 }).joined(separator: "\n")
+        }
         let lines = rows.map { row in
             [row.title, row.value, row.detail].compactMap { $0 }.joined(separator: "　")
         }
@@ -129,7 +156,7 @@ enum SiriTransactionAnalysis {
     }
 
     private enum InputError: Error, CustomLocalizedStringResourceConvertible {
-        case limit, rank, rankMode, bounds, comparison
+        case limit, rank, rankMode, bounds, comparison, monthlyRanking
 
         var localizedStringResource: LocalizedStringResource {
             switch self {
@@ -138,8 +165,34 @@ enum SiriTransactionAnalysis {
             case .rankMode: "順位を調べるには明細一覧または項目別の集計を指定してください。"
             case .bounds: "金額には0以上の数を指定し、上限は下限以上にしてください。"
             case .comparison: "比較する2つの期間を指定してください。"
+            case .monthlyRanking: "月別の順位を調べる期間と、金額が高い順または低い順を指定してください。"
             }
         }
+    }
+
+    static func runMonthlyRankings(sheet: ExpenseSheet, access: IntentSheetAccess, request: SiriAnalysisRequest,
+                                   rankings: [SiriMonthlyRanking]) throws -> SiriAnalysisReport {
+        guard !rankings.isEmpty else { throw InputError.monthlyRanking }
+        let reports = try rankings.map { ranking in
+            guard ranking.sort == .highest || ranking.sort == .lowest else { throw InputError.monthlyRanking }
+            var query = request
+            query.mode = .month
+            query.category = ranking.category ?? request.category
+            query.kind = ranking.kind ?? request.kind
+            query.sort = ranking.sort
+            query.rank = ranking.rank
+            query.limit = ranking.limit
+            return try run(sheet: sheet, access: access, scope: ranking.scope, request: query)
+        }
+        var report = reports[0]
+        if reports.count > 1 {
+            report.sections = reports.flatMap(\.sections)
+            report.rows = report.sections.flatMap(\.rows)
+            report.matchingRowCount = report.rows.count
+            report.summary = report.sections.map(\.summary).joined(separator: "\n")
+            report.requestedRank = nil
+        }
+        return report
     }
 
     static func run(sheet: ExpenseSheet, access: IntentSheetAccess, scope: SiriExpenseScope, request: SiriAnalysisRequest,
@@ -276,16 +329,31 @@ enum SiriTransactionAnalysis {
             return result
         }
 
-        let filters = [stored.displayName, scope.label, member?.name, request.category, request.name, currency.sourceCurrency,
+        let filters = [stored.displayName, request.ranksMonthsByAmount ? nil : scope.label, member?.name,
+                       request.ranksMonthsByAmount ? nil : request.category, request.name, currency.sourceCurrency,
                        request.foreignOnly ? String(localized: "外貨のみ") : nil,
                        request.excludedName.map { String(localized: "「\($0)」以外") },
                        request.excludedCategory.map { String(localized: "「\($0)」以外") },
                        omittedID == nil ? nil : String(localized: "指定の明細を除く")]
         let current = try entries(in: scope.interval)
         let previous = try compares ? entries(in: comparison?.interval) : []
-        return summarize(current: current, previous: previous, target: target,
-                         context: filters.compactMap { $0 }.joined(separator: "・"),
-                         scope: scope, comparison: comparison, request: request)
+        var report = summarize(current: current, previous: previous, target: target,
+                               context: filters.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "・"),
+                               scope: scope, comparison: comparison, request: request)
+        if !report.sections.isEmpty, let name = request.category {
+            let term = TransactionSearchTerm(name)
+            let matching = categories.filter { category in
+                !term.isEmpty && term.matchesCategory(category.displayName)
+                    && (category.kind == .expense ? request.kind.includesExpenses : request.kind.includesIncome)
+            }
+            // Also resolve the icon when the category exists but this period has no matching expenses.
+            if let category = matching.first, matching.allSatisfy({
+                $0.displaySymbol == category.displaySymbol && $0.displayColorHex == category.displayColorHex
+            }) {
+                report.sections[0].artwork = .category(symbol: category.displaySymbol, colorHex: category.displayColorHex)
+            }
+        }
+        return report
     }
 
     private struct Totals {
@@ -366,7 +434,8 @@ enum SiriTransactionAnalysis {
                     missing[value.source, default: 0] += 1
                 }
                 if threshold {
-                    guard let amount = value.converted else { return false }
+                    // Its month cannot be ranked if this row might meet the threshold.
+                    guard let amount = value.converted else { return request.ranksMonthsByAmount }
                     if let min = request.minimum, request.minimumExclusive ? amount <= min : amount < min { return false }
                     if let max = request.maximum, request.maximumExclusive ? amount >= max : amount > max { return false }
                 }
@@ -383,6 +452,18 @@ enum SiriTransactionAnalysis {
         }
         if let max = request.maximum {
             notes.append(money(max, target) + (request.maximumExclusive ? String(localized: "未満") : String(localized: "以下")))
+        }
+        if request.ranksMonthsByAmount {
+            let section = monthlyRanking(entries, scope: scope, request: request, target: target, calendar: calendar)
+            report.title = String(localized: "月別ランキング")
+            report.summary = section.summary
+            report.sections = [section]
+            report.rows = section.rows
+            // The result is exactly the requested selection. Other eligible months are not hidden results.
+            report.matchingRowCount = section.rows.count
+            notes.append(String(localized: "該当する明細がある月のみを集計。"))
+            report.note = notes.joined(separator: "・")
+            return report
         }
         func totalText(_ entries: [Entry], days: Int = 1) -> String {
             let groups = Dictionary(grouping: entries, by: display)
@@ -497,6 +578,96 @@ enum SiriTransactionAnalysis {
             report.singleTransactionID = entries[0].identifier
         }
         return report
+    }
+
+    /// Rank the same converted month totals the ledger uses, keeping unknown and absent months out of both extremes.
+    private static func monthlyRanking(_ entries: [Entry], scope: SiriExpenseScope, request: SiriAnalysisRequest,
+                                       target: String, calendar: Calendar) -> SiriAnalysisReport.Section {
+        struct Month {
+            let start: Date
+            let amount: Decimal
+            let count: Int
+        }
+        var months: [Date: Totals] = [:]
+        var undated = 0
+        for entry in entries {
+            guard let date = entry.date, let start = calendar.dateInterval(of: .month, for: date)?.start else {
+                undated += 1
+                continue
+            }
+            months[start, default: Totals()].add(entry, original: false)
+        }
+        let high = request.sort != .lowest
+        let ordered = months.compactMap { start, total -> Month? in
+            guard total.missing == 0 else { return nil }
+            return Month(start: start, amount: total.measure(request.kind), count: total.knownExpenses + total.knownIncome)
+        }.sorted {
+            if $0.amount == $1.amount { return $0.start > $1.start }
+            return high ? $0.amount > $1.amount : $0.amount < $1.amount
+        }
+        let chosen: [Month]
+        if let rank = request.rank {
+            chosen = rank > 0 && rank <= ordered.count ? [ordered[rank - 1]] : []
+        } else {
+            chosen = Array(ordered.prefix(request.limit ?? ordered.count))
+        }
+        let monthFormat = Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
+            .month(.wide)
+        let spansYears = scope.interval.map {
+            !calendar.isDate($0.start, equalTo: $0.end.addingTimeInterval(-0.001), toGranularity: .year)
+        } ?? true
+        let format = spansYears ? monthFormat.year() : monthFormat
+        let kind: String
+        switch request.kind {
+        case .expense: kind = String(localized: "支出")
+        case .income: kind = String(localized: "収入")
+        case .both: kind = String(localized: "収支差額")
+        }
+        let subject = request.category.map { request.kind == .expense ? $0 : String(localized: "\($0)の\(kind)") } ?? kind
+        let ordinal = request.rank ?? (request.limit == 1 ? 1 : nil)
+        let order: String
+        if let ordinal {
+            if ordinal == 1 { order = high ? String(localized: "一番高かった") : String(localized: "一番低かった") }
+            else { order = high ? String(localized: "\(ordinal)番目に高かった") : String(localized: "\(ordinal)番目に低かった") }
+        } else {
+            order = high ? String(localized: "高かった") : String(localized: "低かった")
+        }
+        let range = scope.label
+        var title = String(localized: "\(range)・\(subject)が\(order)月")
+        if ordinal == nil, let count = request.limit {
+            title += high ? String(localized: "（上位\(count)か月）") : String(localized: "（下位\(count)か月）")
+        }
+        let rows = chosen.map { month in
+            SiriAnalysisReport.Row(title: month.start.formatted(format), value: CurrencyCatalog.format(month.amount, code: target),
+                                   detail: String(localized: "\(month.count)件"))
+        }
+        func spokenAmount(_ month: Month) -> String {
+            month.amount.formatted(.currency(code: target).presentation(.fullName))
+        }
+        let summary: String
+        if let month = chosen.first, ordinal != nil {
+            summary = String(localized: "\(range)、\(subject)が\(order)のは\(month.start.formatted(format))で、\(spokenAmount(month))でした。")
+        } else if !chosen.isEmpty {
+            let list = chosen.map { String(localized: "\($0.start.formatted(format))（\(spokenAmount($0))）") }.joined(separator: "、")
+            summary = high ? String(localized: "\(range)、\(subject)が高かった順に\(list)です。")
+                : String(localized: "\(range)、\(subject)が低かった順に\(list)です。")
+        } else if let ordinal, !ordered.isEmpty {
+            summary = String(localized: "\(range)、\(subject)を比較できるのは\(ordered.count)か月で、\(ordinal)番目の月はありません。")
+        } else {
+            summary = String(localized: "\(range)、\(subject)を比較できる月はありません。")
+        }
+        var notes: [String] = []
+        let incomplete = months.count - ordered.count
+        if incomplete > 0 { notes.append(String(localized: "換算できない明細がある\(incomplete)か月は順位から除外しました。")) }
+        if undated > 0 { notes.append(String(localized: "日付不明の明細\(undated)件を除外しました。")) }
+        if ordinal == nil, let limit = request.limit, !chosen.isEmpty, chosen.count < limit {
+            notes.append(String(localized: "比較できる月は\(chosen.count)か月です。"))
+        }
+        let visibleAmounts = Set(chosen.map(\.amount))
+        if ordered.filter({ visibleAmounts.contains($0.amount) }).count > visibleAmounts.count {
+            notes.append(String(localized: "同額の月は新しい順です。"))
+        }
+        return .init(title: title, summary: summary, rows: rows, note: notes.isEmpty ? nil : notes.joined(separator: " "))
     }
 
     private static func rankSummary(rank: Int, count: Int, sort: SiriAnalysisSort, found: Bool) -> String {

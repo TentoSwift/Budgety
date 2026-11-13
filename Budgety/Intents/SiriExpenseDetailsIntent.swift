@@ -182,11 +182,15 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
         let isSpokenQuery = false
         let search = expenseName
         #endif
-        if SiriSpokenRankingRequest(search).isRanking {
+        let monthlyQuestion = [search, categoryName].compactMap { $0 }.first {
+            !SiriSpokenMonthlyRanking.clauses(in: $0).isEmpty
+        }
+        if SiriSpokenRankingRequest(search).isRanking || monthlyQuestion != nil {
             let analysis = SiriAnalyzeLedgerIntent()
             analysis.sheet = sheet
             analysis.member = member
             analysis.name = search
+            analysis.monthlyQuestion = monthlyQuestion
             analysis.category = categoryName
             analysis.kind = kind
             analysis.period = period
@@ -211,8 +215,10 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
                 }
             }
             let card = SiriExpenseCardResult(sheetName: report.scope, period: report.title, expenseName: "",
-                                            count: report.requestedRank == nil ? report.matchingRowCount : rows.count,
-                                            total: report.summary, rows: rows)
+                                            count: context.monthlyAnswer == nil
+                                                ? (report.requestedRank == nil ? report.matchingRowCount : rows.count)
+                                                : report.rows.count,
+                                            total: context.monthlyAnswer ?? report.summary, rows: rows)
             card.questionContext = context
             return .result(value: card, dialog: IntentDialog("\(report.dialog)"),
                            snippetIntent: SiriLedgerAnalysisSnippet(criteria: context.criteria))

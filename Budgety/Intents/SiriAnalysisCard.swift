@@ -13,29 +13,86 @@ struct SiriAnalysisCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: report.title).font(.headline).accessibilityAddTraits(.isHeader)
-            Text(verbatim: report.scope).font(.caption).foregroundStyle(secondaryInk)
-            Text(verbatim: report.summary).font(.subheadline.bold()).monospacedDigit()
-            if let note = report.note {
-                Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
-            }
-            if !report.rows.isEmpty {
-                Divider()
-                ViewThatFits(in: .vertical) {
-                    #if os(watchOS)
-                    list(limit: 2)
-                    #else
-                    list(limit: 5)
-                    list(limit: 3)
-                    #endif
-                    list(limit: 1)
-                }
+            if report.sections.isEmpty {
+                standardContent
+            } else {
+                monthlyRankings
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .foregroundStyle(primaryInk)
         .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder private var standardContent: some View {
+        Text(verbatim: report.title).font(.headline).accessibilityAddTraits(.isHeader)
+        Text(verbatim: report.scope).font(.caption).foregroundStyle(secondaryInk)
+        Text(verbatim: report.summary).font(.subheadline.bold()).monospacedDigit()
+        if let note = report.note {
+            Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
+        }
+        if !report.rows.isEmpty {
+            Divider()
+            ViewThatFits(in: .vertical) {
+                #if os(watchOS)
+                list(limit: 2)
+                #else
+                list(limit: 5)
+                list(limit: 3)
+                #endif
+                list(limit: 1)
+            }
+        }
+    }
+
+    @ViewBuilder private var monthlyRankings: some View {
+        Text(verbatim: report.scope).font(.caption).foregroundStyle(secondaryInk)
+        ForEach(0..<report.sections.count, id: \.self) { index in
+            let section = report.sections[index]
+            if index > 0 { Divider() }
+            HStack(alignment: .center, spacing: 8) {
+                if case let .category(symbol, colorHex)? = section.artwork {
+                    CategoryIconView(symbol: symbol, tint: Color(hex: colorHex) ?? .gray, size: 28)
+                        .accessibilityHidden(true)
+                }
+                Text(verbatim: section.title).font(.headline)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            if section.rows.isEmpty {
+                Text(verbatim: section.summary).font(.subheadline)
+            } else {
+                let visibleCount = min(5, section.rows.count)
+                ForEach(0..<visibleCount, id: \.self) { rowIndex in
+                    let row = section.rows[rowIndex]
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(verbatim: row.title).fixedSize()
+                            Spacer(minLength: 2)
+                            Text(verbatim: row.value).fixedSize()
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(verbatim: row.title)
+                            Text(verbatim: row.value)
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .accessibilityElement(children: .combine)
+                }
+                if section.rows.count > visibleCount {
+                    Text("ほか\(section.rows.count - visibleCount)か月")
+                        .font(.caption).foregroundStyle(secondaryInk)
+                }
+            }
+            if let note = section.note {
+                Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
+            }
+        }
+        if let note = report.note {
+            Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
+        }
     }
 
     private func list(limit: Int) -> some View {
