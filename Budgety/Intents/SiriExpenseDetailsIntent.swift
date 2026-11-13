@@ -29,14 +29,15 @@ struct SiriExpenseDetailsIntent: AppIntent {
     var showAllInReply: Bool?
 
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetIntent {
         // Existing personal shortcuts consume this action's text output.
         let request = SiriTransactionReplyRequest(expenseName)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day, period: period, unnamedPeriod: .allTime, isSpokenQuery: request.requestsAll)
         let result = try await SiriExpenseLookup.run(sheet: sheet, filter: filter, showAll: showAllInReply ?? request.requestsAll) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
-        return .result(value: result.report, dialog: IntentDialog("\(result.report)"))
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter)
+        return .result(value: result.report, dialog: IntentDialog("\(result.report)"), snippetIntent: snippet)
     }
 }
 
@@ -66,7 +67,7 @@ struct SiriListTransactionsIntent: AppIntent {
     var showAllInReply: Bool?
 
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog & ShowsSnippetIntent {
         let sheetID: String
         if let member {
             guard let separator = member.id.firstIndex(of: "#") else { throw AppIntentError.missingPayer }
@@ -93,7 +94,10 @@ struct SiriListTransactionsIntent: AppIntent {
         let reply = ledger.reply(for: selection, sheetName: selected.displayName, period: filter.scope.label,
                                  member: member?.name, category: filter.categoryName, name: filter.name,
                                  showAll: showAllInReply ?? request.requestsAll)
-        return .result(value: try ledger.rows.map(SiriListedTransactionEntity.init(row:)), dialog: IntentDialog("\(reply)"))
+        let entities = try ledger.rows.map(SiriListedTransactionEntity.init(row:))
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, filter: filter, kind: selection,
+                                                     memberIdentifier: member?.id)
+        return .result(value: entities, dialog: IntentDialog("\(reply)"), snippetIntent: snippet)
     }
 }
 
@@ -171,6 +175,7 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シートの識別子") var sheetIdentifier: String
+    @Parameter(title: "メンバーの識別子") var memberIdentifier: String?
     @Parameter(title: "支出名・カテゴリ名") var expenseName: String?
     @Parameter(title: "カテゴリ名") var categoryName: String?
     @Parameter(title: "対象の収支") var kind: SiriTransactionSelection?
@@ -182,9 +187,11 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     init() {}
 
-    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense) {
+    init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense,
+         memberIdentifier: String? = nil) {
         self.kind = kind
         self.sheetIdentifier = sheetIdentifier
+        self.memberIdentifier = memberIdentifier
         self.expenseName = filter.name
         self.categoryName = filter.categoryName
         self.intervalStart = filter.scope.interval?.start
@@ -210,7 +217,9 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
         default:
             throw AppIntentError.expenseUnavailable
         }
-        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName, interval: interval, periodLabel: label, kind: kind ?? .expense)
+        let result = try SiriExpenseLookup.search(sheetID: sheetIdentifier, expenseName: expenseName, categoryName: categoryName,
+                                                 interval: interval, periodLabel: label, kind: kind ?? .expense,
+                                                 memberIdentifier: memberIdentifier)
         return .result(view: SiriExpenseCardView(result: result.card))
     }
 }
@@ -275,16 +284,23 @@ enum SiriExpenseLookup {
 
     @MainActor
     static func search(sheetID: String, expenseName: String?, categoryName: String? = nil, interval: DateInterval?, periodLabel period: String,
-                       kind: SiriTransactionSelection = .expense, showAll: Bool = false) throws -> Result {
+                       kind: SiriTransactionSelection = .expense, showAll: Bool = false,
+                       memberIdentifier: String? = nil) throws -> Result {
         // Recheck stored access when Siri rebuilds the snippet as well as at initial lookup.
         let viewContext = PersistenceController.shared.container.viewContext
         let access = try IntentSheetAccess(checking: viewContext)
         let record = try access.resolve(sheetID)
         let name = (expenseName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let category = (categoryName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let payer = try memberIdentifier.map { identifier in
+            let roster = try SiriSheetMemberRoster(sheet: record, access: access)
+            guard let member = roster.members.first(where: { $0.id == identifier }) else { throw AppIntentError.missingPayer }
+            return SiriMemberTransactionLookup.Payer(member: member, roster: roster, sheet: record)
+        }
         let ledger = try SiriTransactionLedger.read(sheet: record, access: access, interval: interval,
                                                     includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome,
-                                                    expenseName: name, categoryName: category, allRows: showAll)
+                                                    expenseName: name, categoryName: category, allRows: showAll,
+                                                    matchesPayer: { payer?.matches($0) ?? true })
         let report = ledger.reply(for: kind, sheetName: record.displayName, period: period, member: nil,
                                   category: category.isEmpty ? nil : category, name: name.isEmpty ? nil : name, showAll: showAll)
         let amounts: String

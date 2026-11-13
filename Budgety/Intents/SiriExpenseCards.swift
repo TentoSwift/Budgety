@@ -601,9 +601,9 @@ struct SiriExpenseCardView: View {
             list(rows, count: count, limit: min(2, rows.count), omittingDate: period)
             list(rows, count: count, limit: min(1, rows.count), omittingDate: period)
             #else
-            ForEach((0...rows.count).reversed(), id: \.self) { visibleCount in
-                list(rows, count: count, limit: visibleCount)
-            }
+            list(rows, count: count, limit: min(3, rows.count))
+            list(rows, count: count, limit: min(2, rows.count))
+            list(rows, count: count, limit: min(1, rows.count))
             #endif
         }
     }
