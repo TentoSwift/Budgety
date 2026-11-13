@@ -65,6 +65,8 @@ struct SiriAnalysisRequest {
     var minimumExclusive = false
     var maximumExclusive = false
     var limit: Int?
+    /// One-based position in the ordered results; unlike limit, returns only that position.
+    var rank: Int?
     var sort: SiriAnalysisSort?
 }
 
@@ -88,6 +90,11 @@ struct SiriAnalysisReport {
     var summary: String
     var rows: [Row] = []
     var matchingRowCount = 0
+    var requestedRank: Int?
+
+    func omittedRowCount(displayedCount: Int) -> Int {
+        requestedRank == nil ? max(0, matchingRowCount - displayedCount) : 0
+    }
     var note: String?
     var singleTransactionID: String?
 
@@ -95,7 +102,7 @@ struct SiriAnalysisReport {
         let lines = rows.map { row in
             [row.title, row.value, row.detail].compactMap { $0 }.joined(separator: "　")
         }
-        let remaining = matchingRowCount - rows.count
+        let remaining = omittedRowCount(displayedCount: rows.count)
         let more = remaining > 0 ? String(localized: "ほかに\(remaining)件あります。") : nil
         return ([summary, "\(scope)・\(title)"] + lines + [more, note].compactMap { $0 }).joined(separator: "\n")
     }
@@ -122,11 +129,13 @@ enum SiriTransactionAnalysis {
     }
 
     private enum InputError: Error, CustomLocalizedStringResourceConvertible {
-        case limit, bounds, comparison
+        case limit, rank, rankMode, bounds, comparison
 
         var localizedStringResource: LocalizedStringResource {
             switch self {
             case .limit: "表示件数には1以上の数を指定してください。"
+            case .rank: "順位には1以上の数を指定してください。"
+            case .rankMode: "順位を調べるには明細一覧または項目別の集計を指定してください。"
             case .bounds: "金額には0以上の数を指定し、上限は下限以上にしてください。"
             case .comparison: "比較する2つの期間を指定してください。"
             }
@@ -137,6 +146,10 @@ enum SiriTransactionAnalysis {
                     comparison: SiriExpenseScope? = nil) throws -> SiriAnalysisReport {
         let stored = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         if let limit = request.limit, limit <= 0 { throw InputError.limit }
+        if let rank = request.rank {
+            guard rank > 0 else { throw InputError.rank }
+            guard ![.total, .dailyAverage, .comparison, .categoryIncrease].contains(request.mode) else { throw InputError.rankMode }
+        }
         if [request.minimum, request.maximum].compactMap({ $0 }).contains(where: { !$0.isFinite || $0 < 0 }) {
             throw InputError.bounds
         }
@@ -338,7 +351,8 @@ enum SiriTransactionAnalysis {
         let original = request.groupByOriginal || request.mode == .currency
         let display: (Entry) -> String = { original ? $0.value.source : target }
         let threshold = request.minimum != nil || request.maximum != nil
-        let amountOrder = request.sort == .highest || request.sort == .lowest
+        let effectiveSort = request.sort ?? (request.rank == nil ? .newest : .highest)
+        let amountOrder = effectiveSort == .highest || effectiveSort == .lowest
         let today = calendar.startOfDay(for: now)
         let tomorrow = calendar.dateInterval(of: .day, for: now)?.end ?? now
         let current = request.mode == .dailyAverage ? current.filter { $0.date.map { $0 < tomorrow } == true } : current
@@ -362,6 +376,7 @@ enum SiriTransactionAnalysis {
         let entries = qualifying(current), prior = qualifying(previous)
         let listing = [.transactions, .originalAmounts, .exchangeRates, .unconverted].contains(request.mode)
         var report = SiriAnalysisReport(title: request.mode.title, scope: context, summary: "")
+        report.requestedRank = request.rank
         var notes: [String] = []
         if let min = request.minimum {
             notes.append(money(min, target) + (request.minimumExclusive ? String(localized: "超") : String(localized: "以上")))
@@ -393,9 +408,9 @@ enum SiriTransactionAnalysis {
                 report.summary = String(localized: "平均を計算できる日がありません。")
             }
         case .transactions, .originalAmounts, .exchangeRates, .unconverted:
-            let order = request.sort ?? .newest
+            let order = effectiveSort
             let comparableSources = Set(entries.map(\.value.source))
-            let canRankOriginal = request.mode == .unconverted && comparableSources.count == 1
+            let canRankOriginal = request.rank == nil && request.mode == .unconverted && comparableSources.count == 1
             let sortable = amountOrder && !canRankOriginal ? entries.filter { $0.value.converted != nil } : entries
             if request.mode == .unconverted && amountOrder && comparableSources.count > 1 {
                 notes.append(String(localized: "通貨が異なり、金額順に並べるためのレートがありません。"))
@@ -409,7 +424,15 @@ enum SiriTransactionAnalysis {
                 if ld != rd { return order == .oldest ? ld < rd : ld > rd }
                 return lhs.identifier < rhs.identifier
             }
-            let shown = ordered.prefix(request.limit ?? ordered.count)
+            let shown: [Entry]
+            if let rank = request.rank {
+                shown = rank <= ordered.count ? [ordered[rank - 1]] : []
+                if amountOrder {
+                    notes.append(String(localized: "同額は日付が新しい順、同日なら明細ID順で1件ずつ数えます。"))
+                }
+            } else {
+                shown = Array(ordered.prefix(request.limit ?? ordered.count))
+            }
             report.rows = shown.map { entry in
                 let value = entry.value
                 let date = entry.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明")
@@ -437,6 +460,9 @@ enum SiriTransactionAnalysis {
             report.matchingRowCount = ordered.count
             report.summary = ordered.isEmpty ? String(localized: "該当する明細はありません。")
                 : (shown.count == ordered.count ? String(localized: "\(shown.count)件") : String(localized: "\(ordered.count)件中\(shown.count)件"))
+            if let rank = request.rank {
+                report.summary = rankSummary(rank: rank, count: ordered.count, sort: order, found: !shown.isEmpty)
+            }
             if request.mode == .exchangeRates, let date = FXRatesService.shared.lastRateDate {
                 notes.append(String(localized: "換算レートの基準日 \(date)"))
             }
@@ -455,17 +481,34 @@ enum SiriTransactionAnalysis {
         case .member, .category, .merchant, .day, .month, .currency:
             let rows = breakdown(entries, request: request, display: display, calendar: calendar)
             report.matchingRowCount = rows.count
-            report.rows = Array(rows.prefix(request.limit ?? rows.count))
+            if let rank = request.rank {
+                report.rows = rank <= rows.count ? [rows[rank - 1]] : []
+                report.summary = rankSummary(rank: rank, count: rows.count, sort: request.sort ?? .highest, found: !report.rows.isEmpty)
+            } else {
+                report.rows = Array(rows.prefix(request.limit ?? rows.count))
+            }
         }
         if !missing.isEmpty && request.mode != .unconverted {
             let text = missing.keys.sorted().map { code in String(localized: "\(code) \(missing[code] ?? 0)件") }.joined(separator: "、")
             notes.append(String(localized: "レートがないため換算対象外（\(text)）"))
         }
         if !notes.isEmpty { report.note = notes.joined(separator: "・") }
-        if entries.count == 1 && !listing && request.mode != .comparison && request.mode != .categoryIncrease {
+        if request.rank == nil && entries.count == 1 && !listing && request.mode != .comparison && request.mode != .categoryIncrease {
             report.singleTransactionID = entries[0].identifier
         }
         return report
+    }
+
+    private static func rankSummary(rank: Int, count: Int, sort: SiriAnalysisSort, found: Bool) -> String {
+        let order: String
+        switch sort {
+        case .highest: order = String(localized: "金額が高い順")
+        case .lowest: order = String(localized: "金額が低い順")
+        case .newest: order = String(localized: "新しい順")
+        case .oldest: order = String(localized: "古い順")
+        }
+        return found ? String(localized: "\(order)で\(rank)番目（対象\(count)件）")
+            : String(localized: "対象は\(count)件のため、\(order)で\(rank)番目に該当する項目はありません。")
     }
 
     private struct Bucket: Hashable {
@@ -483,7 +526,7 @@ enum SiriTransactionAnalysis {
 
     private static func orderedRows(_ rows: [RankedRow], request: SiriAnalysisRequest,
                                     fallback: SiriAnalysisSort) -> [SiriAnalysisReport.Row] {
-        let order = request.sort ?? fallback
+        let order = request.sort ?? (request.rank == nil ? fallback : .highest)
         let amountOrder = order == .highest || order == .lowest
         let sorted = rows.sorted { lhs, rhs in
             if amountOrder {
@@ -499,7 +542,7 @@ enum SiriTransactionAnalysis {
             return lhs.key < rhs.key
         }
         // An incomplete group cannot be named the highest or lowest, even if its known subtotal is large.
-        let eligible = amountOrder && request.sort != nil ? sorted.filter { $0.amount != nil } : sorted
+        let eligible = amountOrder && (request.sort != nil || request.rank != nil) ? sorted.filter { $0.amount != nil } : sorted
         return eligible.map(\.row)
     }
 

@@ -155,9 +155,8 @@ struct SiriRecordedTransactionSnippetIntent: SnippetIntent {
 }
 
 @available(iOS 27.3, macOS 27.3, *)
-#if os(iOS) || os(macOS)
-@AppIntent(.tool)
-#endif
+// Existing Shortcuts use this action's text output. Conversational spending queries
+// use SiriFindExpenseCardsIntent, which also returns the scope for a follow-up.
 struct SiriMonthlySpendingIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "シートの支出額を確認"
     static let description = IntentDescription("「今日の支出はいくら？」なら今日1日だけ、「今月はいくら？」なら今月について、シートの支出額を既定通貨で返します。「今月の食費はいくら？」では食費カテゴリだけを集計します。")

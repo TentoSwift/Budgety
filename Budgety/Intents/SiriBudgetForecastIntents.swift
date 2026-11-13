@@ -10,13 +10,21 @@ import SwiftUI
 #endif
 struct SiriBudgetStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "予算の残額と使用率を確認"
-    static let description = IntentDescription("シートの月予算上限、支出、残額、超過額、使用率を確認します。外貨支出と今日までの未確定の定期支出もアプリと同じ為替で含めます。カテゴリ別予算はなく、残額と使用率は常にシート全体の月予算と支出から計算します。")
+    static let description = IntentDescription("「予算は？」「今月の予算はあといくら？」「予算を超えている？」など、シートの月予算を尋ねられたときに使います。予算上限、残額、使用率と、予算未設定の場合はその状態を返します。", searchKeywords: ["残り予算", "予算残額", "月予算", "予算使用率"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
     @Parameter(title: "対象月", description: "省略すると今月。予算は月単位です。") var month: Date?
-    @Parameter(title: "カテゴリ名") var categoryName: String?
-    @Parameter(title: "支払通貨", description: "元の支払通貨で絞ります。ドル払いだけならUSD。", optionsProvider: SiriCurrencyOptions()) var sourceCurrency: String?
-    @Parameter(title: "表示通貨", optionsProvider: SiriCurrencyOptions()) var targetCurrency: String?
+    @Parameter(title: "カテゴリ名", description: "予算の確認に添える支出額だけを絞ります。月予算の残額と使用率はシート全体で計算します。") var categoryName: String?
+    @Parameter(title: "支払通貨", description: "予算の確認に添える支出額だけを元の支払通貨で絞ります。ドル払いだけならUSD。月予算の残額と使用率はシート全体で計算します。", optionsProvider: SiriCurrencyOptions()) var sourceCurrency: String?
+    @Parameter(title: "予算の表示通貨", description: "月予算と残額を表示する通貨。省略時はシートの基準通貨。", optionsProvider: SiriCurrencyOptions()) var targetCurrency: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("\(\.$sheet) の \(\.$month) の月予算の残額と使用率を確認") {
+            \.$targetCurrency
+            \.$categoryName
+            \.$sourceCurrency
+        }
+    }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetIntent {
@@ -29,7 +37,10 @@ struct SiriBudgetStatusIntent: AppIntent {
         let id = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの予算を確認しますか？")
         }
-        let record = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext).resolve(id)
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        // Core Data rows do not retain the private context used for this read.
+        defer { withExtendedLifetime(access) {} }
+        let record = try access.resolve(id)
         let scope = SiriExpenseSearchFilter(expenseName: nil, month: month ?? .now, period: nil).scope
         let target = try SiriBudgetForecastRead.currency(targetCurrency, fallback: record.resolvedDefaultCurrencyCode)
         let source = try sourceCurrency.map { try SiriBudgetForecastRead.currency($0, fallback: target) }
@@ -95,7 +106,10 @@ struct SiriRecurringForecastIntent: AppIntent {
         let id = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの定期予定を確認しますか？")
         }
-        let record = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext).resolve(id)
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        // Core Data rows do not retain the private context used for this read.
+        defer { withExtendedLifetime(access) {} }
+        let record = try access.resolve(id)
         let calendar = Calendar.current
         let anchor = month ?? startDate ?? calendar.date(byAdding: .month, value: 1, to: .now) ?? .now
         let monthRange = calendar.dateInterval(of: .month, for: anchor)!

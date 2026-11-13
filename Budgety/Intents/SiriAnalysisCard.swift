@@ -48,7 +48,7 @@ struct SiriAnalysisCard: View {
                         .accessibilityHint("Budgetyで明細を開きます")
                 } else { content(row) }
             }
-            let remaining = report.matchingRowCount - min(limit, report.rows.count)
+            let remaining = report.omittedRowCount(displayedCount: min(limit, report.rows.count))
             if remaining > 0 {
                 Text("ほか\(remaining)件").font(.caption).foregroundStyle(secondaryInk)
             }

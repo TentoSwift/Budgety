@@ -66,6 +66,7 @@ private struct SiriLedgerQuestion: Codable {
     var maximumExclusive = false
     var sort: String?
     var limit: Int?
+    var rank: Int?
     var all = false
     var comparisonInterval: DateInterval?
     var comparisonLabel: String?
@@ -99,6 +100,7 @@ private struct SiriLedgerQuestion: Codable {
         request.minimumExclusive = minimumExclusive
         request.maximumExclusive = maximumExclusive
         request.limit = all ? nil : (limit ?? 3)
+        request.rank = rank
         request.sort = sort.flatMap(SiriAnalysisSort.init(rawValue:))
         let scope = SiriExpenseScope(interval: interval, label: period, isDay: false)
         let comparison = comparisonInterval.map { SiriExpenseScope(interval: $0, label: comparisonLabel ?? period, isDay: false) }
@@ -107,9 +109,10 @@ private struct SiriLedgerQuestion: Codable {
 }
 
 private enum QuestionError: Error, CustomLocalizedStringResourceConvertible {
-    case invalid, reference, interval
+    case invalid, reference, interval, missingRank
     var localizedStringResource: LocalizedStringResource {
         switch self {
+        case .missingRank: "何番目の明細を調べますか？"
         case .invalid: "集計条件を指定し直してください。"
         case .reference: "どの明細ですか？ 明細の名前を指定してください。"
         case .interval: "集計する期間の開始日と終了日を指定してください。"
@@ -130,7 +133,7 @@ enum SiriAnalysisReference: String, AppEnum {
 #endif
 struct SiriAnalyzeLedgerIntent: AppIntent {
     static let title: LocalizedStringResource = "明細の内訳・比較・換算を表示"
-    static let description = IntentDescription("家計簿の集計方法を選び、合計だけ、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["内訳", "換算", "比較", "一番高い", "平均", "以外", "元の金額"])
+    static let description = IntentDescription("家計簿の集計方法を選び、合計だけ、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「2番目に高い出費」「先月の食費で2番目に安いもの」「安い順に3件」「次に高いのは？」など金額の順位にも使います。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["内訳", "換算", "比較", "何番目", "高い順", "安い順", "平均", "以外", "元の金額"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     @Parameter(title: "直前の集計", description: "「そのうち」「それを除くと」「ドルで表示して」など同じ対象について続けて聞かれた場合、前の回答が返した集計条件。") var previous: SiriLedgerQuestionContext?
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
@@ -164,11 +167,20 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
     @Parameter(title: "下限額を含めない", description: "「1万円を超えた」はオン。「1万円以上」はオフ。") var minimumExclusive: Bool?
     @Parameter(title: "上限額を含めない") var maximumExclusive: Bool?
     @Parameter(title: "並べ方") var sort: SiriAnalysisSort?
-    @Parameter(title: "表示件数", description: "「一番高い」は1、「直近3件」は3。") var limit: Int?
+    @Parameter(title: "順位", description: "「2番めに高い」「安い方から二番目」は2。「一番安い」は1。指定した順位の1件を返します。") var rank: Int?
+    @Parameter(title: "直前の順位の次", description: "「その次は？」「次に高いのは？」のように直前の順位から1つ進むときに指定します。") var nextRank: Bool?
+    @Parameter(title: "表示件数", description: "「高い順に2件」は2、「直近3件」は3。特定の順位だけを聞かれた場合は順位を使います。") var limit: Int?
     @Parameter(title: "全件表示") var showAll: Bool?
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SiriLedgerQuestionContext> & ProvidesDialog & ShowsSnippetIntent {
+        let (report, result) = try await analyze()
+        return .result(value: result, dialog: IntentDialog("\(report.dialog)"),
+                       snippetIntent: SiriLedgerAnalysisSnippet(criteria: result.criteria))
+    }
+
+    @MainActor
+    func analyze() async throws -> (SiriAnalysisReport, SiriLedgerQuestionContext) {
         let saved = try previous.map { try JSONDecoder().decode(SiriLedgerQuestion.self, from: Data($0.criteria.utf8)) }
         let sheetID: String
         if let id = sheet?.id ?? member.flatMap({ $0.id.components(separatedBy: "#").first }) ?? saved?.sheetID { sheetID = id }
@@ -178,7 +190,13 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             }
         }
         let inherited = saved.flatMap { $0.sheetID == sheetID ? $0 : nil }
-        let filter = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: period)
+        let spoken = SiriSpokenRankingRequest(name)
+        let requestedRank = rank ?? spoken.rank
+        let requestedCount = limit ?? spoken.limit
+        let requestedSort = sort ?? spoken.sort
+        let advance = nextRank ?? spoken.next
+        let searchPeriod = period ?? spoken.period
+        let filter = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: searchPeriod)
         var q = inherited ?? SiriLedgerQuestion(sheetID: sheetID, interval: filter.scope.interval, period: filter.scope.label)
         if startDate != nil || endDate != nil {
             let cal = Calendar.current
@@ -187,19 +205,24 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             let start = cal.startOfDay(for: startDate)
             q.interval = DateInterval(start: start, end: end)
             q.period = start.formatted(date: .abbreviated, time: .omitted) + "〜" + endDate.formatted(date: .abbreviated, time: .omitted)
-        } else if day != nil || month != nil || period != nil {
+        } else if day != nil || month != nil || searchPeriod != nil {
             q.interval = filter.scope.interval
             q.period = filter.scope.label
         }
         if let mode { q.mode = mode.rawValue }
-        if let kind { q.kind = kind.rawValue }
+        if let selection = kind ?? spoken.kind { q.kind = selection.rawValue }
         q.category = category ?? q.category
-        q.name = name ?? q.name
+        if !spoken.isRanking, let name { q.name = name }
         q.memberID = member?.id ?? q.memberID
         q.sourceCurrency = sourceCurrency ?? q.sourceCurrency
         q.targetCurrency = targetCurrency ?? q.targetCurrency
         if let groupByOriginal { q.grouped = groupByOriginal }
         else if targetCurrency != nil { q.grouped = false }
+        if groupByOriginal == true, mode == nil,
+           q.mode == SiriAnalysisMode.transactions.rawValue || q.mode == SiriAnalysisMode.total.rawValue {
+            q.mode = SiriAnalysisMode.currency.rawValue
+            q.rank = nil
+        }
         if mode == .currency { q.grouped = true }
         else if targetCurrency != nil, q.mode == SiriAnalysisMode.currency.rawValue { q.mode = SiriAnalysisMode.total.rawValue }
         q.foreignOnly = foreignOnly ?? q.foreignOnly
@@ -215,11 +238,38 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             if reference == .exclude { q.excludedID = id; q.selectedID = nil; q.mode = (mode ?? .total).rawValue }
             else { q.selectedID = id }
             q.limit = nil
+            q.rank = nil
             q.sort = nil
         } else if let transaction { q.selectedID = transaction.id }
-        if let sort { q.sort = sort.rawValue }
-        if let limit { q.limit = limit; q.all = false }
+        if let mode, inherited?.mode != mode.rawValue { q.rank = nil }
+        if let requestedSort { q.sort = requestedSort.rawValue }
+        if let requestedCount { q.limit = requestedCount; q.rank = nil; q.all = false }
+        if showAll == true { q.rank = nil; q.limit = nil }
         q.all = showAll ?? q.all
+        if advance || requestedRank != nil {
+            if mode == nil, inherited?.rank == nil || spoken.kind != nil {
+                q.mode = SiriAnalysisMode.transactions.rawValue
+            }
+            q.selectedID = nil
+            if let requestedRank { q.rank = requestedRank }
+            else {
+                let lastRank: Int?
+                if let previousRank = inherited?.rank {
+                    lastRank = previousRank
+                } else if let order = requestedSort, order == .highest || order == .lowest {
+                    // In a fresh question, 「次に高い」 means second-highest.
+                    lastRank = 1
+                } else if inherited?.limit == 1, inherited?.singleID != nil {
+                    lastRank = 1
+                } else {
+                    lastRank = nil
+                }
+                guard let lastRank, lastRank > 0, lastRank < Int.max else { throw QuestionError.missingRank }
+                q.rank = lastRank + 1
+            }
+            q.all = false
+            q.limit = nil
+        }
         let needsComparison = q.mode == SiriAnalysisMode.comparison.rawValue || q.mode == SiriAnalysisMode.categoryIncrease.rawValue
         let changedScope = day != nil || month != nil || period != nil || startDate != nil || endDate != nil
         if needsComparison && (comparisonStart != nil || comparisonEnd != nil || comparisonMonth != nil || changedScope || q.comparisonInterval == nil) {
@@ -254,8 +304,42 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
             result.editableTransaction = try SiriEditableTransactionQuery.resolve([id], in: sheetID, access: access).first
         }
-        return .result(value: result, dialog: IntentDialog("\(report.dialog)"),
-                       snippetIntent: SiriLedgerAnalysisSnippet(criteria: result.criteria))
+        return (report, result)
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+#if os(iOS) || os(macOS)
+@AppIntent(.tool)
+#endif
+struct SiriCurrencyBreakdownIntent: AppIntent {
+    static let title: LocalizedStringResource = "収入・支出を通貨別で表示"
+    static let description = IntentDescription("「通貨別で表示して」「通貨ごとの内訳は？」「円とドル、それぞれいくら？」に答えます。続けて聞かれたら、直前の収入・支出・収支の集計条件を受け取り、記録時の通貨ごとに合計します。", searchKeywords: ["通貨別で表示して", "通貨ごと", "通貨別内訳"])
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "直前の集計", description: "前の回答の集計条件。続けて聞かれた場合、同じシート・期間・対象を使用します。") var previous: SiriLedgerQuestionContext?
+    @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
+    @Parameter(title: "対象の収支") var kind: SiriTransactionSelection?
+    @Parameter(title: "検索期間") var period: SiriExpensePeriod?
+    @Parameter(title: "対象月") var month: Date?
+    @Parameter(title: "対象日") var day: Date?
+    @Parameter(title: "カテゴリ名") var category: String?
+    @Parameter(title: "メンバー") var member: SiriSheetMemberEntity?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<SiriLedgerQuestionContext> & ProvidesDialog & ShowsSnippetIntent {
+        let analysis = SiriAnalyzeLedgerIntent()
+        analysis.previous = previous
+        analysis.sheet = sheet
+        analysis.kind = kind
+        analysis.period = period
+        analysis.month = month
+        analysis.day = day
+        analysis.category = category
+        analysis.member = member
+        analysis.mode = .currency
+        analysis.groupByOriginal = true
+        return try await analysis.perform()
     }
 }
 

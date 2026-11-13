@@ -182,6 +182,41 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
         let isSpokenQuery = false
         let search = expenseName
         #endif
+        if SiriSpokenRankingRequest(search).isRanking {
+            let analysis = SiriAnalyzeLedgerIntent()
+            analysis.sheet = sheet
+            analysis.member = member
+            analysis.name = search
+            analysis.category = categoryName
+            analysis.kind = kind
+            analysis.period = period
+            analysis.month = month
+            analysis.day = day
+            analysis.targetCurrency = targetCurrency
+            analysis.sourceCurrency = sourceCurrency
+            analysis.foreignOnly = foreignOnly
+            analysis.groupByOriginal = groupByOriginal
+            let (report, context) = try await analysis.analyze()
+            let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+            let backing = VirtualRowBacking()
+            let rows: [SiriExpenseCardRow] = try report.rows.prefix(5).compactMap { row in
+                guard let id = row.transactionID else { return nil }
+                switch try SiriVirtualExpenseLink.resolve(id, access: access) {
+                case .stored(let transaction):
+                    guard let owner = transaction.sheet else { throw AppIntentError.sheetNotFound }
+                    return .from(transaction, in: owner, isSoloSheet: !owner.hasAcceptedOtherMembers())
+                case .virtual(let occurrence, let owner, _):
+                    return .from(backing.displayExpense(for: occurrence, sheet: owner), in: owner,
+                                 isSoloSheet: !owner.hasAcceptedOtherMembers(), virtualIdentifier: id)
+                }
+            }
+            let card = SiriExpenseCardResult(sheetName: report.scope, period: report.title, expenseName: "",
+                                            count: report.requestedRank == nil ? report.matchingRowCount : rows.count,
+                                            total: report.summary, rows: rows)
+            card.questionContext = context
+            return .result(value: card, dialog: IntentDialog("\(report.dialog)"),
+                           snippetIntent: SiriLedgerAnalysisSnippet(criteria: context.criteria))
+        }
         let currency = try currencyOptions()
         let request = SiriTransactionReplyRequest(search)
         let filter = SiriExpenseSearchFilter(expenseName: request.search, categoryName: categoryName, month: month, day: day,

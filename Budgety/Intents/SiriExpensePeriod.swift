@@ -159,4 +159,115 @@ struct SiriExpenseSearchFilter {
         }
     }
 }
+// A narrow fallback for the complete ranking phrase Siri sometimes places in `name`.
+// Explicit AppIntent parameters remain authoritative at the call site.
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+struct SiriSpokenRankingRequest {
+    let rank: Int?
+    let limit: Int?
+    let sort: SiriAnalysisSort?
+    let next: Bool
+    let kind: SiriTransactionSelection?
+    let period: SiriExpensePeriod?
+    var isRanking: Bool { rank != nil || limit != nil || next }
+
+    init(_ text: String?) {
+        var phrase = (text ?? "").precomposedStringWithCompatibilityMapping.filter { !$0.isWhitespace }
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
+        for suffix in ["を教えてください", "を見せてください", "を表示してください", "を教えて", "を見せて", "を表示して", "はどれですか", "はどれ", "を調べて"] where phrase.hasSuffix(suffix) {
+            phrase.removeLast(suffix.count)
+            break
+        }
+        var parsedPeriod: SiriExpensePeriod?
+        for (word, value) in [("今日", SiriExpensePeriod.today), ("きょう", .today), ("本日", .today), ("昨日", .yesterday), ("きのう", .yesterday), ("今月", .thisMonth), ("先月", .lastMonth), ("今年", .thisYear), ("去年", .lastYear), ("昨年", .lastYear), ("全期間", .allTime)] where phrase.hasPrefix(word + "の") {
+            phrase.removeFirst(word.count + 1)
+            parsedPeriod = value
+            break
+        }
+        var parsedKind: SiriTransactionSelection?
+        for (word, value) in [("支出", SiriTransactionSelection.expense), ("出費", .expense), ("収入", .income), ("収支", .both), ("取引", .both)] {
+            if phrase.hasPrefix(word + "の") {
+                phrase.removeFirst(word.count + 1)
+                parsedKind = value
+                break
+            }
+            if phrase.hasSuffix(word) {
+                phrase.removeLast(word.count)
+                if phrase.hasSuffix("の") { phrase.removeLast() }
+                parsedKind = value
+                break
+            }
+        }
+        let numeral = "([0-9一二三四五六七八九十百千〇零]+)"
+        func capture(_ pattern: String) -> String? {
+            guard let expression = try? NSRegularExpression(pattern: "^(?:" + pattern + ")$"),
+                  let match = expression.firstMatch(in: phrase, range: NSRange(phrase.startIndex..., in: phrase)),
+                  let range = Range(match.range(at: 1), in: phrase) else { return nil }
+            return String(phrase[range])
+        }
+        var parsedRank: Int?
+        var parsedLimit: Int?
+        var parsedSort: SiriAnalysisSort?
+        var parsedNext = false
+        for (words, value) in [("高い|多い|大きい", SiriAnalysisSort.highest), ("安い|低い|少ない|小さい", .lowest), ("新しい", .newest), ("古い", .oldest)] {
+            if let number = capture(numeral + "(?:番目|番め|つ目|つめ)に(?:" + words + ")") ?? capture("(?:" + words + ")(?:方|ほう)から" + numeral + "(?:番目|番め|つ目|つめ)") {
+                parsedRank = Self.positiveInteger(number)
+                parsedSort = value
+                break
+            }
+            if let number = capture("(?:" + words + ")順(?:に|で)?" + numeral + "件") {
+                parsedLimit = Self.positiveInteger(number)
+                parsedSort = value
+                break
+            }
+            if phrase.range(of: "^(?:一番|1番|最も|もっとも)(?:" + words + ")$", options: .regularExpression) != nil {
+                parsedRank = 1
+                parsedSort = value
+                break
+            }
+            if phrase.range(of: "^(?:次に|その次に)(?:" + words + ")$", options: .regularExpression) != nil {
+                parsedNext = true
+                parsedSort = value
+                break
+            }
+        }
+        if parsedRank == nil, parsedLimit == nil, !parsedNext {
+            if let number = capture("上から" + numeral + "(?:番目|番め|つ目|つめ)") {
+                parsedRank = Self.positiveInteger(number)
+            } else if ["次", "次の明細", "次の取引", "その次"].contains(phrase) {
+                parsedNext = true
+            }
+        }
+        let recognized = parsedRank != nil || parsedLimit != nil || parsedNext
+        rank = parsedRank
+        limit = parsedLimit
+        sort = recognized ? parsedSort : nil
+        next = parsedNext
+        kind = recognized ? parsedKind : nil
+        period = recognized ? parsedPeriod : nil
+    }
+
+    private static func positiveInteger(_ text: String) -> Int? {
+        if let number = Int(text) { return number > 0 ? number : nil }
+        let digits: [Character: Int] = ["零": 0, "〇": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9]
+        let units: [Character: Int] = ["十": 10, "百": 100, "千": 1000]
+        var result = 0
+        var digit: Int?
+        var previousUnit = 10000
+        for character in text {
+            if let value = digits[character] {
+                // Reject malformed mixed Japanese numerals such as 二三番目.
+                guard digit == nil else { return nil }
+                digit = value
+            } else if let unit = units[character] {
+                guard unit < previousUnit, digit != 0 else { return nil }
+                result += (digit ?? 1) * unit
+                digit = nil
+                previousUnit = unit
+            } else { return nil }
+        }
+        result += digit ?? 0
+        return result > 0 ? result : nil
+    }
+}
 #endif

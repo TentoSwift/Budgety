@@ -48,8 +48,8 @@ struct SiriReadReportSnippetIntent: SnippetIntent {
     }
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
-        let record = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext).resolve(sheetID)
-        let sheet = ExpenseSheetEntity.from(record)
+        let access = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let sheet = try withExtendedLifetime(access) { ExpenseSheetEntity.from(try access.resolve(sheetID)) }
         let report: String
         let title: String
         switch mode {
