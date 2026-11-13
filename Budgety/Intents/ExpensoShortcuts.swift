@@ -43,7 +43,7 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             )
             #if os(macOS)
             AppShortcut(
-                intent: SiriListTransactionsIntent(),
+                intent: SiriFindExpenseCardsIntent(),
                 phrases: ["\(.applicationName) で明細を検索", "\(.applicationName) の収支は", "\(.applicationName) で \(\.$period) の収支を調べて",
                           "\(.applicationName) で \(\.$kind) を調べて", "Search transactions in \(.applicationName)"],
                 shortTitle: "明細を検索", systemImageName: "magnifyingglass"

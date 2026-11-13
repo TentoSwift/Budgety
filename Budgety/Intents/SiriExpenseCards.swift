@@ -141,6 +141,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     var expenseIdentifier: String?
     var categoryColorHex = ""
     var categorySymbol = ""
+    var categoryIcon: IntentFile?
     var signedAmount: String?
     var payerIsVirtual: Bool?
     var payerColorHex: String?
@@ -149,6 +150,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
     @Property(title: "明細の識別子", visibility: .internal) var expenseIdentifier: String?
     @Property(title: "カテゴリの色", visibility: .internal) var categoryColorHex: String
     @Property(title: "カテゴリのアイコン", visibility: .internal) var categorySymbol: String
+    @Property(title: "カテゴリの画像", visibility: .internal) var categoryIcon: IntentFile?
     @Property(title: "表示用金額", visibility: .internal) var signedAmount: String?
     @Property(title: "バーチャルメンバー", visibility: .internal) var payerIsVirtual: Bool?
     @Property(title: "支払者の色", visibility: .internal) var payerColorHex: String?
@@ -162,7 +164,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
          signedAmount: String? = nil, payerName: String? = nil,
          payerColorHex: String = "", payerPhoto: IntentFile? = nil,
          payerIsVirtual: Bool? = nil, foreignCurrencyCode: String? = nil, expenseIdentifier: String? = nil,
-         editableTransaction: SiriEditableTransactionEntity? = nil) {
+         editableTransaction: SiriEditableTransactionEntity? = nil, categoryIcon: IntentFile? = nil) {
         self.transactionKind = kind
         self.expenseIdentifier = expenseIdentifier
         self.editableTransaction = editableTransaction
@@ -172,6 +174,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
         self.amount = amount
         self.categoryColorHex = categoryColorHex
         self.categorySymbol = categorySymbol
+        self.categoryIcon = categoryIcon
         self.signedAmount = signedAmount
         self.payerName = payerName
         self.payerIsVirtual = payerIsVirtual
@@ -181,7 +184,14 @@ struct SiriExpenseCardRow: TransientAppEntity {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)")
+        #if os(iOS) || os(macOS)
+        // Older saved results already carry artwork in the editable entity.
+        let image = SiriTransactionCategoryIcon.image(categoryIcon ?? editableTransaction?.categoryIcon,
+                                                       symbol: editableTransaction?.categorySymbol ?? categorySymbol)
+        #else
+        let image = DisplayRepresentation.Image(systemName: categorySymbol.isEmpty ? "tag.slash" : categorySymbol)
+        #endif
+        return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)", image: image)
     }
 
     @MainActor
@@ -190,6 +200,14 @@ struct SiriExpenseCardRow: TransientAppEntity {
         let currency = transaction.resolvedCurrencyCode.uppercased()
         let category = transaction.categoryDisplayName
         let payer = SiriExpensePayer.snapshot(for: transaction, isSoloSheet: isSoloSheet, includePhoto: includePayerPhoto)
+        let editableTransaction = virtualIdentifier == nil ? SiriEditableTransactionEntity.from(transaction) : nil
+        #if os(iOS) || os(macOS)
+        let categoryIcon = editableTransaction?.categoryIcon
+            ?? SiriTransactionCategoryIcon.file(symbol: transaction.categorySymbol,
+                                                colorHex: transaction.resolvedCategory?.displayColorHex ?? "")
+        #else
+        let categoryIcon: IntentFile? = nil
+        #endif
         return Self(
             title: transaction.displayTitle.isEmpty ? category : transaction.displayTitle,
             date: transaction.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明"),
@@ -202,7 +220,7 @@ struct SiriExpenseCardRow: TransientAppEntity {
             payerIsVirtual: UserProfileStore.isVirtualRecordName(transaction.payerProfileID ?? ""),
             foreignCurrencyCode: currency == sheet.resolvedDefaultCurrencyCode ? nil : currency,
             expenseIdentifier: virtualIdentifier ?? transaction.objectID.uriRepresentation().absoluteString,
-            editableTransaction: virtualIdentifier == nil ? SiriEditableTransactionEntity.from(transaction) : nil
+            editableTransaction: editableTransaction, categoryIcon: categoryIcon
         )
     }
 }

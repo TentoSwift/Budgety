@@ -134,13 +134,13 @@ struct SiriExpenseSearchFilter {
 
     private static func isLedgerList(_ subject: String) -> Bool {
         ["明細", "明細一覧", "取引", "取引一覧", "一覧"].contains(where: { name in
-            ["", "は", "を見せて", "を教えて", "を一覧にして", "にして"].contains(where: { subject == name + $0 })
+            ["", "は", "を見せて", "を教えて", "を調べて", "を一覧にして", "にして"].contains(where: { subject == name + $0 })
         })
     }
 
     private static func transactionKind(in subject: String) -> SiriTransactionSelection? {
         var text = subject.filter { !$0.isWhitespace }
-        for suffix in ["はいくらですか", "はいくら", "を教えてください", "を教えて", "を見せて", "を一覧にして", "は"] where text.hasSuffix(suffix) {
+        for suffix in ["はいくらですか", "はいくら", "を教えてください", "を教えて", "を見せて", "を調べて", "には何がある", "を一覧にして", "は"] where text.hasSuffix(suffix) {
             text.removeLast(suffix.count)
             break
         }
