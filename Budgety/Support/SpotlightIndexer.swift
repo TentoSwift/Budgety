@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import Combine
 import CoreData
 import SwiftUI
 
@@ -27,17 +28,20 @@ import UIKit
 /// Spotlight 検索結果 → シートを開く、の橋渡し。
 /// `onContinueUserActivity` はビュー階層が生きている時に届くとは限らないので、
 /// cold launch 用に識別子を一時保持し、`SheetListView` が消費する。
-final class DeepLinkRouter {
+final class DeepLinkRouter: ObservableObject {
     static let shared = DeepLinkRouter()
     private init() {}
 
     private var pendingSheetIdentifier: String?
     #if os(iOS)
-    @MainActor var pendingExpenseIdentifier: String?
+    @Published var pendingSiriSelection: SiriSheetSelection?
     #endif
 
     /// Spotlight から「このシートを開いて」と要求された時に呼ぶ。
     func requestOpenSheet(identifier: String) {
+        #if os(iOS)
+        pendingSiriSelection = nil
+        #endif
         pendingSheetIdentifier = identifier
         NotificationCenter.default.post(name: .expensoOpenSheet, object: nil,
                                         userInfo: ["identifier": identifier])

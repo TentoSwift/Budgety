@@ -48,6 +48,31 @@ struct SiriSettlementStatusSnippetIntent: SnippetIntent {
     }
 }
 
+@available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
+struct SiriOpenSettlementIntent: AppIntent {
+    static let title: LocalizedStringResource = "精算詳細を開く"
+    static let isDiscoverable = false
+    static let supportedModes: IntentModes = .foreground(.immediate)
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "シートの識別子") var sheetID: String
+
+    init() {}
+    init(sheetID: String) { self.sheetID = sheetID }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        #if os(watchOS)
+        try WatchSiriNavigation.shared.requestOpenSettlement(identifier: sheetID)
+        #elseif os(macOS)
+        try MacSiriNavigation.shared.requestOpenSettlement(identifier: sheetID)
+        #else
+        try DeepLinkRouter.shared.requestOpenSettlement(identifier: sheetID)
+        #endif
+        return .result()
+    }
+}
+
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementProfile: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "メンバー"
@@ -113,6 +138,11 @@ struct SiriSettlementCardResult: TransientAppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "精算状況"
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
+    #if os(watchOS)
+    var sheetID: String?
+    #else
+    @Property(title: "シートの識別子", visibility: .internal) var sheetID: String?
+    #endif
     @Property(title: "シート名") var sheetName: String
     #if os(watchOS)
     var sheetSymbol: String?
@@ -131,6 +161,7 @@ struct SiriSettlementCardResult: TransientAppEntity {
     static func status(sheetID: String) throws -> Self {
         let status = try SiriSettlementStore.status(sheetID: sheetID)
         var card = Self()
+        card.sheetID = sheetID
         card.sheetName = status.sheetName
         card.sheetSymbol = status.sheetSymbol
         card.sheetColorHex = status.sheetColorHex

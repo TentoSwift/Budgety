@@ -5,26 +5,21 @@ import SwiftUI
 
 @MainActor
 final class MacSiriNavigation: ObservableObject {
-    struct Selection: Hashable {
-        let identifier: String
-        let sheetID: NSManagedObjectID
-    }
+    typealias Selection = SiriSheetSelection
 
     static let shared = MacSiriNavigation()
     @Published private(set) var selection: Selection?
 
     func requestOpenExpense(identifier: String) throws {
-        let context = PersistenceController.shared.container.viewContext
-        let target = try SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
-        let sheetID: NSManagedObjectID
-        switch target {
-        case .stored(let expense):
-            guard let sheet = expense.sheet else { throw AppIntentError.expenseUnavailable }
-            sheetID = sheet.objectID
-        case .virtual(_, let sheet, _):
-            sheetID = sheet.objectID
-        }
-        selection = Selection(identifier: identifier, sheetID: sheetID)
+        try request(.expense(identifier))
+    }
+
+    func requestOpenSettlement(identifier: String) throws {
+        try request(.settlement(identifier))
+    }
+
+    private func request(_ destination: Selection.Destination) throws {
+        selection = try Selection(destination, in: PersistenceController.shared.container.viewContext)
         NSApp.activate()
     }
 

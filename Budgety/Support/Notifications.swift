@@ -16,6 +16,5 @@ extension Notification.Name {
     static let expensoStoreReset = Notification.Name("ExpensoStoreReset")
     /// Spotlight 検索結果などから「このシートを開いて」と要求された時に飛ぶ。
     /// userInfo["identifier"] = objectID の URI 文字列。
-    static let expensoOpenExpense = Notification.Name("ExpensoOpenExpense")
     static let expensoOpenSheet = Notification.Name("ExpensoOpenSheet")
 }

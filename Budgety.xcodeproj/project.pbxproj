@@ -131,6 +131,7 @@
 				Support/CategoryHistorySuggestor.swift,
 				Support/RecurringExpenseGenerator.swift,
 				Support/SettlementCalculator.swift,
+				Support/SiriSheetSelection.swift,
 				Support/SiriVirtualExpenseLink.swift,
 				Support/VirtualRowBacking.swift,
 				Support/ShareParticipantCanonical.swift,
@@ -396,6 +397,7 @@
 				Intents/SiriMemberAdvancesIntent.swift,
 				Intents/SiriReadReportSnippetIntent.swift,
 				Intents/SiriTransactionAnalysis.swift,
+				Support/SiriSheetSelection.swift,
 				Support/SiriVirtualExpenseLink.swift,
 				Support/VirtualRowBacking.swift,
 			);

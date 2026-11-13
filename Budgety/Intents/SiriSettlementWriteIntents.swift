@@ -118,7 +118,7 @@ struct SiriSettlementReceiptSnippetIntent: SnippetIntent {
     func perform() async throws -> some IntentResult & ShowsSnippetView {
         guard let id = UUID(uuidString: recordID) else { throw SettlementSelectionError.recordUnavailable }
         let receipt = try SiriSettlementStore.receipt(sheetID: sheetID, recordID: id)
-        return .result(view: SiriSettlementCardView(sheetName: receipt.sheetName, sheetSymbol: receipt.sheetSymbol, sheetColorHex: receipt.sheetColorHex,
+        return .result(view: SiriSettlementCardView(sheetID: sheetID, sheetName: receipt.sheetName, sheetSymbol: receipt.sheetSymbol, sheetColorHex: receipt.sheetColorHex,
                                                     period: receipt.date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "日付不明"), title: "送金を記録しました",
                                                     rows: [.init(from: receipt.fromAvatar, to: receipt.toAvatar, amount: receipt.formattedAmount)]))
     }

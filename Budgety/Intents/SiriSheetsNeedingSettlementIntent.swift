@@ -129,19 +129,25 @@ private struct SiriUnsettledSheetsCard: View {
                 Text("精算が必要なシートはありません。").font(.subheadline)
             }
             ForEach(Array(items.prefix(limit)), id: \.sheet.id) { item in
-                HStack(alignment: .top, spacing: 8) {
-                    SheetSymbolIcon(symbol: item.sheet.symbol, tint: Color(hex: item.sheet.colorHex) ?? .indigo, size: 24)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: item.sheet.name).font(.subheadline.weight(.semibold))
-                        if let amount = item.amount {
-                            Text(verbatim: amount).font(.body.monospacedDigit())
-                        } else {
-                            Text("判定できません").font(.subheadline)
+                Button(intent: SiriOpenSettlementIntent(sheetID: item.sheet.id)) {
+                    HStack(alignment: .top, spacing: 8) {
+                        SheetSymbolIcon(symbol: item.sheet.symbol, tint: Color(hex: item.sheet.colorHex) ?? .indigo, size: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: item.sheet.name).font(.subheadline.weight(.semibold))
+                            if let amount = item.amount {
+                                Text(verbatim: amount).font(.body.monospacedDigit())
+                            } else {
+                                Text("判定できません").font(.subheadline)
+                            }
+                            if let note = item.rateNote { Text(verbatim: note).font(.caption) }
                         }
-                        if let note = item.rateNote { Text(verbatim: note).font(.caption) }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .accessibilityElement(children: .combine)
                 }
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.plain)
+                .accessibilityHint("Budgetyでこのシートの精算詳細を開きます")
             }
             if items.count > limit { Text("+\(items.count - limit)件").font(.caption) }
         }

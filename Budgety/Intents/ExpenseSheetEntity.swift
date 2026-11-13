@@ -63,8 +63,11 @@ struct IntentSheetAccess {
     }
 
     func resolve(_ id: String) throws -> ExpenseSheet {
-        guard let url = URL(string: id),
+        guard let url = URL(string: id), url.scheme == "x-coredata", url.host?.isEmpty == false,
+              url.pathComponents.count == 3, url.pathComponents[1] == "ExpenseSheet",
+              url.query == nil, url.fragment == nil,
               let oid = context.persistentStoreCoordinator?.managedObjectID(forURIRepresentation: url),
+              oid.uriRepresentation().absoluteString == id,
               let sheet = try? context.existingObject(with: oid) as? ExpenseSheet,
               allows(sheet) else { throw AppIntentError.sheetNotFound }
         return sheet

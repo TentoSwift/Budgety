@@ -75,13 +75,14 @@ enum SheetNavigationDestination: Hashable {
     case sheet(NSManagedObjectID)
     #if os(iOS)
     case expense(sheetID: NSManagedObjectID, identifier: String)
+    case settlement(NSManagedObjectID)
     #endif
 
     var sheetID: NSManagedObjectID {
         switch self {
         case .sheet(let id): id
         #if os(iOS)
-        case .expense(let id, _): id
+        case .expense(let id, _), .settlement(let id): id
         #endif
         }
     }
@@ -93,6 +94,9 @@ struct SheetListView: View {
     var usesDuoSidebar = false
     var showDuoSidebar: (() -> Void)? = nil
     @State private var quickExpenseSheet: ExpenseSheet?
+    #if os(iOS)
+    @ObservedObject private var router = DeepLinkRouter.shared
+    #endif
 
     @Environment(\.managedObjectContext) private var viewContext
 
@@ -229,6 +233,10 @@ struct SheetListView: View {
                 #if os(iOS)
                 case .expense(_, let identifier):
                     SiriExpenseDestination(identifier: identifier).id(identifier)
+                case .settlement(let id):
+                    if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
+                        SettlementView(record: sheet).sheetLockCover(sheet).id(id)
+                    }
                 #endif
                 case .sheet(let id):
                     if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
@@ -355,14 +363,10 @@ struct SheetListView: View {
         .onChange(of: sheets.map(\.objectID), initial: true) { _, ids in
             if sharedPath == nil, let selected = path.last?.sheetID, !ids.contains(selected) { path = [] }
             openPendingSheetIfReady()
-            #if os(iOS)
-            openPendingExpenseIfReady()
-            #endif
         }
         #if os(iOS)
-        .onReceive(NotificationCenter.default.publisher(for: .expensoOpenExpense)) { _ in openPendingExpenseIfReady() }
-        .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { openPendingExpenseIfReady() }
+        .onChange(of: scenePhase == .active && !sheets.isEmpty ? router.pendingSiriSelection : nil, initial: true) { _, selection in
+            if let selection, selection == router.pendingSiriSelection { openSiriSelection(selection) }
         }
         #endif
         .onChange(of: path) { oldPath, newPath in
@@ -592,24 +596,18 @@ struct SheetListView: View {
     }
 
     #if os(iOS)
-    private func openPendingExpenseIfReady() {
-        let router = DeepLinkRouter.shared
-        guard scenePhase == .active, !sheets.isEmpty, let identifier = router.pendingExpenseIdentifier else { return }
-        router.pendingExpenseIdentifier = nil
-        guard let access = try? IntentSheetAccess(checking: viewContext),
-              let target = try? SiriVirtualExpenseLink.resolve(identifier, access: access) else { return }
-        let sheetID: NSManagedObjectID
-        switch target {
-        case .stored(let expense):
-            guard let sheet = expense.sheet else { return }
-            sheetID = sheet.objectID
-        case .virtual(_, let sheet, _):
-            sheetID = sheet.objectID
+    private func openSiriSelection(_ selection: SiriSheetSelection) {
+        router.pendingSiriSelection = nil
+        guard let sheet = selection.currentSheet(in: viewContext) else { return }
+        let child: SheetNavigationDestination
+        switch selection.destination {
+        case .expense(let identifier): child = .expense(sheetID: sheet.objectID, identifier: identifier)
+        case .settlement: child = .settlement(sheet.objectID)
         }
         didRestorePath = true
         searchText = ""
         searchFocused = false
-        path = [.sheet(sheetID), .expense(sheetID: sheetID, identifier: identifier)]
+        path = [.sheet(sheet.objectID), child]
     }
     #endif
 

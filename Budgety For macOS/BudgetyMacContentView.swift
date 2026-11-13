@@ -50,7 +50,18 @@ struct BudgetyMacContentView: View {
             NavigationStack(path: $siriDetailPath) {
                 sheetContent
                     .navigationDestination(for: MacSiriNavigation.Selection.self) { selection in
-                        MacSiriExpenseDetail(identifier: selection.identifier)
+                        switch selection.destination {
+                        case .expense(let identifier):
+                            MacSiriExpenseDetail(identifier: identifier)
+                        case .settlement:
+                            if let sheet = selectedSheet, sheet.objectID == selection.sheetID, !sheet.isDeleted {
+                                if lockManager.isUnlocked(sheet) {
+                                    SettlementView(record: sheet)
+                                } else {
+                                    MacSheetLockView(record: sheet, onUnlock: {}, onCancel: { siriDetailPath = [] })
+                                }
+                            }
+                        }
                     }
             }
         }
@@ -83,7 +94,7 @@ struct BudgetyMacContentView: View {
             if selectedSheet == nil { selectedSheet = sheets.first }
             openSiriSelectionIfPossible()
         }
-        .onChange(of: siriNavigation.selection?.identifier) { _, _ in openSiriSelectionIfPossible() }
+        .onChange(of: siriNavigation.selection) { _, _ in openSiriSelectionIfPossible() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification)) { _ in
             Task { @MainActor in openSiriSelectionIfPossible() }
         }
@@ -147,7 +158,7 @@ struct BudgetyMacContentView: View {
     private func openSiriSelectionIfPossible() {
         guard !NSApp.windows.contains(where: { $0.attachedSheet != nil }),
               let selection = siriNavigation.takeSelection(),
-              let sheet = try? viewContext.existingObject(with: selection.sheetID) as? ExpenseSheet
+              let sheet = selection.currentSheet(in: viewContext)
         else { return }
         searchText = ""
         selectedSheet = sheet

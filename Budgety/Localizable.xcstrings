@@ -1,6 +1,98 @@
 {
   "sourceLanguage": "ja",
   "strings": {
+    "精算詳細を開く": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrechnungsdetails öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open settlement details"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir detalles de liquidación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir les détails du règlement"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정산 상세 열기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开结算详情"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟結算詳細資訊"
+          }
+        }
+      }
+    },
+    "Budgetyでこのシートの精算詳細を開きます": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnet die Abrechnungsdetails dieses Blatts in Budgety"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens this sheet’s settlement details in Budgety"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abre los detalles de liquidación de esta hoja en Budgety"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre les détails du règlement de cette feuille dans Budgety"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Budgety에서 이 시트의 정산 상세를 엽니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Budgety 中打开此账本的结算详情"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Budgety 中開啟此帳本的結算詳細資訊"
+          }
+        }
+      }
+    },
     "指定されたシート。省略時は最後に開いたシートを使います。": {
       "localizations": {
         "de": {

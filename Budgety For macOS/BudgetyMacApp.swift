@@ -103,8 +103,8 @@ struct BudgetyMacApp: App {
                 }
                 #endif
         }
-        .onChange(of: siriNavigation.selection?.identifier, initial: true) { _, identifier in
-            if identifier != nil { openWindow(id: "main") }
+        .onChange(of: siriNavigation.selection, initial: true) { _, selection in
+            if selection != nil { openWindow(id: "main") }
         }
         .defaultSize(width: 1100, height: 750)
         .commands {

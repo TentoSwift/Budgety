@@ -4,25 +4,16 @@ import SwiftUI
 
 @MainActor
 final class WatchSiriNavigation: ObservableObject {
-    struct Selection: Identifiable {
-        let id: String
-        let sheet: ExpenseSheet
-    }
-
     static let shared = WatchSiriNavigation()
-    @Published var selection: Selection?
+    @Published var selection: SiriSheetSelection?
     @Published var editingDraft = false
 
     func requestOpenExpense(identifier: String) throws {
-        let context = PersistenceController.shared.container.viewContext
-        let target = try SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
-        switch target {
-        case .stored(let expense):
-            guard let sheet = expense.sheet else { throw AppIntentError.expenseUnavailable }
-            selection = Selection(id: identifier, sheet: sheet)
-        case .virtual(_, let sheet, _):
-            selection = Selection(id: identifier, sheet: sheet)
-        }
+        selection = try SiriSheetSelection(.expense(identifier), in: PersistenceController.shared.container.viewContext)
+    }
+
+    func requestOpenSettlement(identifier: String) throws {
+        selection = try SiriSheetSelection(.settlement(identifier), in: PersistenceController.shared.container.viewContext)
     }
 }
 

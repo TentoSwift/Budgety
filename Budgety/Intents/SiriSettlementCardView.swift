@@ -4,6 +4,7 @@ import SwiftUI
 
 @available(iOS 27.3, macOS 27.3, *)
 struct SiriSettlementCardView: View {
+    let sheetID: String?
     let sheetName: String
     let sheetSymbol: String?
     let sheetColorHex: String?
@@ -13,12 +14,13 @@ struct SiriSettlementCardView: View {
     let missingRates: [String]
 
     init(result: SiriSettlementCardResult) {
-        self.init(sheetName: result.sheetName, sheetSymbol: result.sheetSymbol, sheetColorHex: result.sheetColorHex,
+        self.init(sheetID: result.sheetID, sheetName: result.sheetName, sheetSymbol: result.sheetSymbol, sheetColorHex: result.sheetColorHex,
                   period: result.period, title: "精算状況", rows: result.rows, missingRates: result.missingRates)
     }
 
-    init(sheetName: String, sheetSymbol: String?, sheetColorHex: String?, period: String,
+    init(sheetID: String? = nil, sheetName: String, sheetSymbol: String?, sheetColorHex: String?, period: String,
          title: LocalizedStringKey, rows: [SiriSettlementCardRow], missingRates: [String] = []) {
+        self.sheetID = sheetID
         self.sheetName = sheetName
         self.sheetSymbol = sheetSymbol
         self.sheetColorHex = sheetColorHex
@@ -35,6 +37,18 @@ struct SiriSettlementCardView: View {
     private var surface: Color { Color(white: colorScheme == .dark ? 0.10 : 0.98) }
 
     var body: some View {
+        if let sheetID {
+            Button(intent: SiriOpenSettlementIntent(sheetID: sheetID)) {
+                card.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Budgetyでこのシートの精算詳細を開きます")
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         ViewThatFits(in: .vertical) {
             ForEach((0...min(5, rows.count)).reversed(), id: \.self) { limit in
                 VStack(alignment: .leading, spacing: 8) {

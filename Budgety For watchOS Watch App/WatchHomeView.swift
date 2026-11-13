@@ -18,6 +18,7 @@ import UIKit
 struct WatchHomeView: View {
     private enum Route: Hashable {
         case sheet(NSManagedObjectID)
+        case settlement(NSManagedObjectID)
         case expense(sheet: NSManagedObjectID, identifier: String)
     }
     @Environment(\.managedObjectContext) private var ctx
@@ -83,6 +84,12 @@ struct WatchHomeView: View {
                             WatchSheetPage(sheet: sheet)
                         }
                     }
+                case .settlement(let id):
+                    if let sheet = sheets.first(where: { $0.objectID == id && !$0.isDeleted }) {
+                        WatchLockedSheetGate(sheet: sheet) {
+                            WatchSettlementView(sheet: sheet)
+                        }
+                    }
                 case .expense(let sheetID, let identifier):
                     if let sheet = try? ctx.existingObject(with: sheetID) as? ExpenseSheet {
                         WatchSiriExpenseDetail(identifier: identifier, sheet: sheet)
@@ -113,8 +120,8 @@ struct WatchHomeView: View {
             showShareToast(message)
         }
         .onAppear { restoreLastOpenedSheetIfNeeded() }
-        .onChange(of: siriNavigation.selection?.id, initial: true) { _, _ in openRequestedExpense() }
-        .onChange(of: siriNavigation.editingDraft) { _, _ in openRequestedExpense() }
+        .onChange(of: siriNavigation.selection, initial: true) { _, _ in openSiriSelection() }
+        .onChange(of: siriNavigation.editingDraft) { _, _ in openSiriSelection() }
         .onChange(of: sheets.count) { _, _ in restoreLastOpenedSheetIfNeeded() }
         .onChange(of: path) { oldPath, newPath in
             // 末尾のシート URI を覚えておき、次回起動時に復元する。
@@ -136,12 +143,16 @@ struct WatchHomeView: View {
         }
     }
 
-    private func openRequestedExpense() {
+    private func openSiriSelection() {
         guard !siriNavigation.editingDraft, let selection = siriNavigation.selection else { return }
-        let id = selection.sheet.objectID
-        didRestorePath = true
-        path = [.sheet(id), .expense(sheet: id, identifier: selection.id)]
         siriNavigation.selection = nil
+        guard let sheet = selection.currentSheet(in: ctx) else { return }
+        let id = sheet.objectID
+        didRestorePath = true
+        switch selection.destination {
+        case .expense(let identifier): path = [.sheet(id), .expense(sheet: id, identifier: identifier)]
+        case .settlement: path = [.sheet(id), .settlement(id)]
+        }
     }
 
     /// 前回開いていたシートへ起動時に 1 度だけ自動遷移する (iOS と同じ挙動)。

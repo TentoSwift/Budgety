@@ -5,10 +5,17 @@ import SwiftUI
 @MainActor
 extension DeepLinkRouter {
     func requestOpenExpense(identifier: String) throws {
-        let context = PersistenceController.shared.container.viewContext
-        _ = try SiriVirtualExpenseLink.resolve(identifier, access: IntentSheetAccess(checking: context))
-        pendingExpenseIdentifier = identifier
-        NotificationCenter.default.post(name: .expensoOpenExpense, object: nil)
+        try request(.expense(identifier))
+    }
+
+    func requestOpenSettlement(identifier: String) throws {
+        try request(.settlement(identifier))
+    }
+
+    private func request(_ destination: SiriSheetSelection.Destination) throws {
+        let selection = try SiriSheetSelection(destination, in: PersistenceController.shared.container.viewContext)
+        _ = consumePendingSheetIdentifier()
+        pendingSiriSelection = selection
     }
 }
 
