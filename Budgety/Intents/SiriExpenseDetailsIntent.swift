@@ -173,7 +173,7 @@ struct SiriListMemberQuery: SheetScopedMemberQuery {
 #endif
 struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
-    static let description = IntentDescription("「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。「カフェの出費」「寿司系で何円使った？」など業態別の支出は「お店の種類で支出を調べる」を使います。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
+    static let description = IntentDescription("1つの期間の明細と合計を表示します。「今月の収支を先月と比べて」など2か月の差額・比較は「今月の収支を先月と比較する」を使います。「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。「カフェの出費」「寿司系で何円使った？」など業態別の支出は「お店の種類で支出を調べる」を使います。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "表示通貨", description: "「ドルで表示して」はUSD。指定がなければシートの既定通貨で合計します。", optionsProvider: SiriCurrencyOptions())
@@ -202,6 +202,9 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
     @Parameter(title: "検索期間", description: "「今日の支出は？」は今日、「昨日」は昨日、「今月」は今月、「先月」は先月。期間指定がない一覧は今月、店名だけの検索は全期間を対象にします。")
     var period: SiriExpensePeriod?
 
+    @Parameter(title: "比較元の月", description: "2つの月の増減・比較を明示して質問された場合だけ指定します。単一期間の質問では省略します。")
+    var comparisonMonth: Date?
+
     @Parameter(title: "本文に全件を表示", description: "明細を全部・全件・すべて表示するよう明示された場合のみ有効にします。「全期間」は検索期間の指定です。")
     var showAllInReply: Bool?
 
@@ -225,8 +228,12 @@ struct SiriFindExpenseCardsIntent: AppIntent, SiriLedgerCurrencyParameters {
         let route = try await SiriExpenseLookup.spendingRoute(sheet: sheet, member: member, name: search, category: categoryName) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を検索しますか？")
         }
-        if SiriSpokenRankingRequest(search).isRanking || monthlyQuestion != nil || route.analysis {
+        if comparisonMonth != nil || SiriSpokenRankingRequest(search).isRanking || monthlyQuestion != nil || route.analysis {
             let analysis = SiriAnalyzeLedgerIntent()
+            if let comparisonMonth {
+                analysis.mode = .comparison
+                analysis.comparisonMonth = comparisonMonth
+            }
             analysis.sheet = route.sheet
             analysis.member = member
             analysis.name = search

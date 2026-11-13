@@ -191,6 +191,50 @@ enum SiriAnalysisReference: String, AppEnum {
 #if os(iOS) || os(macOS)
 @available(iOS 27.3, macOS 27.3, *)
 @AppIntent(.tool)
+struct SiriCompareMonthlySpendingIntent: AppIntent {
+    static let title: LocalizedStringResource = "今月の収支を先月と比較する"
+    static let description = IntentDescription("「今月の収支を先月と比べて」「先月より支出は増えた？」「先月と比べてどう？」「先月と比べて外食費は？」など、2か月の収支・収入・支出を比較する質問に答えます。増減額と両月の金額を表示します。",
+        searchKeywords: ["今月の収支を先月と比べて", "月の比較", "先月と比べて", "先月比", "前月比", "先月より増えた", "先月より減った"])
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "直前の集計", description: "前の回答と同じシート・対象・期間について続けて聞かれた場合に引き継ぎます。") var previous: SiriLedgerQuestionContext?
+    @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
+    @Parameter(title: "比較する収支", description: "「収支」「収入と支出」なら両方、「支出」または「収入」ならその種別。対象の指定がない続きの質問では省略。") var kind: SiriTransactionSelection?
+    @Parameter(title: "対象月", description: "「今月の収支を先月と比べて」の対象月は今月。「先月と比べて？」だけの続きの質問では省略します。") var month: Date?
+    @Parameter(title: "比較元の月", description: "明示した比較元の月。通常は対象月の前月です。") var comparisonMonth: Date?
+    @Parameter(title: "カテゴリ", description: "「食費を比較」なら食費。カテゴリを指定した場合だけ設定します。") var category: String?
+    @Parameter(title: "お店・明細名", description: "指定した店名・料理の種類など。対象の指定がないときは省略します。") var name: String?
+    @Parameter(title: "メンバー") var member: SiriSheetMemberEntity?
+    @Parameter(title: "表示通貨") var targetCurrency: String?
+    @Parameter(title: "通貨別で比較") var groupByOriginal: Bool?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<SiriLedgerQuestionContext> & ProvidesDialog & ShowsSnippetIntent {
+        let analysis = SiriAnalyzeLedgerIntent()
+        analysis.mode = .comparison
+        analysis.previous = previous
+        analysis.sheet = sheet
+        analysis.member = member
+        analysis.month = month
+        if month == nil, let previous,
+           try JSONDecoder().decode(SiriLedgerQuestion.self, from: Data(previous.criteria.utf8)).interval == nil {
+            // An all-time result has no preceding month. Keep its sheet and subject, then compare this month.
+            analysis.period = .thisMonth
+        }
+        analysis.comparisonMonth = comparisonMonth
+        analysis.category = category
+        analysis.name = name
+        analysis.kind = kind
+        analysis.targetCurrency = targetCurrency
+        analysis.groupByOriginal = groupByOriginal
+        let (report, context) = try await analysis.analyze()
+        return .result(value: context, dialog: IntentDialog("\(report.dialog)"),
+                       snippetIntent: SiriLedgerAnalysisSnippet(criteria: context.criteria))
+    }
+}
+
+@available(iOS 27.3, macOS 27.3, *)
+@AppIntent(.tool)
 struct SiriMerchantSpendingIntent: AppIntent {
     static let title: LocalizedStringResource = "お店の種類で支出を調べる"
     static let description = IntentDescription("「和食の出費」「今月の洋食はいくら？」「ハンバーガーにいくら使った？」「今月の外食はいくら？」「カフェの出費」「寿司系で何円使った？」など、料理やお店の種類ごとの支出の合計と該当する明細を返します。個別の明細の最高額や順位は集計のアクションで調べます。お店の種類・質問には利用者が指定した対象を必ず含めます。", searchKeywords: ["外食費", "和食", "洋食", "ハンバーガー", "カフェの出費", "寿司系", "お店の種類"])
@@ -231,7 +275,7 @@ struct SiriMerchantSpendingIntent: AppIntent {
 #endif
 struct SiriAnalyzeLedgerIntent: AppIntent {
     static let title: LocalizedStringResource = "明細の内訳・比較・換算を表示"
-    static let description = IntentDescription("「カフェの出費」「寿司系で何円使った？」のような業態別の支出には「お店の種類で支出を調べる」を使います。家計簿の集計方法を選び、合計、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「カフェで一番高い出費は？」「2番目に高い出費」「先月の食費で2番目に安いもの」「安い順に3件」「次に高いのは？」など金額の順位にも使います。「今年、食費が一番高かったのは何月？」「直近半年で食費が安かった月を3つ教えて」は、月ごとの合計を順位付けして、月と金額を返します。2つを一度に聞かれたら「月別順位の質問全文」に両方の質問を省略せずにそのまま渡します。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["何円使った", "いくら使った", "内訳", "換算", "比較", "何番目", "高い順", "安い順", "平均", "以外", "元の金額", "何月", "安かった月", "月別順位", "直近半年"])
+    static let description = IntentDescription("2か月の増減を尋ねる「今月の収支を先月と比べて」は「今月の収支を先月と比較する」を使います。「カフェの出費」「寿司系で何円使った？」のような業態別の支出には「お店の種類で支出を調べる」を使います。家計簿の集計方法を選び、合計、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「カフェで一番高い出費は？」「2番目に高い出費」「先月の食費で2番目に安いもの」「安い順に3件」「次に高いのは？」など金額の順位にも使います。「今年、食費が一番高かったのは何月？」「直近半年で食費が安かった月を3つ教えて」は、月ごとの合計を順位付けして、月と金額を返します。2つを一度に聞かれたら「月別順位の質問全文」に両方の質問を省略せずにそのまま渡します。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["何円使った", "いくら使った", "内訳", "換算", "比較", "何番目", "高い順", "安い順", "平均", "以外", "元の金額", "何月", "安かった月", "月別順位", "直近半年"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     @Parameter(title: "直前の集計", description: "「そのうち」「それを除くと」「ドルで表示して」など同じ対象について続けて聞かれた場合、前の回答が返した集計条件。") var previous: SiriLedgerQuestionContext?
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
@@ -326,6 +370,9 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             || group != nil && (rank != nil || limit != nil && sort != nil) && (mode == nil || mode == .total || mode == .transactions))
         let resolvedMode: SiriAnalysisMode?
         if first != nil || secondSpecified { resolvedMode = .month }
+        else if mode == .comparison || (mode != .categoryIncrease && (comparisonMonth != nil || comparisonStart != nil || comparisonEnd != nil)) {
+            resolvedMode = .comparison
+        }
         else if namedRanking { resolvedMode = .transactions }
         else { resolvedMode = mode ?? (wantsSpending ? .total : nil) }
         let requestedRank = rank ?? (limit == nil ? first?.rank ?? spoken.rank : nil)
@@ -361,7 +408,11 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             q.period = scope.label
         }
         if let resolvedMode { q.mode = resolvedMode.rawValue }
-        if let selection = kind ?? first?.kind ?? spoken.kind ?? (wantsSpending ? .expense : nil) { q.kind = selection.rawValue }
+        let comparisonDefault: SiriTransactionSelection? = resolvedMode == .comparison && inherited == nil
+            ? (filters.name != nil || filters.category != nil ? .expense : .both) : nil
+        if let selection = kind ?? first?.kind ?? spoken.kind ?? comparisonDefault ?? (wantsSpending && resolvedMode != .comparison ? .expense : nil) {
+            q.kind = selection.rawValue
+        }
         q.category = (categoryIsQuestion ? nil : category) ?? first?.category ?? (first?.kind == nil ? q.category : nil)
         if !spoken.isRanking, (first == nil || monthlyQuestion != nil), let name, name != monthlyQuestion {
             // Siri sometimes copies the category (or the entire question) into the merchant field as well.
