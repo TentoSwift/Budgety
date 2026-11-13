@@ -35,7 +35,7 @@ enum SiriTransactionCategoryIcon {
     }
 
     #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-    static func deferredImage(symbol: String, colorHex: String) -> DisplayRepresentation.Image {
+    static func thumbnail(symbol: String, colorHex: String) -> DisplayRepresentation.Image {
         guard let data = file(symbol: symbol, colorHex: colorHex)?.data, !data.isEmpty else {
             return image(nil, symbol: symbol)
         }
@@ -100,7 +100,7 @@ struct SiriListedTransactionEntity: AppEntity {
         let symbol = categorySymbol
         let color = categoryColorHex
         return DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)", image: {
-            await SiriTransactionCategoryIcon.deferredImage(symbol: symbol, colorHex: color)
+            await SiriTransactionCategoryIcon.thumbnail(symbol: symbol, colorHex: color)
         })
         #else
         DisplayRepresentation(title: "\(title)", subtitle: "\(date) · \(amount)",
@@ -116,8 +116,13 @@ struct SiriListedTransactionQuery: EntityQuery {
     func displayRepresentations(for identifiers: [String]) async throws -> [String: DisplayRepresentation] {
         SiriCompactExperimentDiagnostics.record(.displayQueryRequested)
         let resolved = try await entities(for: identifiers)
+        // Siri can re-fetch visible rows without evaluating a deferred image.
+        // Supply the bitmap directly for the IDs in this display-only request.
         return resolved.reduce(into: [:]) { representations, entity in
-            representations[entity.id] = entity.displayRepresentation
+            let image = SiriTransactionCategoryIcon.thumbnail(symbol: entity.categorySymbol, colorHex: entity.categoryColorHex)
+            representations[entity.id] = DisplayRepresentation(
+                title: "\(entity.title)", subtitle: "\(entity.date) · \(entity.amount)", image: image
+            )
         }
     }
     #endif
@@ -427,7 +432,7 @@ nonisolated enum SiriCompactExperimentDiagnostics {
     nonisolated static func record(_ event: Event) {
         let manager = FileManager.default
         guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
-        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v3", isDirectory: true)
+        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v4", isDirectory: true)
         let file = directory.appendingPathComponent(event.rawValue + ".json")
         guard !manager.fileExists(atPath: file.path) else { return }
         do {
