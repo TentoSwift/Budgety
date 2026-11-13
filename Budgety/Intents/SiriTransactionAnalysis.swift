@@ -100,12 +100,26 @@ struct SiriAnalysisReport {
         case member(name: String, colorHex: String, photo: Data?, isVirtual: Bool)
     }
 
+    struct PeriodComparison {
+        struct Metric {
+            let title: String
+            let prior: String
+            let current: String
+        }
+        let currency: String
+        let priorLabel: String
+        let currentLabel: String
+        let headline: String
+        let metrics: [Metric]
+    }
+
     struct Row {
         var title: String
         var value: String
         var detail: String?
         var transactionID: String?
         var artwork: Artwork?
+        var comparison: PeriodComparison?
     }
 
     struct Section {
@@ -135,6 +149,15 @@ struct SiriAnalysisReport {
     var dialog: String {
         if let filteredTotalDialog {
             return [filteredTotalDialog, note].compactMap { $0 }.joined(separator: "\n")
+        }
+        if let first = rows.first?.comparison {
+            let multiple = matchingRowCount > 1
+            let summary = multiple ? rows.compactMap { row in
+                row.comparison.map { "\($0.currency)・\($0.headline)" }
+            }.joined(separator: "\n") : first.headline
+            let remaining = omittedRowCount(displayedCount: rows.count)
+            let more = remaining > 0 ? String(localized: "ほか\(remaining)通貨") : nil
+            return [summary, scope, more, note].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
         }
         if !sections.isEmpty {
             let answers = sections.map { [$0.summary, $0.note].compactMap { $0 }.joined(separator: " ") }
@@ -357,7 +380,7 @@ enum SiriTransactionAnalysis {
                        request.excludedCategory.map { String(localized: "「\($0)」以外") },
                        omittedID == nil ? nil : String(localized: "指定の明細を除く"),
                        selectedID == nil ? nil : String(localized: "指定の明細のみ")].compactMap { $0 }.filter { !$0.isEmpty }
-        let context = [stored.displayName] + (request.ranksMonthsByAmount ? [] : [scope.label]) + filters
+        let context = [stored.displayName] + (request.ranksMonthsByAmount || request.mode == .comparison ? [] : [scope.label]) + filters
         let current = try entries(in: scope.interval)
         let previous = try compares ? entries(in: comparison?.interval) : []
         var report = summarize(current: current, previous: previous, target: target,
@@ -593,8 +616,10 @@ enum SiriTransactionAnalysis {
             let shown: [Entry]
             if let rank = request.rank {
                 shown = rank <= ordered.count ? [ordered[rank - 1]] : []
-                if amountOrder {
-                    notes.append(String(localized: "同額は日付が新しい順、同日なら明細ID順で1件ずつ数えます。"))
+                if amountOrder, let selected = shown.first {
+                    let amount = canRankOriginal ? selected.value.original : selected.value.converted
+                    let tied = ordered.contains { $0.identifier != selected.identifier && (canRankOriginal ? $0.value.original : $0.value.converted) == amount }
+                    if tied { notes.append(String(localized: "同額の明細は新しい日付を優先しました。")) }
                 }
             } else {
                 shown = Array(ordered.prefix(request.limit ?? ordered.count))
@@ -605,7 +630,7 @@ enum SiriTransactionAnalysis {
             report.matchingRowCount = ordered.count
             report.summary = ordered.isEmpty ? String(localized: "該当する明細はありません。")
                 : (shown.count == ordered.count ? String(localized: "\(shown.count)件") : String(localized: "\(ordered.count)件中\(shown.count)件"))
-            if let rank = request.rank {
+            if let rank = request.rank, !ordered.isEmpty {
                 report.summary = rankSummary(rank: rank, count: ordered.count, sort: order, found: !shown.isEmpty)
             }
             if request.mode == .exchangeRates, let date = FXRatesService.shared.lastRateDate {
@@ -616,9 +641,13 @@ enum SiriTransactionAnalysis {
             if let comparison {
                 report.summary = comparison.label + " → " + scope.label
                 let rows = comparisons(entries, prior: prior, target: target, request: request, display: display,
-                                       currentLabel: scope.label, priorLabel: comparison.label)
+                                       currentScope: scope, priorScope: comparison, now: now, calendar: calendar,
+                                       incompleteThreshold: threshold && !missing.isEmpty)
                 report.matchingRowCount = rows.count
                 report.rows = Array(rows.prefix(request.limit ?? rows.count))
+                if request.mode == .comparison, let first = report.rows.first?.comparison {
+                    report.summary = rows.count == 1 ? first.headline : String(localized: "通貨別の期間比較")
+                }
                 if report.rows.isEmpty && request.mode == .categoryIncrease {
                     report.summary += "\n" + String(localized: "比較できたカテゴリに増加はありません。")
                 }
@@ -844,8 +873,57 @@ enum SiriTransactionAnalysis {
         return orderedRows(ranked, request: request, fallback: [.day, .month].contains(request.mode) ? .oldest : .highest)
     }
 
+    private static func periodComparison(from before: Totals, to after: Totals, priorScope: SiriExpenseScope,
+                                         currentScope: SiriExpenseScope, kind: SiriTransactionSelection, code: String,
+                                         now: Date, calendar: Calendar, incompleteThreshold: Bool) -> SiriAnalysisReport.PeriodComparison {
+        func periodLabel(_ scope: SiriExpenseScope) -> String {
+            guard let interval = scope.interval else { return scope.label }
+            if calendar.dateInterval(of: .month, for: interval.start) == interval {
+                let dateStyle = Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
+                let style = calendar.isDate(interval.start, equalTo: now, toGranularity: .year)
+                    ? dateStyle.month(.wide) : dateStyle.year().month(.wide)
+                return interval.start.formatted(style)
+            }
+            return scope.label
+        }
+        let prior = periodLabel(priorScope)
+        let current = periodLabel(currentScope)
+        let currentMonth = calendar.dateInterval(of: .month, for: now)
+        let previousMonth = calendar.date(byAdding: .month, value: -1, to: now).flatMap { calendar.dateInterval(of: .month, for: $0) }
+        let isCurrentMonth = currentScope.interval == currentMonth
+        let relativePrior = isCurrentMonth && priorScope.interval == previousMonth ? String(localized: "先月") : prior
+        let label: String = switch kind {
+        case .both: String(localized: "収支")
+        case .expense: String(localized: "支出")
+        case .income: String(localized: "収入")
+        }
+        let subject = isCurrentMonth ? label : String(localized: "\(current)の\(label)")
+        let delta = after.measure(kind) - before.measure(kind)
+        let amount = money(abs(delta), code, presentation: .fullName)
+        let headline: String
+        if before.missing > 0 || after.missing > 0 || incompleteThreshold {
+            headline = String(localized: "\(subject)は換算できない明細があり、増減を確定できません。")
+        } else if delta == 0 {
+            headline = String(localized: "\(subject)は\(relativePrior)と同額です。")
+        } else if kind == .both {
+            headline = delta > 0 ? String(localized: "\(subject)は\(relativePrior)より\(amount)改善しました。")
+                : String(localized: "\(subject)は\(relativePrior)より\(amount)悪化しました。")
+        } else {
+            headline = delta > 0 ? String(localized: "\(subject)は\(relativePrior)より\(amount)増えました。")
+                : String(localized: "\(subject)は\(relativePrior)より\(amount)減りました。")
+        }
+        let selections: [(SiriTransactionSelection, String)] = kind == .both
+            ? [(.both, label), (.income, String(localized: "収入")), (.expense, String(localized: "支出"))] : [(kind, label)]
+        let metrics = selections.map { selection, title in
+            SiriAnalysisReport.PeriodComparison.Metric(title: title, prior: before.amountText(selection, code: code, presentation: .standard),
+                                                       current: after.amountText(selection, code: code, presentation: .standard))
+        }
+        return .init(currency: code, priorLabel: prior, currentLabel: current, headline: headline, metrics: metrics)
+    }
+
     private static func comparisons(_ entries: [Entry], prior: [Entry], target: String, request: SiriAnalysisRequest,
-                                    display: (Entry) -> String, currentLabel: String, priorLabel: String) -> [SiriAnalysisReport.Row] {
+                                    display: (Entry) -> String, currentScope: SiriExpenseScope, priorScope: SiriExpenseScope,
+                                    now: Date, calendar: Calendar, incompleteThreshold: Bool) -> [SiriAnalysisReport.Row] {
         let byCategory = request.mode == .categoryIncrease
         let original = request.groupByOriginal
         func buckets(_ items: [Entry]) -> [Bucket: [Entry]] {
@@ -875,10 +953,16 @@ enum SiriTransactionAnalysis {
                 }
                 change = text
             } else { change = String(localized: "増減は不明") }
-            let detail = "\(priorLabel) \(b.formatted(request.kind, code: key.code)) → \(currentLabel) \(a.formatted(request.kind, code: key.code))"
-            let label = byCategory ? key.group.label : String(localized: "\(key.code)の増減")
-            let row = SiriAnalysisReport.Row(title: label, value: change, detail: detail,
-                                             artwork: byCategory ? (newItems.first ?? oldItems.first)?.categoryArtwork : nil)
+            let row: SiriAnalysisReport.Row
+            if byCategory {
+                let detail = "\(priorScope.label) \(b.formatted(request.kind, code: key.code)) → \(currentScope.label) \(a.formatted(request.kind, code: key.code))"
+                row = .init(title: key.group.label, value: change, detail: detail,
+                            artwork: (newItems.first ?? oldItems.first)?.categoryArtwork)
+            } else {
+                let comparison = periodComparison(from: b, to: a, priorScope: priorScope, currentScope: currentScope,
+                    kind: request.kind, code: key.code, now: now, calendar: calendar, incompleteThreshold: incompleteThreshold)
+                row = .init(title: comparison.headline, value: "", comparison: comparison)
+            }
             // Compare magnitudes across original currencies only after valuing them in a single currency.
             let convertedA = original ? totals(newItems, original: false) : a
             let convertedB = original ? totals(oldItems, original: false) : b

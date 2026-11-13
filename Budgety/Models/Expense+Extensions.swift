@@ -349,7 +349,91 @@ extension Expense {
 struct TransactionSearchTerm {
     private let key: String
     private var alternativeKeys: [String] = []
+    private var merchantGroup: String?
     var isEmpty: Bool { key.isEmpty }
+
+    nonisolated enum FoodGroup: String, CaseIterable {
+        case japanese = "和食", western = "洋食", chinese = "中華料理", italian = "イタリアン"
+        case french = "フレンチ", korean = "韓国料理", indian = "インド料理"
+        case hamburger = "ハンバーガー", diningOut = "外食"
+
+        var includedGroups: Set<Self> {
+            switch self {
+            case .diningOut: Set(Self.allCases)
+            case .western: [.western, .italian, .french, .hamburger]
+            default: [self]
+            }
+        }
+
+        var labels: [String] {
+            switch self {
+            case .japanese: ["和食", "日本料理", "日本食", "わしょく"]
+            case .western: ["洋食", "西洋料理", "ようしょく"]
+            case .chinese: ["中華料理", "中華", "中国料理", "町中華"]
+            case .italian: ["イタリアン", "イタリア料理"]
+            case .french: ["フレンチ", "フランス料理"]
+            case .korean: ["韓国料理", "韓国グルメ"]
+            case .indian: ["インド料理", "インドカレー"]
+            case .hamburger: ["ハンバーガー", "バーガー", "ハンバーガーショップ", "hamburger", "burger"]
+            case .diningOut: ["外食", "外食費", "飲食店", "店内飲食", "外での食事"]
+            }
+        }
+
+        var restaurants: [String] {
+            switch self {
+            case .japanese: ["大戸屋", "やよい軒", "すき家", "吉野家", "松屋", "なか卯", "丸亀製麺", "はなまるうどん", "和食さと", "とんかつ和幸", "しゃぶ葉", "日本料理店", "そば屋"]
+            case .western: ["たいめいけん", "びっくりドンキー", "いきなりステーキ", "洋食屋"]
+            case .chinese: ["餃子の王将", "大阪王将", "バーミヤン", "日高屋", "紅虎餃子房", "中国飯店"]
+            case .italian: ["サイゼリヤ", "サイゼリア", "カプリチョーザ", "ジョリーパスタ", "鎌倉パスタ", "ピッツェリア", "トラットリア"]
+            case .french: ["フレンチレストラン", "ブラッスリー", "ビストロ", "ジョエル・ロブション"]
+            case .korean: ["韓国食堂", "韓国料理店", "韓国屋台", "妻家房"]
+            case .indian: ["インド料理店", "インドレストラン", "エリックサウス"]
+            case .hamburger: ["マクドナルド", "マクド", "mcdonald", "モスバーガー", "mos burger", "バーガーキング", "burger king", "フレッシュネスバーガー", "ロッテリア", "ゼッテリア", "シェイクシャック", "shake shack"]
+            case .diningOut: ["レストラン", "食堂", "居酒屋", "焼肉店", "牛角", "ラーメン店", "ラーメン屋", "ファミレス", "ガスト", "ロイヤルホスト", "デニーズ", "大衆酒場"]
+            }
+        }
+
+        var dishes: [String] {
+            switch self {
+            case .japanese: ["天ぷら", "天麩羅", "とんかつ", "親子丼", "牛丼", "蕎麦", "うどん", "刺身", "焼き魚", "懐石", "会席料理"]
+            case .western: ["オムライス", "ハンバーグ", "ビーフシチュー", "ハヤシライス", "グラタン"]
+            case .chinese: ["麻婆豆腐", "回鍋肉", "青椒肉絲", "小籠包", "餃子", "炒飯"]
+            case .italian: ["パスタ", "ピッツァ", "ピザ", "リゾット"]
+            case .french: ["ブイヤベース", "フランス料理"]
+            case .korean: ["ビビンバ", "サムギョプサル", "スンドゥブ", "チヂミ"]
+            case .indian: ["タンドリーチキン", "ビリヤニ"]
+            case .hamburger: ["ビッグマック", "チーズバーガー", "てりやきバーガー"]
+            case .diningOut: []
+            }
+        }
+    }
+
+    private static let sushiKeys = ["寿司", "寿し", "鮨", "鮓", "京樽", "銚子丸", "すしざんまい", "すしランチ", "すし屋", "回転すし", "にぎりすし", "手巻きすし", "元気すし", "すし食いねぇ"] + sushiMerchants.values.flatMap { $0 }
+    private static let cafeKeys = ["カフェ", "喫茶", "cafe", "café", "coffee shop", "coffeehouse", "スターバックス", "スタバ", "starbucks", "ドトール", "doutor", "タリーズ", "tully", "コメダ", "komeda", "サンマルクカフェ", "エクセルシオール", "ベローチェ", "ヴェローチェ", "星乃珈琲"]
+    private static let foodAliases: [String: FoodGroup] = {
+        var aliases: [String: FoodGroup] = [:]
+        for group in FoodGroup.allCases {
+            for label in group.labels { aliases[normalized(label)] = group }
+        }
+        return aliases
+    }()
+
+    // Precompute these once; ledger searches can visit years of rows.
+    private static let foodKeys: [FoodGroup: [String]] = Dictionary(uniqueKeysWithValues: FoodGroup.allCases.map { group in
+        var words = group.labels
+        for included in group.includedGroups {
+            words += included.restaurants
+            if group != .diningOut { words += included.labels + included.dishes }
+        }
+        if group == .japanese || group == .diningOut { words += sushiKeys }
+        if group == .diningOut { words += cafeKeys }
+        return (group, Array(Set(words.map(normalized))))
+    })
+    private static let nonFood = ["食器", "への電車", "電車代", "乗車券", "交通費", "定期券", "家具", "家賃", "光熱費", "水道代", "電気代", "通信費", "クリーニング", "Tシャツ", "キーホルダー", "ぬいぐるみ", "洋服", "ゲームソフト", "クスリのアオキ", "ドラッグストア"].map(normalized)
+    private static let notDining = ["テイクアウト", "テークアウト", "持ち帰り", "持帰り", "持帰", "デリバリー", "出前", "宅配", "ウーバーイーツ", "uber eats", "自炊", "食材", "スーパーで", "コンビニで", "冷凍", "おうちごはん", "食パン", "弁当持参"].map(normalized)
+    private static let unspecifiedFood = Set(["食費", "昼食", "ランチ", "お昼", "朝食", "夕食", "晩ごはん", "ディナー", "ごはん", "食事", "飲食", "買い物"].map(normalized))
+    private static let retail = ["コンビニ", "スーパー", "ローソン", "ファミリーマート", "ファミマ", "セブンイレブン", "セブン-イレブン", "デイリーヤマザキ", "デイリーヤマサキ"].map(normalized)
+
 
     init(_ text: String) {
         key = Self.normalized(text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -360,15 +444,15 @@ struct TransactionSearchTerm {
         var term = Self(text)
         guard !term.isEmpty else { return term }
         if let group = spendingGroup(text) {
-            switch group {
-            case "寿司系":
-                term.alternativeKeys = ["寿司", "スシ", "鮨", "鮓"] + sushiMerchants.values.flatMap { $0 }
-            case "カフェ":
-                term.alternativeKeys = ["カフェ", "喫茶", "cafe", "café", "coffee shop", "coffeehouse",
-                                        "スターバックス", "スタバ", "starbucks", "ドトール", "doutor", "タリーズ", "tully",
-                                        "コメダ", "komeda", "サンマルクカフェ", "エクセルシオール", "ベローチェ", "ヴェローチェ", "星乃珈琲"]
-            default:
-                term.alternativeKeys = [normalized(String(group.dropLast()))]
+            term.merchantGroup = group
+            if let food = FoodGroup(rawValue: group) {
+                term.alternativeKeys = foodKeys[food] ?? []
+            } else {
+                switch group {
+                case "寿司系": term.alternativeKeys = sushiKeys.map(normalized)
+                case "カフェ": term.alternativeKeys = cafeKeys.map(normalized)
+                default: term.alternativeKeys = [normalized(String(group.dropLast()))]
+                }
             }
         } else if let selection = sushiMerchantList(text) {
             term.alternativeKeys = selection.names.flatMap { sushiMerchants[$0] ?? [] }
@@ -416,6 +500,8 @@ struct TransactionSearchTerm {
     /// Only an open group asks the on-device model for additional merchant names.
     static func spendingGroup(_ text: String?) -> String? {
         guard let term = text?.trimmingCharacters(in: .whitespacesAndNewlines), !term.isEmpty else { return nil }
+        let name = term.hasSuffix("系") ? String(term.dropLast()) : term
+        if let food = foodAliases[normalized(name)] { return food.rawValue }
         if sushiSubject(term) == "寿司系" { return "寿司系" }
         switch normalized(term) {
         case "カフェ", "カフェ系", "喫茶", "喫茶店", "喫茶店系", "cafe", "café", "coffee shop", "coffee shops": return "カフェ"
@@ -424,13 +510,38 @@ struct TransactionSearchTerm {
     }
 
     static func isKnownUnrelatedMerchant(_ title: String, for group: String) -> Bool {
-        let other: String
-        switch group {
-        case "カフェ": other = "寿司系"
-        case "寿司系": other = "カフェ"
-        default: return false
+        let key = normalized(title)
+        if unspecifiedFood.contains(key) || nonFood.contains(where: key.contains) { return true }
+        // Several unrelated retailers share the phonetic name マツヤ. A receipt in kana alone
+        // cannot identify the 松屋 restaurant. An explicit dish or category can still match.
+        if key == "マツヤ" || key.hasPrefix("マツヤ ") || key.hasPrefix("マツヤ　") { return true }
+        if group == "寿司系" { return true } // A sushi total needs explicit evidence in the title or category.
+        if group == FoodGroup.diningOut.rawValue && notDining.contains(where: key.contains) { return true }
+        if retail.contains(where: key.contains) { return true }
+        let allowed = FoodGroup(rawValue: group)?.includedGroups ?? []
+        if !allowed.contains(.diningOut), FoodGroup.diningOut.restaurants.contains(where: { key.contains(normalized($0)) }),
+           !ledgerName(group).matches(title) { return true }
+        if FoodGroup.allCases.contains(where: { food in
+            food != .diningOut && !allowed.contains(food) && (foodKeys[food] ?? []).contains(where: key.contains)
+        }) { return !ledgerName(group).matches(title) }
+        if group == "カフェ" { return ledgerName("寿司系").matches(title) }
+        return false
+    }
+
+    /// Recheck a stored model selection against this row on every read, including older Siri cards.
+    func matchesLedgerRow(title: String, category: String, relatedTitles: Set<String> = []) -> Bool {
+        if let group = merchantGroup {
+            let titleKey = Self.normalized(title), categoryKey = Self.normalized(category)
+            if Self.nonFood.contains(where: titleKey.contains) || Self.nonFood.contains(where: categoryKey.contains) { return false }
+            if group == FoodGroup.diningOut.rawValue && (Self.notDining.contains(where: titleKey.contains)
+                || Self.notDining.contains(where: categoryKey.contains) || Self.retail.contains(where: titleKey.contains)) { return false }
+            if group == "寿司系" {
+                return matches(title) || matches(category) || titleKey == "スシ" || categoryKey == "スシ"
+            }
+            if matches(title) || matches(category) { return true }
+            return relatedTitles.contains(title) && !Self.isKnownUnrelatedMerchant(title, for: group)
         }
-        return ledgerName(other).matches(title) && !ledgerName(group).matches(title)
+        return matches(title) || matches(category)
     }
 
     func matches(_ value: String) -> Bool {
@@ -443,14 +554,14 @@ struct TransactionSearchTerm {
     }
 
     func matchesNameOrCategory(of expense: Expense) -> Bool {
-        matches(expense.displayTitle) || matches(expense.categoryDisplayName)
+        matchesLedgerRow(title: expense.displayTitle, category: expense.categoryDisplayName)
     }
 
     func matchesNameOrCategory(of occurrence: RecurringOccurrence) -> Bool {
-        matches(occurrence.title) || matches(occurrence.categoryDisplayName)
+        matchesLedgerRow(title: occurrence.title, category: occurrence.categoryDisplayName)
     }
 
-    private static func normalized(_ text: String) -> String {
+    nonisolated private static func normalized(_ text: String) -> String {
         let folded = text.precomposedStringWithCanonicalMapping.folding(options: [.caseInsensitive, .widthInsensitive], locale: Locale(identifier: "ja_JP"))
         return folded.applyingTransform(.hiraganaToKatakana, reverse: false) ?? folded
     }

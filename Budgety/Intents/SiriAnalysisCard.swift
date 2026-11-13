@@ -13,7 +13,9 @@ struct SiriAnalysisCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if report.sections.isEmpty {
+            if report.rows.first?.comparison != nil {
+                periodComparisons
+            } else if report.sections.isEmpty {
                 standardContent
             } else {
                 monthlyRankings
@@ -23,6 +25,59 @@ struct SiriAnalysisCard: View {
         .padding()
         .foregroundStyle(primaryInk)
         .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder private var periodComparisons: some View {
+        Text(verbatim: report.scope).font(.caption).foregroundStyle(secondaryInk)
+        ForEach(0..<report.rows.count, id: \.self) { index in
+            if let comparison = report.rows[index].comparison {
+                if index > 0 { Divider() }
+                if report.matchingRowCount > 1 { Text(verbatim: comparison.currency).font(.caption.bold()) }
+                Text(verbatim: comparison.headline).font(.headline).accessibilityAddTraits(.isHeader)
+                ViewThatFits(in: .horizontal) {
+                    Grid(alignment: .trailing, horizontalSpacing: 12, verticalSpacing: 4) {
+                        GridRow {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]).accessibilityHidden(true)
+                            Text(verbatim: comparison.priorLabel)
+                            Text(verbatim: comparison.currentLabel)
+                        }
+                        .font(.caption).foregroundStyle(secondaryInk)
+                        ForEach(0..<comparison.metrics.count, id: \.self) { i in
+                            let metric = comparison.metrics[i]
+                            GridRow {
+                                Text(verbatim: metric.title).gridColumnAlignment(.leading)
+                                Text(verbatim: metric.prior)
+                                Text(verbatim: metric.current)
+                            }
+                            .font(.subheadline.weight(i == 0 ? .semibold : .regular))
+                        }
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach([false, true], id: \.self) { isCurrent in
+                            Text(verbatim: isCurrent ? comparison.currentLabel : comparison.priorLabel).font(.caption).foregroundStyle(secondaryInk)
+                            ForEach(0..<comparison.metrics.count, id: \.self) { i in
+                                let metric = comparison.metrics[i]
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(verbatim: metric.title)
+                                    Spacer(minLength: 3)
+                                    Text(verbatim: isCurrent ? metric.current : metric.prior)
+                                }
+                                .font(.subheadline.weight(i == 0 ? .semibold : .regular))
+                            }
+                        }
+                    }
+                }
+                .monospacedDigit()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: comparison.metrics.map {
+                    "\($0.title)、\(comparison.priorLabel) \($0.prior)、\(comparison.currentLabel) \($0.current)"
+                }.joined(separator: "。")))
+            }
+        }
+        let remaining = report.omittedRowCount(displayedCount: report.rows.count)
+        if remaining > 0 { Text("ほか\(remaining)通貨").font(.caption).foregroundStyle(secondaryInk) }
+        if let note = report.note { Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk) }
     }
 
     @ViewBuilder private var standardContent: some View {

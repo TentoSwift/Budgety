@@ -212,7 +212,7 @@ struct SiriTransactionLedger {
     /// Give the on-device model only unresolved names from readable transactions in this scope.
     static func relatedMerchantNames(for group: String, sheet: ExpenseSheet, access: IntentSheetAccess,
                                      interval: DateInterval?, includeExpenses: Bool, includeIncome: Bool) async throws -> Set<String> {
-        guard LedgerMerchantClassifier.isAvailable, TransactionSearchTerm.spendingGroup(group) != nil else { return [] }
+        guard group != "寿司系", LedgerMerchantClassifier.isAvailable, TransactionSearchTerm.spendingGroup(group) != nil else { return [] }
         let term = TransactionSearchTerm.ledgerName(group)
         var dates: [String: Date] = [:]
         try forEach(sheet: sheet, access: access, interval: interval, includeExpenses: includeExpenses, includeIncome: includeIncome) { item, _ in
@@ -254,10 +254,10 @@ struct SiriTransactionLedger {
             switch item {
             case .expense(let row):
                 guard category.isEmpty || category.matchesCategory(row.categoryDisplayName),
-                      term.isEmpty || term.matchesNameOrCategory(of: row) || relatedMerchantNames.contains(row.displayTitle) else { return }
+                      term.isEmpty || term.matchesLedgerRow(title: row.displayTitle, category: row.categoryDisplayName, relatedTitles: relatedMerchantNames) else { return }
             case .occurrence(let occurrence):
                 guard category.isEmpty || category.matchesCategory(occurrence.categoryDisplayName),
-                      term.isEmpty || term.matchesNameOrCategory(of: occurrence) || relatedMerchantNames.contains(occurrence.title) else { return }
+                      term.isEmpty || term.matchesLedgerRow(title: occurrence.title, category: occurrence.categoryDisplayName, relatedTitles: relatedMerchantNames) else { return }
             }
             let source = item.currencyCode.uppercased()
             guard currency.sourceCurrency.map({ $0 == source }) ?? true, !currency.foreignOnly || source != base else { return }

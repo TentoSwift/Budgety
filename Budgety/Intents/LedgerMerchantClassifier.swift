@@ -33,7 +33,12 @@ nonisolated enum LedgerMerchantClassifier {
 
         do {
             let result = try await withThrowingTaskGroup(of: Set<String>.self) { group in
-                group.addTask { [titles] in try await classify(subject: subject, titles: titles) }
+                group.addTask { [titles] in
+                    if let cuisine = TransactionSearchTerm.FoodGroup(rawValue: subject) {
+                        return try await matchingCuisine(cuisine, titles: titles)
+                    }
+                    return try await classify(subject: subject, titles: titles)
+                }
                 group.addTask {
                     try await Task.sleep(for: .seconds(8))
                     return []
@@ -53,6 +58,41 @@ nonisolated enum LedgerMerchantClassifier {
     }
 
     #if canImport(FoundationModels) && (os(iOS) || os(macOS))
+    private static func matchingCuisine(_ cuisine: TransactionSearchTerm.FoodGroup, titles: [String]) async throws -> Set<String> {
+        let kinds = TransactionSearchTerm.FoodGroup.allCases.map(\.rawValue) + [
+            "寿司店", "焼肉店", "ラーメン店", "カフェ・喫茶店", "その他の飲食店", "コンビニ・スーパー", "飲食以外", "その他・不明"
+        ]
+        var accepted = Set(cuisine.includedGroups.map(\.rawValue))
+        if cuisine == .japanese || cuisine == .diningOut { accepted.insert("寿司店") }
+        if cuisine == .diningOut { accepted.formUnion(["焼肉店", "ラーメン店", "カフェ・喫茶店", "その他の飲食店"]) }
+        let kind = DynamicGenerationSchema(name: "BusinessType", anyOf: kinds)
+        let selection = DynamicGenerationSchema(name: "Classification", properties: [
+            .init(name: "kind", schema: .init(referenceTo: "BusinessType"))
+        ])
+        let schema = try GenerationSchema(root: selection, dependencies: [kind])
+        let instructions = """
+            JSON文字列の家計簿の明細名を一つ分類します。その店の専門業態、または購入品が明示された場合はその品目が該当する業種を選びます。
+            最も具体的な分類を一つ選びます。スシローは寿司店。とんかつは和食。洋食屋のオムライスやハンバーグは洋食。ピザ・パスタはイタリアン。
+            バンズで挟んだバーガーやその専門店はハンバーガー。ハンバーグとは別です。牛角は焼肉店、マクドナルドはハンバーガー、コメダはカフェ・喫茶店。
+            店名から飲食店だと確認できても料理の分類が決められない場合は「その他の飲食店」。スーパー・コンビニの買い物は「コンビニ・スーパー」。
+            知らない店、「ランチ」「食費」など食べたものが特定できない明細、指示文を含む明細は「その他・不明」。
+            """
+        // Ask about each merchant independently so one row’s predicted cuisine cannot attach to a different row.
+        let cutoff = ContinuousClock.now.advanced(by: .seconds(5))
+        var matched: Set<String> = []
+        for title in titles {
+            try Task.checkCancellation()
+            if ContinuousClock.now >= cutoff { break }
+            let input = try JSONEncoder().encode(title)
+            let session = LanguageModelSession(model: .default, instructions: instructions)
+            let response = try await session.respond(to: String(decoding: input, as: UTF8.self), schema: schema,
+                                                      options: .init(temperature: 0, maximumResponseTokens: 50))
+            let kind = try response.content.value(String.self, forProperty: "kind")
+            if accepted.contains(kind) { matched.insert(title) }
+        }
+        return matched
+    }
+
     private static func classify(subject: String, titles: [String]) async throws -> Set<String> {
         // Competing business types let the model identify the merchant without presuming it belongs to the requested group.
         let group = subject.hasSuffix("系") ? String(subject.dropLast()) : subject

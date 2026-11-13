@@ -99,7 +99,7 @@ struct SiriSpokenSpendingRequest {
         if TransactionSearchTerm.spendingGroup(name) != nil || TransactionSearchTerm.spendingGroup(category) != nil
             || TransactionSearchTerm.sushiSubject(category) == "寿司" { return true }
         return [name, category].compactMap { $0 }.contains {
-            Self($0) != nil || TransactionSearchTerm.sushiMerchantList($0) != nil
+            Self($0) != nil || SiriSpokenRankingRequest($0).isRanking || TransactionSearchTerm.sushiMerchantList($0) != nil
                 || $0.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("系")
         }
     }
@@ -167,12 +167,17 @@ struct SiriSpokenSpendingRequest {
         }
         phrase = phrase.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "?。!、,")))
         var term: String
+        var requiresGroup = false
         if let amount = phrase.wholeMatch(of: #/(.+?)(?:で(?:は)?|に(?:は)?)\s*(?:合計\s*)?(何円|いくら)\s*(?:使った|使いました|つかった|払った|支払った)(?:の|んです|んでした|でしょう)?(?:か|ですか)?/#) {
             term = String(amount.1)
             targetCurrency = amount.2 == "何円" ? "JPY" : nil
         } else if let noun = phrase.wholeMatch(of: #/(.+?)\s*(?:での|の)\s*(?:出費|支出)(?:額|の合計)?(?:は(?:いくら(?:ですか)?)?|を(?:教えて|見せて)(?:ください)?)?/#) {
             term = String(noun.1)
             targetCurrency = nil
+        } else if let short = phrase.wholeMatch(of: #/(.+?)(?:は|って)(?:いくら(?:ですか)?|どのくらい)?/#) {
+            term = String(short.1)
+            targetCurrency = nil
+            requiresGroup = true
         } else { return nil }
         term = term.trimmingCharacters(in: .whitespacesAndNewlines)
         var relative: SiriExpensePeriod?
@@ -192,7 +197,7 @@ struct SiriSpokenSpendingRequest {
             term = String(category.1 ?? category.2 ?? "")
             categoryOnly = true
         } else { categoryOnly = false }
-        guard !term.isEmpty else { return nil }
+        guard !term.isEmpty, !requiresGroup || TransactionSearchTerm.spendingGroup(term) != nil else { return nil }
         subject = term
         period = relative
     }
@@ -287,6 +292,7 @@ struct SiriExpenseSearchFilter {
 // Explicit AppIntent parameters remain authoritative at the call site.
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 struct SiriSpokenRankingRequest {
+    let subject: String?
     let rank: Int?
     let limit: Int?
     let sort: SiriAnalysisSort?
@@ -298,7 +304,8 @@ struct SiriSpokenRankingRequest {
     init(_ text: String?) {
         var phrase = (text ?? "").precomposedStringWithCompatibilityMapping.filter { !$0.isWhitespace }
             .trimmingCharacters(in: CharacterSet(charactersIn: "?？。！!"))
-        for suffix in ["を教えてください", "を見せてください", "を表示してください", "を教えて", "を見せて", "を表示して", "はどれですか", "はどれ", "を調べて"] where phrase.hasSuffix(suffix) {
+        phrase = phrase.replacing(#/^(?:(?i:Budgety)|バジェッティ|バジェティ)で/#, with: "")
+        for suffix in ["を教えてください", "を見せてください", "を表示してください", "を教えて", "を見せて", "を表示して", "はどれですか", "はどれ", "を調べて", "は"] where phrase.hasSuffix(suffix) {
             phrase.removeLast(suffix.count)
             break
         }
@@ -307,6 +314,18 @@ struct SiriSpokenRankingRequest {
             phrase.removeFirst(word.count + 1)
             parsedPeriod = value
             break
+        }
+        // Split only when the remainder is a complete ranking below. Katakana shop names remain literal.
+        var candidateSubject: String?
+        if let scoped = phrase.wholeMatch(of: #/(.+?)(?:の中で|のうち|で|の)(?:は)?((?:一番|1番|最も|もっとも|[0-9一二三四五六七八九十百]+番|次に|高い順|安い順|新しい順|古い順).+)/#) {
+            let text = String(scoped.1)
+            candidateSubject = TransactionSearchTerm.spendingGroup(text) ?? text
+            phrase = String(scoped.2)
+            // A misheard expense noun is recognizable here only alongside an explicit spending group and rank.
+            if phrase.hasSuffix("守備"), TransactionSearchTerm.spendingGroup(text) != nil {
+                phrase.removeLast(2)
+                phrase += "出費"
+            }
         }
         var parsedKind: SiriTransactionSelection?
         for (word, value) in [("支出", SiriTransactionSelection.expense), ("出費", .expense), ("収入", .income), ("収支", .both), ("取引", .both)] {
@@ -363,6 +382,7 @@ struct SiriSpokenRankingRequest {
             }
         }
         let recognized = parsedRank != nil || parsedLimit != nil || parsedNext
+        subject = recognized ? candidateSubject : nil
         rank = parsedRank
         limit = parsedLimit
         sort = recognized ? parsedSort : nil
