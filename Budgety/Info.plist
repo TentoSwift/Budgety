@@ -4,6 +4,10 @@
 <dict>
 	<key>BudgetyWidgetURLScheme</key>
 	<string>budgety$(BUNDLE_ID_SUFFIX)</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.tento.budgety.view-sheet</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

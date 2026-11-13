@@ -87,10 +87,12 @@ struct ExpensoShortcuts: AppShortcutsProvider {
             )
             #else
             AppShortcut(
-                intent: SiriFindMemberTransactionsIntent(),
+                intent: SiriSheetOverviewShortcut(),
                 phrases: [
                     "\(.applicationName) でメンバーの収支を調べて",
-                    "Find a member’s income and expenses in \(.applicationName)"
+                    "Find a member’s income and expenses in \(.applicationName)",
+                    "\(.applicationName) の \(\.$kind) は",
+                    "\(.applicationName) で \(\.$kind) を調べて"
                 ],
                 shortTitle: "メンバーの収支",
                 systemImageName: "person.crop.circle"

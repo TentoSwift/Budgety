@@ -116,7 +116,7 @@ struct SiriListMemberQuery: SheetScopedMemberQuery {
 #endif
 struct SiriFindExpenseCardsIntent: AppIntent {
     static let title: LocalizedStringResource = "シートの収入・支出を検索して表示"
-    static let description = IntentDescription("「はま寿司の支出を見せて」のように店名・支出名で個別の明細を聞かれたときや、「今月の支出には何がある？」「全期間の支出を調べて」「収支は？」と聞かれたときに、該当する明細をカテゴリの絵柄付きカードで表示します。期間、店名、カテゴリ、メンバーで絞れます。本文には直近3件と残り件数を使い、全件を明示した場合だけすべて伝えます。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
+    static let description = IntentDescription("「収入は？」「支出は？」「収支は？」と聞かれたら、対象のシートの最新の記録を検索し、金額と明細カードを一緒に返します。シートや期間の指定がなければ最後に開いたシートの今月分です。「全期間の支出を調べて」や「はま寿司の支出を見せて」にも使います。期間、店名、カテゴリ、メンバーで絞れます。本文は直近3件と残り件数、全件を求められた場合は全件です。", searchKeywords: ["収支", "支出", "収入", "明細", "カテゴリ"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "シート", description: "指定されたシート。省略時は最後に開いたシートを使います。")
@@ -127,7 +127,7 @@ struct SiriFindExpenseCardsIntent: AppIntent {
     var expenseName: String?
     @Parameter(title: "カテゴリ名", description: "「今月の食費」なら「食費」。指定されたカテゴリに絞り、店名や日付の条件があれば併用します。")
     var categoryName: String?
-    @Parameter(title: "対象の収支", description: "「支出を調べて」は支出、「収入を調べて」は収入。「収支」や「何がある？」など明細全般なら両方です。")
+    @Parameter(title: "対象の収支", description: "「収入は？」は収入、「支出は？」は支出、「収支は？」は両方。明細全般を聞かれた場合も両方です。")
     var kind: SiriTransactionSelection?
     @Parameter(title: "対象月", description: "2026年5月など年月だけが指定されたときの月。「今日」や日付を含む質問は対象月に設定しません。")
     var month: Date?
@@ -200,14 +200,18 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     init(sheetIdentifier: String, filter: SiriExpenseSearchFilter, kind: SiriTransactionSelection = .expense,
          memberIdentifier: String? = nil) {
+        self.init(sheetIdentifier: sheetIdentifier, scope: filter.scope, categoryName: filter.categoryName, kind: kind)
+        self.expenseName = filter.name
+        self.memberIdentifier = memberIdentifier
+    }
+
+    init(sheetIdentifier: String, scope: SiriExpenseScope, categoryName: String?, kind: SiriTransactionSelection) {
         self.kind = kind
         self.sheetIdentifier = sheetIdentifier
-        self.memberIdentifier = memberIdentifier
-        self.expenseName = filter.name
-        self.categoryName = filter.categoryName
-        self.intervalStart = filter.scope.interval?.start
-        self.intervalEnd = filter.scope.interval?.end
-        self.periodLabel = filter.scope.label
+        self.categoryName = categoryName
+        self.intervalStart = scope.interval?.start
+        self.intervalEnd = scope.interval?.end
+        self.periodLabel = scope.label
     }
 
     @MainActor

@@ -177,7 +177,7 @@ struct SiriMonthlySpendingIntent: AppIntent {
     var period: SiriExpensePeriod?
 
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetIntent {
         let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの支出を集計しますか？")
         }
@@ -211,7 +211,8 @@ struct SiriMonthlySpendingIntent: AppIntent {
             let currencies = totals.missing.sorted().joined(separator: ", ")
             report = "「\(record.displayName)」の\(periodLabel)の支出は\(amount)です。為替レートを取得できない通貨（\(currencies)）の明細は合計に含まれていません。"
         }
-        return .result(value: String(localized: report), dialog: IntentDialog(report))
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, scope: scope, categoryName: category, kind: .expense)
+        return .result(value: String(localized: report), dialog: IntentDialog(report), snippetIntent: snippet)
     }
 }
 #endif

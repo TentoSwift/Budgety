@@ -464,6 +464,11 @@ struct SheetDetailView: View {
         #endif
         #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
         .appEntityUIElements(siriSheetElements(in:))
+        .userActivity("com.tento.budgety.view-sheet", element: siriSheetActivityID) { id, activity in
+            activity.isEligibleForHandoff = false
+            guard #available(iOS 27.3, *), let identifier = accessibleSheetIdentifier(id) else { return }
+            activity.appEntityIdentifier = identifier
+        }
         #endif
         // フィルタ・検索・並び替え・追加で表示集合が変わったら一覧をアニメーション。
         // Reduce Motion 時はアニメーションしない。
@@ -826,9 +831,23 @@ struct SheetDetailView: View {
     }
 
     #if os(iOS) && canImport(AppIntents, _version: 301.2.7.2)
-    private func siriSheetElements(in context: AppEntityUIElementsContext) -> [AppEntityUIElement] {
+    private var siriSheetActivityID: String? {
         guard #available(iOS 27.3, *), !isPreview, record.managedObjectContext === viewContext,
-              !record.objectID.isTemporaryID, !record.isDeleted else { return [] }
+              !record.objectID.isTemporaryID, !record.isDeleted,
+              record.lockPasswordHash?.isEmpty != false, record.lockPasswordSalt?.isEmpty != false else { return nil }
+        let id = record.objectID.uriRepresentation().absoluteString
+        return UserDefaults.standard.object(forKey: SheetLockManager.legacyPrefix + id) == nil ? id : nil
+    }
+
+    @available(iOS 27.3, *)
+    private func accessibleSheetIdentifier(_ id: String) -> EntityIdentifier? {
+        guard let access = try? IntentSheetAccess(checking: viewContext),
+              (try? access.resolve(id)) != nil else { return nil }
+        return EntityIdentifier(for: ExpenseSheetEntity.self, identifier: id)
+    }
+
+    private func siriSheetElements(in context: AppEntityUIElementsContext) -> [AppEntityUIElement] {
+        guard #available(iOS 27.3, *), let id = siriSheetActivityID else { return [] }
         let requested = context.requests.contains { request in
             switch request {
             case .selected: true
@@ -836,13 +855,8 @@ struct SheetDetailView: View {
             @unknown default: false
             }
         }
-        guard requested else { return [] }
-
-        // Siri requests context on demand. Use the same lock checks as the lookup itself.
-        let id = record.objectID.uriRepresentation().absoluteString
-        guard let access = try? IntentSheetAccess(checking: viewContext),
-              (try? access.resolve(id)) != nil else { return [] }
-        return [AppEntityUIElement(identifier: EntityIdentifier(for: ExpenseSheetEntity.self, identifier: id),
+        guard requested, let identifier = accessibleSheetIdentifier(id) else { return [] }
+        return [AppEntityUIElement(identifier: identifier,
                                    bounds: context.bounds, state: .init(isSelected: true))]
     }
     #endif
