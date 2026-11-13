@@ -201,16 +201,42 @@ struct SiriTransactionLedger {
 
     static func forEach(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                         includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
-                        currency: SiriLedgerCurrency = .init(), matchesPayer: (LedgerItem) -> Bool = { _ in true },
+                        relatedMerchantNames: Set<String> = [], currency: SiriLedgerCurrency = .init(), matchesPayer: (LedgerItem) -> Bool = { _ in true },
                         visit: (LedgerItem, SiriTransactionValue) -> Void) throws {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         try visitItems(in: record, access: access, interval: interval, includeExpenses: includeExpenses, includeIncome: includeIncome,
-                       expenseName: expenseName, categoryName: categoryName, currency: currency, matchesPayer: matchesPayer, visit: visit)
+                       expenseName: expenseName, categoryName: categoryName, relatedMerchantNames: relatedMerchantNames,
+                       currency: currency, matchesPayer: matchesPayer, visit: visit)
+    }
+
+    /// Give the on-device model only unresolved names from readable transactions in this scope.
+    static func relatedMerchantNames(for group: String, sheet: ExpenseSheet, access: IntentSheetAccess,
+                                     interval: DateInterval?, includeExpenses: Bool, includeIncome: Bool) async throws -> Set<String> {
+        guard LedgerMerchantClassifier.isAvailable, TransactionSearchTerm.spendingGroup(group) != nil else { return [] }
+        let term = TransactionSearchTerm.ledgerName(group)
+        var dates: [String: Date] = [:]
+        try forEach(sheet: sheet, access: access, interval: interval, includeExpenses: includeExpenses, includeIncome: includeIncome) { item, _ in
+            let title: String
+            switch item {
+            case .expense(let expense):
+                guard !term.matchesNameOrCategory(of: expense) else { return }
+                title = expense.displayTitle
+            case .occurrence(let occurrence):
+                guard !term.matchesNameOrCategory(of: occurrence) else { return }
+                title = occurrence.title
+            }
+            guard !title.isEmpty, !TransactionSearchTerm.isKnownUnrelatedMerchant(title, for: group) else { return }
+            dates[title] = max(dates[title] ?? .distantPast, item.date)
+        }
+        let candidates = dates.sorted {
+            $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value
+        }.map(\.key)
+        return try await LedgerMerchantClassifier.matchingTitles(for: group, candidates: candidates)
     }
 
     private static func visitItems(in record: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                                    includeExpenses: Bool, includeIncome: Bool, expenseName: String?, categoryName: String?,
-                                   currency: SiriLedgerCurrency, matchesPayer: (LedgerItem) -> Bool,
+                                   relatedMerchantNames: Set<String>, currency: SiriLedgerCurrency, matchesPayer: (LedgerItem) -> Bool,
                                    visit: (LedgerItem, SiriTransactionValue) -> Void) throws {
         let base = record.resolvedDefaultCurrencyCode.uppercased()
         let target = currency.targetCurrency ?? base
@@ -228,10 +254,10 @@ struct SiriTransactionLedger {
             switch item {
             case .expense(let row):
                 guard category.isEmpty || category.matchesCategory(row.categoryDisplayName),
-                      term.isEmpty || term.matchesNameOrCategory(of: row) else { return }
+                      term.isEmpty || term.matchesNameOrCategory(of: row) || relatedMerchantNames.contains(row.displayTitle) else { return }
             case .occurrence(let occurrence):
                 guard category.isEmpty || category.matchesCategory(occurrence.categoryDisplayName),
-                      term.isEmpty || term.matchesNameOrCategory(of: occurrence) else { return }
+                      term.isEmpty || term.matchesNameOrCategory(of: occurrence) || relatedMerchantNames.contains(occurrence.title) else { return }
             }
             let source = item.currencyCode.uppercased()
             guard currency.sourceCurrency.map({ $0 == source }) ?? true, !currency.foreignOnly || source != base else { return }
@@ -283,7 +309,7 @@ struct SiriTransactionLedger {
 
     static func read(sheet: ExpenseSheet, access: IntentSheetAccess, interval: DateInterval?,
                      includeExpenses: Bool, includeIncome: Bool, expenseName: String? = nil, categoryName: String? = nil,
-                     allRows: Bool = false, currency: SiriLedgerCurrency = .init(),
+                     relatedMerchantNames: Set<String> = [], allRows: Bool = false, currency: SiriLedgerCurrency = .init(),
                      matchesPayer: (LedgerItem) -> Bool = { _ in true }) throws -> Self {
         let record = try access.resolve(sheet.objectID.uriRepresentation().absoluteString)
         var expenses: [String: Decimal] = [:]
@@ -293,7 +319,8 @@ struct SiriTransactionLedger {
         var count = 0
         var newest: [(item: LedgerItem, value: SiriTransactionValue)] = []
         try visitItems(in: record, access: access, interval: interval, includeExpenses: includeExpenses, includeIncome: includeIncome,
-                       expenseName: expenseName, categoryName: categoryName, currency: currency, matchesPayer: matchesPayer) { item, value in
+                       expenseName: expenseName, categoryName: categoryName, relatedMerchantNames: relatedMerchantNames,
+                       currency: currency, matchesPayer: matchesPayer) { item, value in
             count += 1
             let code = currency.groupByOriginal ? value.source : value.target
             if let amount = currency.groupByOriginal ? value.original : value.converted {

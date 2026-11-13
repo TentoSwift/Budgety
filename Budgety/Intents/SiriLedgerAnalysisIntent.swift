@@ -17,6 +17,7 @@ struct SiriLedgerQuestionContext: TransientAppEntity {
     #endif
     @Property(title: "月別順位の回答（月と合計額）") var monthlyAnswer: String?
     @Property(title: "使った金額と該当する明細の回答") var spendingAnswer: String?
+    @Property(title: "対象になったお店や明細名") var matchedMerchantNames: [String]?
     @Property(title: "この1件の編集対象") var editableTransaction: SiriEditableTransactionEntity?
 
     init() {}
@@ -51,13 +52,14 @@ private struct AdditionalMonthlyRanking: Codable {
     let rank: Int?
     let limit: Int?
     let category: String?
+    var name: String? = nil
     let kind: String
 
     func ranking() throws -> SiriMonthlyRanking {
         guard let order = SiriAnalysisSort(rawValue: sort), order == .highest || order == .lowest,
               let selection = SiriTransactionSelection(rawValue: kind) else { throw QuestionError.invalid }
         return SiriMonthlyRanking(scope: SiriExpenseScope(interval: interval, label: period, isDay: false),
-                                  sort: order, rank: rank, limit: limit, category: category, kind: selection)
+                                  sort: order, rank: rank, limit: limit, category: category, name: name, kind: selection)
     }
 }
 
@@ -92,6 +94,28 @@ private struct SiriLedgerQuestion: Codable {
     var comparisonInterval: DateInterval?
     var comparisonLabel: String?
     var additionalMonthlyRankings: [AdditionalMonthlyRanking]?
+    // An interactive snippet replays these exact matches against the currently readable ledger.
+    var relatedMerchantNamesByGroup: [String: Set<String>]?
+
+    @MainActor
+    mutating func resolveMerchantNames(in sheet: ExpenseSheet, access: IntentSheetAccess) async throws {
+        relatedMerchantNamesByGroup = nil
+        var scopes: [(String?, DateInterval?, String)] = [(name, interval, kind)]
+        if mode == SiriAnalysisMode.comparison.rawValue || mode == SiriAnalysisMode.categoryIncrease.rawValue,
+           let comparisonInterval { scopes.append((name, comparisonInterval, kind)) }
+        for monthly in additionalMonthlyRankings ?? [] {
+            scopes.append((monthly.name, monthly.interval, monthly.kind))
+        }
+        var matches: [String: Set<String>] = [:]
+        for (subject, interval, rawKind) in scopes {
+            guard let group = TransactionSearchTerm.spendingGroup(subject), let kind = SiriTransactionSelection(rawValue: rawKind) else { continue }
+            let names = try await SiriTransactionLedger.relatedMerchantNames(for: group, sheet: sheet, access: access,
+                interval: interval, includeExpenses: kind.includesExpenses, includeIncome: kind.includesIncome)
+            if !names.isEmpty { matches[group, default: []].formUnion(names) }
+        }
+        if !matches.isEmpty { relatedMerchantNamesByGroup = matches }
+    }
+
 
     @MainActor
     func report() throws -> SiriAnalysisReport {
@@ -104,6 +128,7 @@ private struct SiriLedgerQuestion: Codable {
         guard let mode = SiriAnalysisMode(rawValue: mode), let kind = SiriTransactionSelection(rawValue: kind)
         else { throw QuestionError.invalid }
         var request = SiriAnalysisRequest(mode: mode)
+        request.relatedMerchantNamesByGroup = relatedMerchantNamesByGroup ?? [:]
         request.totalOnly = totalOnly == true
         request.kind = kind
         if let memberID {
@@ -131,10 +156,11 @@ private struct SiriLedgerQuestion: Codable {
         request.sort = sort.flatMap(SiriAnalysisSort.init(rawValue:))
         let scope = SiriExpenseScope(interval: interval, label: period, isDay: false)
         if mode == .month, let order = request.sort, order == .highest || order == .lowest {
-            let first = SiriMonthlyRanking(scope: scope, sort: order, rank: rank, limit: request.limit, category: category, kind: kind)
+            let first = SiriMonthlyRanking(scope: scope, sort: order, rank: rank, limit: request.limit, category: category, name: name, kind: kind)
             let additional = try (additionalMonthlyRankings ?? []).map { try $0.ranking() }
             // Each condition carries its category, including an explicitly unfiltered second question.
             request.category = nil
+            request.name = nil
             return try SiriTransactionAnalysis.runMonthlyRankings(sheet: sheet, access: access, request: request, rankings: [first] + additional)
         }
         let comparison = comparisonInterval.map { SiriExpenseScope(interval: $0, label: comparisonLabel ?? period, isDay: false) }
@@ -161,18 +187,55 @@ enum SiriAnalysisReference: String, AppEnum {
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [.select: "その明細だけ", .exclude: "その明細を除く"]
 }
 
+#if os(iOS) || os(macOS)
+@available(iOS 27.3, macOS 27.3, *)
+@AppIntent(.tool)
+struct SiriMerchantSpendingIntent: AppIntent {
+    static let title: LocalizedStringResource = "お店の種類で支出を調べる"
+    static let description = IntentDescription("「カフェの出費」「今月のカフェの支出」「寿司系で何円使った？」など、お店の種類を指定した支出の合計と該当店・明細を返します。お店の種類・質問には利用者が指定した対象を必ず含めます。", searchKeywords: ["カフェの出費", "喫茶店", "寿司系", "お店の種類", "何円使った"])
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
+    @Parameter(title: "お店の種類・質問", description: "「カフェの出費」「寿司系で何円使った？」のような質問の全文、または「カフェ」「寿司系」のような指定された検索対象。") var subject: String
+    @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
+    @Parameter(title: "検索期間", description: "指定されたときだけ設定します。") var period: SiriExpensePeriod?
+    @Parameter(title: "対象月") var month: Date?
+    @Parameter(title: "対象日") var day: Date?
+    @Parameter(title: "メンバー") var member: SiriSheetMemberEntity?
+    @Parameter(title: "表示通貨") var targetCurrency: String?
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<SiriLedgerQuestionContext> & ProvidesDialog & ShowsSnippetIntent {
+        let text = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw QuestionError.invalid }
+        let analysis = SiriAnalyzeLedgerIntent()
+        analysis.spendingQuestion = text
+        analysis.sheet = sheet
+        analysis.kind = .expense
+        analysis.mode = .total
+        analysis.member = member
+        analysis.period = period
+        analysis.month = month
+        analysis.day = day
+        analysis.targetCurrency = targetCurrency
+        let (report, context) = try await analysis.analyze()
+        return .result(value: context, dialog: IntentDialog("\(report.dialog)"),
+                       snippetIntent: SiriLedgerAnalysisSnippet(criteria: context.criteria))
+    }
+}
+#endif
+
 @available(iOS 27.3, macOS 27.3, watchOS 26.2, *)
 #if os(iOS) || os(macOS)
 @AppIntent(.tool)
 #endif
 struct SiriAnalyzeLedgerIntent: AppIntent {
     static let title: LocalizedStringResource = "明細の内訳・比較・換算を表示"
-    static let description = IntentDescription("「寿司系で何円使った？」など支出額を聞かれたら、支出額の質問全文に発言を渡し、該当する店やカテゴリの合計と明細を答えます。家計簿の集計方法を選び、合計、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「2番目に高い出費」「先月の食費で2番目に安いもの」「安い順に3件」「次に高いのは？」など金額の順位にも使います。「今年、食費が一番高かったのは何月？」「直近半年で食費が安かった月を3つ教えて」は、月ごとの合計を順位付けして、月と金額を返します。2つを一度に聞かれたら「月別順位の質問全文」に両方の質問を省略せずにそのまま渡します。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["何円使った", "いくら使った", "内訳", "換算", "比較", "何番目", "高い順", "安い順", "平均", "以外", "元の金額", "何月", "安かった月", "月別順位", "直近半年"])
+    static let description = IntentDescription("「カフェの出費」「寿司系で何円使った？」のような業態別の支出には「お店の種類で支出を調べる」を使います。家計簿の集計方法を選び、合計、通貨・お店・カテゴリ・人・日・月別、期間比較、増えたカテゴリ、1日平均、金額順位、換算レートを表示します。「2番目に高い出費」「先月の食費で2番目に安いもの」「安い順に3件」「次に高いのは？」など金額の順位にも使います。「今年、食費が一番高かったのは何月？」「直近半年で食費が安かった月を3つ教えて」は、月ごとの合計を順位付けして、月と金額を返します。2つを一度に聞かれたら「月別順位の質問全文」に両方の質問を省略せずにそのまま渡します。「そのうち食費だけ」「元はいくら？」「それを除くと？」など続く質問では、前の回答の集計条件を引き継ぎます。", searchKeywords: ["何円使った", "いくら使った", "内訳", "換算", "比較", "何番目", "高い順", "安い順", "平均", "以外", "元の金額", "何月", "安かった月", "月別順位", "直近半年"])
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     @Parameter(title: "直前の集計", description: "「そのうち」「それを除くと」「ドルで表示して」など同じ対象について続けて聞かれた場合、前の回答が返した集計条件。") var previous: SiriLedgerQuestionContext?
     @Parameter(title: "シート") var sheet: ExpenseSheetEntity?
     @Parameter(title: "表示方法", description: "「何円使った？」「いくら使った？」は合計。該当する最近の明細も表示します。") var mode: SiriAnalysisMode?
-    @Parameter(title: "支出額の質問全文", description: "「寿司系で何円使った？」「はま寿司とかっぱ寿司でいくら使った？」など、支出の合計を聞かれた発言。期間・店名・系・など・通貨・合計だけの指定を含めて渡します。") var spendingQuestion: String?
+    @Parameter(title: "支出額の質問全文", description: "「カフェの出費」「寿司系で何円使った？」「はま寿司とかっぱ寿司でいくら使った？」など、対象を含む発言の全文。期間・店名・系・など・通貨・合計だけの指定を含めて渡します。") var spendingQuestion: String?
     @Parameter(title: "合計だけ", description: "「合計だけ」「金額のみ」と明示された場合に限り、該当明細を省略します。") var totalOnly: Bool?
     @Parameter(title: "収入・支出・収支") var kind: SiriTransactionSelection?
     @Parameter(title: "検索期間") var period: SiriExpensePeriod?
@@ -244,15 +307,19 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
         let categoryIsQuestion = first != nil && !monthlyClauses(category).isEmpty
         let secondSpecified = additionalPeriod != nil || additionalSort != nil || additionalRank != nil || additionalLimit != nil
         if monthlyQuestion != nil && first == nil && mode != .month && !secondSpecified { throw QuestionError.invalid }
-        let nameSubject = TransactionSearchTerm.sushiSubject(name)
-        let categorySubject = TransactionSearchTerm.sushiSubject(category)
-        let spokenSubject = TransactionSearchTerm.sushiSubject(spending?.subject)
-        // When Siri shortens 寿司系 to a category named 寿司, prefer a real category on this sheet.
-        let missingSushiCategory = categorySubject == "寿司" && !(record.categories as? Set<ExpenseCategory> ?? []).contains {
-            TransactionSearchTerm(category ?? "").matchesCategory($0.displayName)
+        let categories = record.categories as? Set<ExpenseCategory> ?? []
+        func hasCategory(_ label: String) -> Bool {
+            let term = TransactionSearchTerm(label)
+            return categories.contains { term.matchesCategory($0.displayName) }
         }
-        let isSpendingGroup = [spokenSubject, nameSubject, categorySubject].compactMap { $0 }.contains { $0 != "寿司" }
-        let wantsSpending = spending != nil || isSpendingGroup
+        if let spendingQuestion, spendingQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw QuestionError.invalid }
+        let amount = mode == .total || spending != nil || spendingQuestion != nil
+        let subjectInput = spending == nil ? (spendingQuestion ?? name) : name
+        let filters = SiriSpokenSpendingRequest.filters(spoken: spending, name: subjectInput, category: category,
+                                                        amount: amount, hasCategory: hasCategory)
+        let group = TransactionSearchTerm.spendingGroup(filters.name)
+        let wantsSpending = spending != nil || spendingQuestion != nil || group != nil
+            || filters.name.flatMap(TransactionSearchTerm.sushiMerchantList) != nil
         let resolvedMode: SiriAnalysisMode? = first != nil || secondSpecified ? .month : mode ?? (wantsSpending ? .total : nil)
         let requestedRank = rank ?? (limit == nil ? first?.rank ?? spoken.rank : nil)
         let requestedCount = limit ?? first?.limit ?? spoken.limit
@@ -265,7 +332,7 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
         // Fresh month rankings without a period cover the recorded history; inherited questions keep their scope.
         let monthOrder = requestedSort ?? inherited?.sort.flatMap(SiriAnalysisSort.init(rawValue:))
         let ranksMonths = isMonthly && (monthOrder == .highest || monthOrder == .lowest || requestedRank != nil || secondSpecified)
-        let fallback: SiriExpensePeriod = ranksMonths ? .allTime : .thisMonth
+        let fallback: SiriExpensePeriod = ranksMonths || (resolvedMode == .total && group != nil) ? .allTime : .thisMonth
         var scope = SiriExpenseSearchFilter(expenseName: nil, month: month, day: day, period: searchPeriod,
                                             unnamedPeriod: fallback, now: now, calendar: calendar).scope
         if ranksMonths, searchPeriod == .thisYear, day == nil {
@@ -294,20 +361,15 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             if ranksMonths, name == q.category || !monthlyClauses(name).isEmpty { q.name = nil }
             else { q.name = name }
         }
-        if first == nil, !spoken.isRanking {
-            let amountMode = resolvedMode == .total || spending != nil
-            let subject = spokenSubject ?? nameSubject ?? categorySubject
-            if let subject, isSpendingGroup || (amountMode && (spokenSubject != nil || nameSubject != nil || missingSushiCategory)) {
-                // The group must match a transaction title OR its displayed category, including recurring rows.
-                q.name = subject == "寿司" ? "寿司系" : subject
-                if categorySubject != nil || SiriSpokenSpendingRequest(category) != nil { q.category = nil }
-                if let name, nameSubject == nil, SiriSpokenSpendingRequest(name) == nil {
-                    q.name = name
-                }
-            } else if let spending {
-                if SiriSpokenSpendingRequest(category) != nil { q.category = nil }
-                q.name = q.category == spending.subject ? nil : spending.subject
+        if first == nil, !spoken.isRanking, spending != nil || subjectInput != nil || category != nil {
+            if !ranksMonths || subjectInput != filters.category {
+                if let resolvedName = filters.name { q.name = resolvedName }
+                else if subjectInput != nil || spending != nil { q.name = nil }
             }
+            if category != nil || spending != nil { q.category = filters.category }
+        } else if let first, let subject = first.category, let group = TransactionSearchTerm.spendingGroup(subject) {
+            q.name = group
+            q.category = nil
         }
         q.totalOnly = totalOnly ?? spending.map(\.totalOnly) ?? q.totalOnly
         q.memberID = member?.id ?? q.memberID
@@ -385,16 +447,19 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
                 let position = (index == 0 ? additionalRank : nil) ?? (count == nil ? clause?.rank ?? 1 : nil)
                 let order = (index == 0 ? additionalSort : nil) ?? clause?.sort ?? requestedSort ?? .highest
                 let selection = clause?.kind?.rawValue ?? q.kind
-                let subject = clause?.category ?? (clause?.kind == nil ? q.category : nil)
+                let clauseGroup = TransactionSearchTerm.spendingGroup(clause?.category)
+                let subject = clauseGroup == nil ? (clause?.category ?? (clause?.kind == nil ? q.category : nil)) : nil
+                let name = clauseGroup ?? (clause == nil ? q.name : nil)
                 additional.append(.init(interval: periodScope.interval, period: periodScope.label, sort: order.rawValue,
-                                        rank: position, limit: count, category: subject, kind: selection))
+                                        rank: position, limit: count, category: subject, name: name, kind: selection))
             }
             q.additionalMonthlyRankings = additional.isEmpty ? nil : additional
         } else if isMonthly, category != nil || kind != nil {
             // A follow-up like 「交通費では？」 reapplies both period/order choices to the new subject.
             q.additionalMonthlyRankings = q.additionalMonthlyRankings?.map {
                 AdditionalMonthlyRanking(interval: $0.interval, period: $0.period, sort: $0.sort, rank: $0.rank,
-                                         limit: $0.limit, category: category ?? $0.category, kind: kind?.rawValue ?? $0.kind)
+                                         limit: $0.limit, category: filters.category ?? $0.category,
+                                         name: category == nil ? $0.name : filters.name, kind: kind?.rawValue ?? $0.kind)
             }
         } else if !isMonthly {
             q.additionalMonthlyRankings = nil
@@ -426,15 +491,18 @@ struct SiriAnalyzeLedgerIntent: AppIntent {
             q.comparisonLabel = earlier.start.formatted(date: .abbreviated, time: .omitted) + "〜" +
                 earlier.end.addingTimeInterval(-1).formatted(date: .abbreviated, time: .omitted)
         }
-        let report = try q.report(in: record, access: access)
+        try await q.resolveMerchantNames(in: record, access: access)
+        let currentAccess = try IntentSheetAccess(checking: PersistenceController.shared.container.viewContext)
+        let report = try q.report(in: currentAccess.resolve(sheetID), access: currentAccess)
         q.singleID = report.singleTransactionID
         var result = try SiriLedgerQuestionContext(query: q, label: report.scope + "・" + report.title)
+        if !report.matchedMerchantNames.isEmpty { result.matchedMerchantNames = report.matchedMerchantNames }
         if !report.sections.isEmpty {
             result.monthlyAnswer = report.dialog
         }
         if report.filteredTotalDialog != nil { result.spendingAnswer = report.dialog }
         if let id = q.singleID {
-            result.editableTransaction = try SiriEditableTransactionQuery.resolve([id], in: sheetID, access: access).first
+            result.editableTransaction = try SiriEditableTransactionQuery.resolve([id], in: sheetID, access: currentAccess).first
         }
         return (report, result)
     }

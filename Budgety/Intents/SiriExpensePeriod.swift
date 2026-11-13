@@ -93,13 +93,66 @@ struct SiriSpokenSpendingRequest {
     let period: SiriExpensePeriod?
     let targetCurrency: String?
     let totalOnly: Bool
+    let categoryOnly: Bool
 
     static func recognizes(name: String?, category: String?) -> Bool {
-        [name, category].compactMap { $0 }.contains {
-            if Self($0) != nil { return true }
-            guard let subject = TransactionSearchTerm.sushiSubject($0) else { return false }
-            return subject != "寿司"
+        if TransactionSearchTerm.spendingGroup(name) != nil || TransactionSearchTerm.spendingGroup(category) != nil
+            || TransactionSearchTerm.sushiSubject(category) == "寿司" { return true }
+        return [name, category].compactMap { $0 }.contains {
+            Self($0) != nil || TransactionSearchTerm.sushiMerchantList($0) != nil
+                || $0.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("系")
         }
+    }
+
+    // Siri may supply the complete question and a narrower inferred merchant or category.
+    // Keep subjects supplied in the actual utterance ahead of those inferred parameters.
+    static func filters(spoken: Self?, name: String?, category: String?, amount: Bool,
+                        hasCategory: (String) -> Bool) -> (name: String?, category: String?) {
+        func nameFilter(_ text: String) -> String {
+            if let group = TransactionSearchTerm.spendingGroup(text) { return group }
+            if let sushi = TransactionSearchTerm.sushiSubject(text) {
+                return sushi == "寿司" ? "寿司系" : sushi
+            }
+            return text
+        }
+        let businessCategory = category.flatMap { Self($0) == nil ? $0 : nil }
+        if let spoken {
+            if spoken.categoryOnly { return (nil, spoken.subject) }
+            let resolved = nameFilter(spoken.subject)
+            // For an open group, a guessed category or example shop must not exclude other members.
+            if TransactionSearchTerm.spendingGroup(resolved) != nil { return (resolved, nil) }
+            if TransactionSearchTerm.sushiMerchantList(resolved) != nil, let businessCategory,
+               TransactionSearchTerm.sushiSubject(businessCategory) != nil || TransactionSearchTerm.spendingGroup(businessCategory) != nil
+                || TransactionSearchTerm.ledgerName(resolved).matches(businessCategory) { return (resolved, nil) }
+            // An independent category can still narrow a named shop.
+            let sameSubject = businessCategory == spoken.subject
+                || businessCategory.map(nameFilter) == resolved
+            if sameSubject, TransactionSearchTerm.sushiMerchantList(resolved) == nil, hasCategory(spoken.subject) {
+                return (nil, spoken.subject)
+            }
+            return (resolved, sameSubject ? nil : businessCategory)
+        }
+
+        let groupInName = TransactionSearchTerm.spendingGroup(name) != nil
+            || (amount && TransactionSearchTerm.sushiSubject(name) == "寿司")
+        if let name, groupInName || TransactionSearchTerm.sushiMerchantList(name) != nil {
+            let resolved = nameFilter(name)
+            let inferredCategory = businessCategory.map {
+                nameFilter($0) == resolved || (TransactionSearchTerm.spendingGroup(resolved) != nil
+                    && TransactionSearchTerm.ledgerName(resolved).matches($0))
+            } ?? false
+            return (resolved, inferredCategory ? nil : businessCategory)
+        }
+        if let category = businessCategory,
+           TransactionSearchTerm.sushiMerchantList(category) != nil
+            || (!hasCategory(category)
+                && (TransactionSearchTerm.spendingGroup(category) != nil || TransactionSearchTerm.sushiSubject(category) == "寿司")) {
+            let resolved = nameFilter(category)
+            if let name, TransactionSearchTerm.spendingGroup(resolved) != nil,
+               TransactionSearchTerm.ledgerName(resolved).matches(name) { return (resolved, nil) }
+            return (name ?? resolved, nil)
+        }
+        return (name, businessCategory)
     }
 
     init?(_ text: String?) {
@@ -113,8 +166,15 @@ struct SiriSpokenSpendingRequest {
             phrase.removeSubrange(suffix.range)
         }
         phrase = phrase.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "?。!、,")))
-        guard let match = phrase.wholeMatch(of: #/(.+?)(?:で(?:は)?|に(?:は)?)\s*(?:合計\s*)?(何円|いくら)\s*(?:使った|使いました|つかった|払った|支払った)(?:の|んです|んでした|でしょう)?(?:か|ですか)?/#) else { return nil }
-        var term = String(match.1).trimmingCharacters(in: .whitespacesAndNewlines)
+        var term: String
+        if let amount = phrase.wholeMatch(of: #/(.+?)(?:で(?:は)?|に(?:は)?)\s*(?:合計\s*)?(何円|いくら)\s*(?:使った|使いました|つかった|払った|支払った)(?:の|んです|んでした|でしょう)?(?:か|ですか)?/#) {
+            term = String(amount.1)
+            targetCurrency = amount.2 == "何円" ? "JPY" : nil
+        } else if let noun = phrase.wholeMatch(of: #/(.+?)\s*(?:での|の)\s*(?:出費|支出)(?:額|の合計)?(?:は(?:いくら(?:ですか)?)?|を(?:教えて|見せて)(?:ください)?)?/#) {
+            term = String(noun.1)
+            targetCurrency = nil
+        } else { return nil }
+        term = term.trimmingCharacters(in: .whitespacesAndNewlines)
         var relative: SiriExpensePeriod?
         let periods: [(String, SiriExpensePeriod)] = [
             ("今日", .today), ("きょう", .today), ("本日", .today), ("昨日", .yesterday), ("きのう", .yesterday),
@@ -127,10 +187,14 @@ struct SiriSpokenSpendingRequest {
             term = term.replacing(#/^\s*(?:の|は)?[、,]?\s*/#, with: "")
             break
         }
+        // A quoted or marked category is an exact category even if it also names a kind of shop.
+        if let category = term.wholeMatch(of: #/(?:カテゴリ(?:ー)?(?:の|[：:])?[「『]?(.+?)[」』]?|(.+?)カテゴリ(?:ー)?)(?:だけ|のみ)?/#) {
+            term = String(category.1 ?? category.2 ?? "")
+            categoryOnly = true
+        } else { categoryOnly = false }
         guard !term.isEmpty else { return nil }
         subject = term
         period = relative
-        targetCurrency = match.2 == "何円" ? "JPY" : nil
     }
 }
 

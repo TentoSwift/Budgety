@@ -31,6 +31,17 @@ struct SiriAnalysisCard: View {
         Text(verbatim: report.summary)
             .font(report.filteredTotalDialog == nil ? .subheadline.bold() : .title3.bold())
             .monospacedDigit()
+        if !report.matchedMerchantNames.isEmpty {
+            // Newest rows can all be from one shop. Include older matching names alongside the total.
+            let names = report.matchedMerchantNames
+            let preview = names.prefix(8).joined(separator: "、")
+            let rest = names.count - min(names.count, 8)
+            Group {
+                if rest > 0 { Text("対象：\(preview) ほか\(rest)件") }
+                else { Text("対象：\(preview)") }
+            }
+            .font(.caption).foregroundStyle(secondaryInk)
+        }
         if let note = report.note {
             Text(verbatim: note).font(.caption).foregroundStyle(secondaryInk)
         }

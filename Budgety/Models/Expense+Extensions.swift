@@ -358,29 +358,46 @@ struct TransactionSearchTerm {
     /// A spoken group searches titles and categories. Ordinary names and exact category filters keep their literal meaning.
     static func ledgerName(_ text: String) -> Self {
         var term = Self(text)
-        if sushiSubject(text) == "寿司系" {
-            term.alternativeKeys = ["寿司", "スシ", "鮨", "鮓", "ハマズシ", "カッパズシ", "クラズシ", "魚ベイ", "ウオベイ"]
+        guard !term.isEmpty else { return term }
+        if let group = spendingGroup(text) {
+            switch group {
+            case "寿司系":
+                term.alternativeKeys = ["寿司", "スシ", "鮨", "鮓"] + sushiMerchants.values.flatMap { $0 }
+            case "カフェ":
+                term.alternativeKeys = ["カフェ", "喫茶", "cafe", "café", "coffee shop", "coffeehouse",
+                                        "スターバックス", "スタバ", "starbucks", "ドトール", "doutor", "タリーズ", "tully",
+                                        "コメダ", "komeda", "サンマルクカフェ", "エクセルシオール", "ベローチェ", "ヴェローチェ", "星乃珈琲"]
+            default:
+                term.alternativeKeys = [normalized(String(group.dropLast()))]
+            }
         } else if let selection = sushiMerchantList(text) {
             term.alternativeKeys = selection.names.flatMap { sushiMerchants[$0] ?? [] }
+        } else if let shop = sushiMerchant(named: text) {
+            term.alternativeKeys = sushiMerchants[shop] ?? []
         }
         return term
     }
 
     private static let sushiMerchants = [
-        "はま寿司": ["ハマ寿司", "ハマズシ", "ハマスシ"],
-        "かっぱ寿司": ["カッパ寿司", "カッパズシ", "カッパスシ"],
-        "くら寿司": ["クラ寿司", "クラズシ", "クラスシ"],
-        "スシロー": ["スシロー"], "魚べい": ["魚ベイ", "ウオベイ"]
+        "はま寿司": ["ハマ寿司", "ハマズシ", "ハマスシ", "hamasushi", "hama sushi"],
+        "かっぱ寿司": ["カッパ寿司", "カッパズシ", "カッパスシ", "kappasushi", "kappa sushi"],
+        "くら寿司": ["クラ寿司", "クラズシ", "クラスシ", "kurasushi", "kura sushi"],
+        "スシロー": ["スシロー", "スシロウ", "sushiro", "sushirō"], "魚べい": ["魚ベイ", "ウオベイ", "uobei"]
     ]
 
+    private static func sushiMerchant(named text: String) -> String? {
+        let key = normalized(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        return sushiMerchants.first { $0.value.contains(key) }?.key
+    }
+
     static func sushiMerchantList(_ text: String) -> (names: [String], examples: Bool)? {
-        var subject = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var subject = text.precomposedStringWithCompatibilityMapping.trimmingCharacters(in: .whitespacesAndNewlines)
         let examples = subject.hasSuffix("など")
         if examples { subject.removeLast(2) }
         let parts = subject.replacing(#/\s*(?:[とや・、,])\s*[、,]?\s*/#, with: "\n")
-            .split(separator: "\n").map { normalized(String($0).trimmingCharacters(in: .whitespaces)) }
+            .split(separator: "\n")
         guard !parts.isEmpty, examples || parts.count > 1 else { return nil }
-        let names = parts.compactMap { part in sushiMerchants.first { $0.value.contains(part) }?.key }
+        let names = parts.compactMap { sushiMerchant(named: String($0)) }
         return names.count == parts.count ? (names, examples) : nil
     }
 
@@ -394,6 +411,26 @@ struct TransactionSearchTerm {
         case "寿司", "スシ", "鮨", "鮓": return "寿司"
         default: return nil
         }
+    }
+
+    /// Only an open group asks the on-device model for additional merchant names.
+    static func spendingGroup(_ text: String?) -> String? {
+        guard let term = text?.trimmingCharacters(in: .whitespacesAndNewlines), !term.isEmpty else { return nil }
+        if sushiSubject(term) == "寿司系" { return "寿司系" }
+        switch normalized(term) {
+        case "カフェ", "カフェ系", "喫茶", "喫茶店", "喫茶店系", "cafe", "café", "coffee shop", "coffee shops": return "カフェ"
+        default: return term.count > 1 && term.hasSuffix("系") ? term : nil
+        }
+    }
+
+    static func isKnownUnrelatedMerchant(_ title: String, for group: String) -> Bool {
+        let other: String
+        switch group {
+        case "カフェ": other = "寿司系"
+        case "寿司系": other = "カフェ"
+        default: return false
+        }
+        return ledgerName(other).matches(title) && !ledgerName(group).matches(title)
     }
 
     func matches(_ value: String) -> Bool {
@@ -414,7 +451,7 @@ struct TransactionSearchTerm {
     }
 
     private static func normalized(_ text: String) -> String {
-        let folded = text.folding(options: [.caseInsensitive, .widthInsensitive], locale: .current)
+        let folded = text.precomposedStringWithCanonicalMapping.folding(options: [.caseInsensitive, .widthInsensitive], locale: Locale(identifier: "ja_JP"))
         return folded.applyingTransform(.hiraganaToKatakana, reverse: false) ?? folded
     }
 }

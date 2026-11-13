@@ -68,6 +68,7 @@ struct SiriAnalysisRequest {
     /// One-based position in the ordered results; unlike limit, returns only that position.
     var rank: Int?
     var sort: SiriAnalysisSort?
+    var relatedMerchantNamesByGroup: [String: Set<String>] = [:]
     var totalOnly = false
 
     fileprivate var filteredTotalSubject: String? {
@@ -88,6 +89,7 @@ struct SiriMonthlyRanking {
     var rank: Int?
     var limit: Int?
     var category: String?
+    var name: String?
     var kind: SiriTransactionSelection?
 }
 
@@ -127,6 +129,7 @@ struct SiriAnalysisReport {
     }
     var note: String?
     var singleTransactionID: String?
+    var matchedMerchantNames: [String] = []
     var filteredTotalDialog: String?
 
     var dialog: String {
@@ -189,6 +192,7 @@ enum SiriTransactionAnalysis {
             var query = request
             query.mode = .month
             query.category = ranking.category ?? request.category
+            query.name = ranking.name ?? request.name
             query.kind = ranking.kind ?? request.kind
             query.sort = ranking.sort
             query.rank = ranking.rank
@@ -277,11 +281,13 @@ enum SiriTransactionAnalysis {
         // Payroll names are commonly stored under either Japanese spelling.
         let excludedNames = ["給料", "給与"].contains(where: excludedTerm.matchesCategory)
             ? ["給料", "給与"].map(TransactionSearchTerm.init) : [excludedTerm].filter { !$0.isEmpty }
+        let relatedNames = TransactionSearchTerm.spendingGroup(request.name).flatMap { request.relatedMerchantNamesByGroup[$0] } ?? []
         func entries(in interval: DateInterval?) throws -> [Entry] {
             var result: [Entry] = []
             try SiriTransactionLedger.forEach(sheet: stored, access: access, interval: interval,
                                               includeExpenses: request.kind.includesExpenses, includeIncome: request.kind.includesIncome,
-                                              expenseName: request.name, categoryName: request.category, currency: currency,
+                                              expenseName: request.name, categoryName: request.category,
+                                              relatedMerchantNames: relatedNames, currency: currency,
                                               matchesPayer: { payer?.matches($0) ?? true }) { item, value in
                 let title: String, category: String, identifier: String
                 let date: Date?, categoryRecord: ExpenseCategory?
@@ -522,10 +528,15 @@ enum SiriTransactionAnalysis {
                     let expense = sum.amountText(.expense, code: target, presentation: .standard)
                     notes.append(String(localized: "収入 \(income)、支出 \(expense)"))
                 }
-                let latest = entries.sorted { lhs, rhs in
+                let sorted = entries.sorted { lhs, rhs in
                     if lhs.date != rhs.date { return (lhs.date ?? .distantPast) > (rhs.date ?? .distantPast) }
                     return lhs.identifier < rhs.identifier
-                }.prefix(min(3, request.limit ?? 3))
+                }
+                let latest = sorted.prefix(min(3, request.limit ?? 3))
+                if TransactionSearchTerm.spendingGroup(request.name) != nil {
+                    var seen = Set<String>()
+                    report.matchedMerchantNames = sorted.map(\.title).filter { !$0.isEmpty && seen.insert($0).inserted }
+                }
                 report.rows = latest.map {
                     transactionRow($0, mode: .total, target: target, original: false)
                 }
