@@ -37,6 +37,9 @@ struct SiriExpenseDetailsIntent: AppIntent {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートで支出を検索しますか？")
         }
         let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter)
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.legacyTextResult)
+        #endif
         return .result(value: result.report, dialog: IntentDialog("\(result.report)"), snippetIntent: snippet)
     }
 }
@@ -71,25 +74,11 @@ struct SiriListTransactionsIntent: AppIntent {
     @Parameter(title: "本文に全件を表示", description: "すべての明細を読み上げるよう明示された場合だけオン。「全期間」は期間の指定で、「一覧」「何がある？」も通常はオフです。")
     var showAllInReply: Bool?
 
-    #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
-    @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog {
-        let result = try await search()
-        return .result(value: result.entities, dialog: result.dialog)
-    }
-    #else
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[SiriListedTransactionEntity]> & ProvidesDialog & ShowsSnippetIntent {
-        let result = try await search()
-        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: result.filter,
-                                                     kind: result.selection, memberIdentifier: member?.id)
-        return .result(value: result.entities, dialog: result.dialog, snippetIntent: snippet)
-    }
-    #endif
-
-    @MainActor
-    private func search() async throws -> (entities: [SiriListedTransactionEntity], dialog: IntentDialog, sheetID: String,
-                                           filter: SiriExpenseSearchFilter, selection: SiriTransactionSelection) {
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.searchStarted)
+        #endif
         let sheetID = try await SiriExpenseLookup.sheetIdentifier(sheet: sheet, member: member) {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を一覧にしますか？")
         }
@@ -110,7 +99,12 @@ struct SiriListTransactionsIntent: AppIntent {
                                  member: member?.name, category: filter.categoryName, name: filter.name,
                                  showAll: showAllInReply ?? request.requestsAll)
         let entities = try ledger.rows.map(SiriListedTransactionEntity.init(row:))
-        return (entities, IntentDialog("\(reply)"), sheetID, filter, selection)
+        let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: sheetID, filter: filter, kind: selection,
+                                                     memberIdentifier: member?.id)
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.searchFinished)
+        #endif
+        return .result(value: entities, dialog: IntentDialog("\(reply)"), snippetIntent: snippet)
     }
 }
 
@@ -183,6 +177,9 @@ struct SiriFindExpenseCardsIntent: AppIntent {
             try await $sheet.requestDisambiguation(among: $0, dialog: "どのシートの明細を検索しますか？")
         }
         let snippet = SiriExpenseResultsSnippetIntent(sheetIdentifier: result.sheetID, filter: filter, kind: selection, memberIdentifier: member?.id)
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.singleCardResult)
+        #endif
         return .result(value: result.card, dialog: IntentDialog("\(result.report)"),
                        snippetIntent: snippet)
     }
@@ -235,6 +232,9 @@ struct SiriExpenseResultsSnippetIntent: SnippetIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ShowsSnippetView {
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        SiriCompactExperimentDiagnostics.record(.snippetRequested)
+        #endif
         let interval: DateInterval?
         let label: String
         switch (intervalStart, intervalEnd, periodLabel) {

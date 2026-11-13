@@ -69,10 +69,17 @@ struct SiriListedTransactionEntity: AppEntity {
         category = row.category
         payerName = row.payerName
         kind = row.transactionKind
-        editableTransaction = row.editableTransaction
         categorySymbol = row.categorySymbol
         categoryColorHex = row.categoryColorHex
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        // Keep the editable entity and its identifiers for follow-up requests, but
+        // avoid transferring the same category PNG twice for every listed row.
+        editableTransaction = row.editableTransaction?.withoutEmbeddedCategoryImage()
+        categoryIcon = nil
+        #else
+        editableTransaction = row.editableTransaction
         categoryIcon = SiriTransactionCategoryIcon.file(symbol: row.categorySymbol, colorHex: row.categoryColorHex)
+        #endif
     }
 
     var displayRepresentation: DisplayRepresentation {
@@ -368,6 +375,42 @@ private extension CardSnippetFamily {
         get
     }
 }
+
+// Development-only breadcrumbs for container inspection. Record only fixed
+// event names, never transaction data. Each event writes at most one file.
+nonisolated enum SiriCompactExperimentDiagnostics {
+    enum Event: String, Sendable {
+        case searchStarted
+        case searchFinished
+        case snippetRequested
+        case legacyTextResult
+        case singleCardResult
+        case compactRowBodyEvaluated
+        case standardRowBodyEvaluated
+    }
+
+    nonisolated static func record(_ event: Event) {
+        let manager = FileManager.default
+        guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let directory = caches.appendingPathComponent("BudgetySiriCompactDiagnostics-v2", isDirectory: true)
+        let file = directory.appendingPathComponent(event.rawValue + ".json")
+        guard !manager.fileExists(atPath: file.path) else { return }
+        do {
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let payload: [String: Any] = [
+                "event": event.rawValue,
+                "timestamp": Date().timeIntervalSince1970,
+                "processID": ProcessInfo.processInfo.processIdentifier
+            ]
+            let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            // Exclusive creation also avoids duplicate writes from concurrent
+            // entity renders. Existing markers survive subsequent app builds.
+            try data.write(to: file, options: .withoutOverwriting)
+        } catch {
+            // Diagnostics must never change the intent or snippet result.
+        }
+    }
+}
 #endif
 
 @available(iOS 27.3, macOS 27.3, *)
@@ -391,6 +434,9 @@ struct SiriListedTransactionCard: View {
     var isCompact = false
 
     var body: some View {
+        #if os(iOS) && DEBUG && BUDGETY_SIRI_COMPACT_EXPERIMENT
+        let _ = SiriCompactExperimentDiagnostics.record(isCompact ? .compactRowBodyEvaluated : .standardRowBodyEvaluated)
+        #endif
         HStack(spacing: 12) {
             CategoryIconView(symbol: transaction.categorySymbol.isEmpty ? "tag.slash" : transaction.categorySymbol,
                              tint: Color(hex: transaction.categoryColorHex) ?? .gray, size: isCompact ? 30 : 38)
